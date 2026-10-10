@@ -17,14 +17,25 @@ def check(name, ok, detail=""):
     if VERBOSE or not ok:
         print(("PASS " if ok else "FAIL ") + name + (f"  [{detail}]" if detail else ""), flush=True)
 
-ORDER = ["BTC", "RELIANCE", "HDFCBANK", "NVDA", "XRP", "VOO", "PAXG"]
-COINS = {"BTC", "XRP", "PAXG"}
+ORDER = ["BTC", "ETH", "BNB", "XRP", "SOL", "TRX", "ZEC", "HYPE", "DOGE", "LINK"]
+COINS = set(ORDER)
+
+# Kraken stand-in: the test browser has no internet, so every coin gets 120 days of made-up daily candles.
+import json as _json, random as _random, re as _re
+def kraken_route(route):
+    pair = _re.search(r"pair=([A-Z]+)", route.request.url).group(1)
+    rnd = _random.Random(pair); price = rnd.uniform(0.2, 900); rows = []; t0 = 1781913600
+    for k in range(120):
+        o = price; c = o * (1 + rnd.gauss(0, 0.03)); h = max(o, c) * (1 + abs(rnd.gauss(0, 0.01))); l = min(o, c) * (1 - abs(rnd.gauss(0, 0.01)))
+        rows.append([t0 + k * 86400, f"{o:.6f}", f"{h:.6f}", f"{l:.6f}", f"{c:.6f}", f"{c:.6f}", f"{rnd.uniform(1e3, 1e6):.2f}", 100]); price = c
+    route.fulfill(status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"}, body=_json.dumps({"error": [], "result": {pair: rows, "last": rows[-1][0]}}))
 
 def active(p):
     return p.evaluate("(()=>{const c=document.querySelector('.card.active');return c?[c.getAttribute('aria-label'),c.dataset.view||'main',+c.dataset.i]:[null,null,-1]})()")
 
 def phone_tests(b):
     ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
+    ctx.route("https://api.kraken.com/**", kraken_route)
     p = ctx.new_page(); errs = []
     p.on("pageerror", lambda e: errs.append(str(e)))
     p.goto(BASE); p.wait_for_timeout(2500)
@@ -89,20 +100,17 @@ def phone_tests(b):
     chart_ok, chart_detail, stock_ok, stock_detail = True, [], True, []
     for i, name in enumerate(ORDER):
         p.evaluate(f"document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight*{i+1})")
-        p.wait_for_timeout(1300 if name in COINS else 7200)
+        p.wait_for_timeout(1300)
         info = p.evaluate("""(()=>{const c=document.querySelector('.card.active'); const svg=c.querySelector('.chartbox svg.chart');
           return {svg: !!svg, rects: svg? svg.querySelectorAll('rect').length:0, last: c.querySelector('.axlast')?.textContent||'', price: c.querySelector('.price')?.textContent||'',
-          lower: !!c.querySelector('.lower svg'), tv: !!c.querySelector('.tv'), tvfail: !!c.querySelector('.tvfail'), iframe: !!c.querySelector('.tv iframe')}})()""")
+          lower: !!c.querySelector('.lower svg'), frames: document.querySelectorAll('iframe').length}})()""")
         if name in COINS:
             ok = info["svg"] and info["rects"] >= 40 and info["last"] and info["price"] and not info["lower"]
             chart_ok &= bool(ok)
             if not ok: chart_detail.append(f"{name}:{info}")
-        else:
-            ok = info["tv"] and (info["iframe"] or info["tvfail"])
-            stock_ok &= bool(ok)
-            stock_detail.append(f"{name}:{'TradingView chart' if info['iframe'] else 'fallback message' if info['tvfail'] else 'BLANK'}")
+        stock_ok &= info["frames"] == 0
     check("phone: coin cards draw candlesticks, price and last-price label, no lower panel by default", chart_ok, "; ".join(chart_detail))
-    check("phone: stock cards show the TradingView chart or a clear message, never a blank box", stock_ok, "; ".join(stock_detail))
+    check("phone: all 10 coins draw our own candles, nothing loads from TradingView", chart_ok and stock_ok, "; ".join(chart_detail))
 
     # the card shows only the name, the price and today's move above the chart
     p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
@@ -121,24 +129,24 @@ def phone_tests(b):
 
     # add-stock sheet with a new watchlist
     p.click("#addBtn"); p.wait_for_timeout(500)
-    p.fill("#addQ", "amd"); p.wait_for_timeout(600)
+    p.fill("#addQ", "cardano"); p.wait_for_timeout(600)
     first = p.locator(".result").first.inner_text() if p.locator(".result").count() else ""
-    check("phone: search finds AMD", "AMD" in first, first.replace("\n", " "))
+    check("phone: search finds Cardano (ADA)", "ADA" in first, first.replace("\n", " "))
     p.locator(".result").first.click(); p.wait_for_timeout(300)
-    p.fill("#newWl", "Semiconductors"); p.click("#doAdd"); p.wait_for_timeout(700)
+    p.fill("#newWl", "Altcoins"); p.click("#doAdd"); p.wait_for_timeout(700)
     toast = p.inner_text("#toast") if p.is_visible("#toast") else ""
-    check("phone: adding to a new watchlist confirms with Undo", "Semiconductors" in toast and "Undo" in toast, toast)
+    check("phone: adding to a new watchlist confirms with Undo", "Altcoins" in toast and "Undo" in toast, toast)
     check("phone: sheet returns to search for the next stock", p.locator("#addQ").count() == 1)
     p.click("#sheet [data-close]"); p.wait_for_timeout(900)
-    check("phone: feed jumps to the newly added stock", active(p)[0] == "AMD", str(active(p)))
+    check("phone: feed jumps to the newly added stock", active(p)[0] == "ADA", str(active(p)))
 
     p.click("#switcher"); p.wait_for_timeout(500)
     rows = p.locator("#sheet [data-l]").all_inner_texts()
-    check("phone: switcher lists All, My watchlist and Semiconductors with counts", any("Semiconductors" in r and "1 symbol" in r for r in rows) and any("All my stocks" in r for r in rows), " | ".join(r.replace("\n", " ") for r in rows))
-    p.locator("#sheet [data-l]").filter(has_text="Semiconductors").click(); p.wait_for_timeout(1200)
+    check("phone: switcher lists All, My watchlist and Altcoins with counts", any("Altcoins" in r and "1 symbol" in r for r in rows) and any("All my coins" in r for r in rows), " | ".join(r.replace("\n", " ") for r in rows))
+    p.locator("#sheet [data-l]").filter(has_text="Altcoins").click(); p.wait_for_timeout(1200)
     p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1000)
-    check("phone: choosing a watchlist shows only its stocks", active(p)[0] == "AMD" and p.inner_text("#switchName") == "Semiconductors", f"{active(p)} {p.inner_text('#switchName')}")
-    p.click("#switcher"); p.wait_for_timeout(400); p.locator("#sheet [data-l]").filter(has_text="All my stocks").click(); p.wait_for_timeout(1200)
+    check("phone: choosing a watchlist shows only its stocks", active(p)[0] == "ADA" and p.inner_text("#switchName") == "Altcoins", f"{active(p)} {p.inner_text('#switchName')}")
+    p.click("#switcher"); p.wait_for_timeout(400); p.locator("#sheet [data-l]").filter(has_text="All my coins").click(); p.wait_for_timeout(1200)
 
     p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1000)
     left(); p.click(".card.active [data-pane=details] [data-save]"); p.wait_for_timeout(500)
@@ -203,6 +211,7 @@ def phone_tests(b):
 
 def desktop_tests(b):
     p = b.new_page(viewport={"width": 1280, "height": 800}); errs = []
+    p.route("https://api.kraken.com/**", kraken_route)
     p.on("pageerror", lambda e: errs.append(str(e)))
     p.goto(BASE); p.wait_for_timeout(2500)
     p.mouse.move(640, 450)

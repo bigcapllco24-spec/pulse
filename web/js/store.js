@@ -12,12 +12,8 @@ const ls = {
 };
 export { ls };
 
-const STARTER = [
-  { key: "CRYPTO:BTC", t: "BTC", n: "Bitcoin", m: "CRYPTO", ty: "C" }, { key: "NSE:RELIANCE", t: "RELIANCE", n: "Reliance Industries", m: "NSE", ty: "S" },
-  { key: "NSE:HDFCBANK", t: "HDFCBANK", n: "HDFC Bank", m: "NSE", ty: "S" }, { key: "NASDAQ:NVDA", t: "NVDA", n: "NVIDIA Corporation", m: "NASDAQ", ty: "S" },
-  { key: "CRYPTO:XRP", t: "XRP", n: "XRP (Ripple)", m: "CRYPTO", ty: "C" }, { key: "ARCA:VOO", t: "VOO", n: "Vanguard S&P 500 ETF", m: "ARCA", ty: "E" },
-  { key: "CRYPTO:PAXG", t: "PAXG", n: "PAX Gold (tracks gold price)", m: "CRYPTO", ty: "C" },
-];
+// Starter list: the 10 largest coins by market cap (CoinPaprika, Oct 2026), leaving out stablecoins and wrapped or staked copies.
+export const STARTER = [{ key: "CRYPTO:BTC", t: "BTC", n: "Bitcoin", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:ETH", t: "ETH", n: "Ethereum", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:BNB", t: "BNB", n: "BNB", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:XRP", t: "XRP", n: "XRP", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:SOL", t: "SOL", n: "Solana", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:TRX", t: "TRX", n: "TRON", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:ZEC", t: "ZEC", n: "Zcash", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:HYPE", t: "HYPE", n: "Hyperliquid", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:DOGE", t: "DOGE", n: "Dogecoin", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:LINK", t: "LINK", n: "Chainlink", m: "CRYPTO", ty: "C" }];
 export const DEFAULT_CHART = { window: 50, interval: "1D", type: "candles", mas: [], lower: "none", order: "watchlist" };
 export const DEFAULT_ACCOUNT = () => ({
   v: 2, createdAt: new Date().toISOString(),
@@ -132,11 +128,12 @@ export async function save(patch) {
   await fb.f.setDoc(fb.f.doc(fb.db, "accounts", store.id), patch, { merge: true });
 }
 
-// ---- watchlists. "All my stocks" is every symbol in any watchlist, each once, in watchlist order.
+// ---- watchlists. "All my coins" is every symbol in any watchlist, each once, in watchlist order.
 export const watchlists = () => store.data?.watchlists || [];
 export function allSyms() {
   const seen = new Set(), out = [];
-  for (const w of watchlists()) for (const s of w.syms || []) if (!seen.has(s.key)) { seen.add(s.key); out.push(s); }
+  // Coins only for now: stock prices need a licensed data source before they can be shown.
+  for (const w of watchlists()) for (const s of w.syms || []) if (s.m === "CRYPTO" && !seen.has(s.key)) { seen.add(s.key); out.push(s); }
   return out;
 }
 export const listsOf = (key) => watchlists().filter((w) => (w.syms || []).some((s) => s.key === key)).map((w) => w.id);

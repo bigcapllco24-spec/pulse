@@ -1,18 +1,16 @@
 // Pulse: the chart feed. Scroll up or down for the next symbol; swipe for its news (finger moves right)
 // or its details (finger moves left). The feed loops through the watchlist with a "caught up" card between rounds.
 import { CONFIG } from "../config.js";
-import { store, ls, init, save, allSyms, watchlists, callAI, getShared, getSharedMany } from "./store.js";
+import { store, ls, init, save, STARTER, allSyms, watchlists, callAI, getShared, getSharedMany } from "./store.js";
 import { loadSymbols, MKLABEL, TYLABEL, findSymbol } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { describe } from "./describe.js";
 import { mainChart, lowerChart } from "./chart.js";
 import { D, loadCached, refresh, view, factTags, bigMove, storiesFor } from "./data.js";
-import * as TV from "./tv.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
 import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, renderOnboarding, demoRules } from "./pages.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
-const MAX_ACTIVE_TV = 1; // live TradingView embeds kept around the visible card
 const chartSettings = () => ({ window: 50, interval: "1D", type: "candles", mas: [], lower: "none", order: "watchlist", ...(store.data?.settings?.chart || {}) });
 const LOWER_KEY = { RSI: "rsi14", MACD: "macdHist", VOL: "volRatio" };
 
@@ -30,7 +28,7 @@ export function currentSyms() {
 }
 export function listName() {
   const list = store.data?.settings?.list || "all";
-  return list === "all" ? "All my stocks" : watchlists().find((w) => w.id === list)?.name || "All my stocks";
+  return list === "all" ? "All my coins" : watchlists().find((w) => w.id === list)?.name || "All my coins";
 }
 
 // ---------- feed construction (virtual: shells for every slot, content only near the visible card)
@@ -46,7 +44,9 @@ export function wheelGesture(onStep, threshold) {
     const a = Math.abs(d), gap = now - last;
     last = now;
     const avg = hist.length ? hist.reduce((x, y) => x + y, 0) / hist.length : 0;
-    const fresh = gap > 110 || (locked && a > 4 && Math.sign(d) !== dir) ||
+    // A short pause only starts a new gesture if the deltas are not still fading (a hiccup in the glide is not a swipe).
+    const lastA = hist.length ? hist[hist.length - 1] : 0;
+    const fresh = gap > 300 || (gap > 110 && a >= lastA * 0.9) || (locked && a > 4 && Math.sign(d) !== dir) ||
       (locked && now - stepAt > 200 && hist.length >= 3 && a > 8 && a > avg * 1.6);
     hist.push(a); if (hist.length > 5) hist.shift();
     if (fresh) { locked = false; acc = 0; if (gap > 110) hist = [a]; }
@@ -55,14 +55,62 @@ export function wheelGesture(onStep, threshold) {
     if (Math.abs(acc) >= threshold) { dir = Math.sign(acc); locked = true; stepAt = now; acc = 0; onStep(dir); }
   };
 }
-// Scroll position we are heading to, so a quick second swipe during the glide moves on from there.
-let fTarget = null, fTargetAt = 0;
-function stepFeed(dir) {
-  const h = feed.clientHeight;
-  const base = fTarget != null && performance.now() - fTargetAt < 700 ? fTarget : Math.round(feed.scrollTop / h);
-  fTarget = Math.max(0, base + dir); fTargetAt = performance.now();
-  feed.scrollTo({ top: fTarget * h, behavior: "smooth" });
+// The feed pages one card at a time under our own control (like short-video apps) instead of the browser's
+// scroll snapping. Native snapping stops a second quick swipe at the card the first one was already heading to,
+// so the swipe feels lost. Here every swipe moves on from where the last one was going.
+let fTarget = 0, anim = null;
+const feedH = () => feed.clientHeight;
+const maxIndex = () => feed.querySelectorAll(".card").length - 1;
+export function goCard(i, ms = 300) {
+  fTarget = Math.max(0, Math.min(maxIndex(), i));
+  const from = feed.scrollTop, to = fTarget * feedH(), t0 = performance.now();
+  cancelAnimationFrame(anim?.raf || 0);
+  if (Math.abs(to - from) < 1) { feed.scrollTop = to; anim = null; return; }
+  anim = { raf: 0 };
+  const tick = (now) => {
+    const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+    feed.scrollTop = from + (to - from) * e;
+    if (k < 1) anim.raf = requestAnimationFrame(tick); else anim = null;
+  };
+  anim.raf = requestAnimationFrame(tick);
 }
+const stepFeed = (dir) => goCard((anim ? fTarget : Math.round(feed.scrollTop / feedH())) + dir);
+// Finger (and mouse) drags up and down. Sideways drags are handled per card in setupSwipe.
+let vd = null;
+feed.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  if (e.target.closest(".pane.side, .sheet")) return; // news and details lists scroll on their own
+  const base = anim ? fTarget : Math.round(feed.scrollTop / feedH());
+  cancelAnimationFrame(anim?.raf || 0); anim = null;
+  vd = { id: e.pointerId, x: e.clientX, y: e.clientY, top: feed.scrollTop, base, mode: null, pts: [[performance.now(), e.clientY]] };
+});
+feed.addEventListener("pointermove", (e) => {
+  if (!vd || e.pointerId !== vd.id) return;
+  const mx = e.clientX - vd.x, my = e.clientY - vd.y;
+  if (!vd.mode) {
+    if (Math.abs(my) > 10 && Math.abs(my) * 1.2 >= Math.abs(mx)) { vd.mode = "v"; APP.dragging = true; try { feed.setPointerCapture(vd.id); } catch {} }
+    else if (Math.abs(mx) > 10) { vd = null; return; }
+    else return;
+  }
+  const h = feedH(), top = vd.top - my, lim = maxIndex() * h;
+  feed.scrollTop = top < 0 ? top / 3 : top > lim ? lim + (top - lim) / 3 : top; // gentle resistance at the ends
+  vd.pts.push([performance.now(), e.clientY]); if (vd.pts.length > 6) vd.pts.shift();
+});
+const vEnd = (e) => {
+  if (!vd || e.pointerId !== vd.id) return;
+  const d = vd; vd = null;
+  if (d.mode !== "v") return;
+  const my = e.clientY - d.y, [t1, y1] = d.pts[0], vel = (e.clientY - y1) / Math.max(1, performance.now() - t1); // px per ms
+  const h = feedH(), dir = my < -0.15 * h || vel < -0.3 ? 1 : my > 0.15 * h || vel > 0.3 ? -1 : 0;
+  goCard(d.base + dir, 260);
+  APP.dragging = false; setTimeout(flushIdle, 300);
+  swallowFeedClick = true; setTimeout(() => (swallowFeedClick = false), 60);
+};
+let swallowFeedClick = false;
+feed.addEventListener("pointerup", vEnd);
+feed.addEventListener("pointercancel", (e) => { if (vd && e.pointerId === vd.id) { const d = vd; vd = null; if (d.mode === "v") { goCard(d.base, 200); APP.dragging = false; } } });
+feed.addEventListener("click", (e) => { if (swallowFeedClick) { e.preventDefault(); e.stopPropagation(); } }, true);
+addEventListener("resize", () => { if (APP.active >= 0) feed.scrollTop = APP.active * feedH(); });
 const feedWheel = wheelGesture(stepFeed, 20);
 feed.addEventListener("wheel", (e) => {
   const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? feed.clientHeight : 1);
@@ -76,7 +124,13 @@ feed.addEventListener("wheel", (e) => {
 // Changing the page while a finger or trackpad is moving it makes phones drop the gesture (the next swipe then
 // needs a tap first). So cards are filled, emptied and refreshed only once scrolling and dragging have stopped.
 let scrolling = false, idleT = null, idleJobs = new Map();
-const idle = () => !scrolling && !APP.dragging;
+const idle = () => !scrolling && !APP.dragging && !touching;
+// A finger on the screen counts as busy too: replacing the card under it would cancel the swipe it is starting.
+let touching = 0;
+feed.addEventListener("touchstart", (e) => { touching = e.touches.length; }, { passive: true });
+const touchEnd = (e) => { touching = e.touches.length; if (!touching) setTimeout(flushIdle, 0); };
+feed.addEventListener("touchend", touchEnd, { passive: true });
+feed.addEventListener("touchcancel", touchEnd, { passive: true });
 function whenIdle(key, fn) { idleJobs.set(key, fn); if (idle()) flushIdle(); }
 function flushIdle() { if (!idle()) return; const jobs = [...idleJobs.values()]; idleJobs.clear(); jobs.forEach((f) => f()); }
 feed.addEventListener("scroll", () => { scrolling = true; clearTimeout(idleT); idleT = setTimeout(() => { scrolling = false; flushIdle(); }, 140); }, { passive: true });
@@ -90,6 +144,7 @@ export function buildFeed({ keepKey } = {}) {
   observe();
   let target = 0;
   if (keepKey) { const i = APP.seq.findIndex((x) => x.sym?.key === keepKey); if (i >= 0) target = i; }
+  cancelAnimationFrame(anim?.raf || 0); anim = null; fTarget = target;
   feed.scrollTop = target * feed.clientHeight;
   setActive(target);
   syncCards();
@@ -129,17 +184,15 @@ function setActive(i) {
   progress();
   whenIdle("sync", syncCards);
 }
-// Fill the neighbours, empty far cards so memory stays flat, keep TradingView only on the visible card.
+// Fill the neighbours and empty far cards so memory stays flat.
 function syncCards() {
   const i = APP.active, cards = feed.querySelectorAll(".card");
   cards.forEach((c, k) => {
     const near = Math.abs(k - i) <= 2;
     if (near && !c.dataset.filled) fillCard(c, APP.seq[k]);
     if (!near && c.dataset.filled && Math.abs(k - i) > 6) { c.innerHTML = ""; delete c.dataset.filled; }
-    if (Math.abs(k - i) > MAX_ACTIVE_TV) c.querySelectorAll(".tv,.tvquote").forEach((el) => TV.unmount(el));
   });
   const it = APP.seq[i];
-  if (it?.type === "sym" && !it.sym.key.startsWith("CRYPTO:") && !D.series[it.sym.key]) mountTV(cards[i], it.sym);
   if (i >= APP.seq.length - 3) appendRound();
 }
 function progress() {
@@ -176,26 +229,11 @@ function renderMain(c, it) {
       <div class="chartbox">${mainChart(v.win, v.ov, { type: cs.type, closeOnly: v.closeOnly, maKeys: cs.mas, interval: cs.interval })}</div>
       ${cs.lower && cs.lower !== "none" ? lowerChart(v.win, v.ov, cs.lower) : ""}${dots}`;
   } else {
-    main.innerHTML = `<div class="head tvhead"><div class="tk" data-tvname hidden>${esc(s.t)}</div><div class="tvquote" data-tvq><div class="shield"></div></div></div>
-      <div class="tv" data-tvc><div class="shield"></div></div>${dots}`;
+    main.innerHTML = `<div class="head"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div>
+      <div class="chartbox nodata"><p>${D.status === "refreshing" ? `Loading ${esc(s.t)} prices…` : `${esc(s.t)} prices couldn't load. Pull to refresh or tap “Updated” at the top.`}</p></div>${dots}`;
   }
 }
 const addDays = (d, n) => new Date(new Date(d + "T00:00:00Z").getTime() + n * 864e5).toISOString().slice(0, 10);
-function mountTV(c, sym) {
-  const q = c.querySelector("[data-tvq]"), ch = c.querySelector("[data-tvc]");
-  if (q && !q.querySelector(".tradingview-widget-container")) TV.quote(q, sym);
-  if (ch && !ch.querySelector(".tradingview-widget-container")) TV.chart(ch, sym, chartSettings());
-  // If TradingView can't load (offline, blocked by a browser or preview), say so instead of showing a blank box.
-  clearTimeout(c._tvCheck);
-  c._tvCheck = setTimeout(() => {
-    if (!ch || ch.querySelector("iframe")) return;
-    if (q) q.hidden = true;
-    c.querySelector("[data-tvname]")?.removeAttribute("hidden");
-    const link = `https://www.tradingview.com/symbols/${TV.tvSymbol(sym).replace(":", "-")}/`;
-    ch.innerHTML = `<div class="tvfail"><b>The ${esc(sym.t)} chart couldn't load here.</b><p>Stock, ETF and index charts come from TradingView's free embed. It loads on the live site, but this browser or preview is blocking it.</p><a class="btn sm" href="${esc(link)}" target="_blank" rel="noopener">Open ${esc(sym.t)} on TradingView ↗</a></div>`;
-  }, 6000);
-}
-
 // ---------- news pane
 const whyRunning = new Set(), whyErr = new Map();
 function renderNews(c, it, scope) {
@@ -261,7 +299,6 @@ async function explain(key, root) {
 // ---------- details pane
 function renderDetails(c, it) {
   const s = it.sym, cs = chartSettings(), v = view(s.key, cs), pane = c.querySelector('[data-pane="details"]');
-  const tvLink = `https://www.tradingview.com/symbols/${TV.tvSymbol(s).replace(":", "-")}/`;
   const lists = watchlists().filter((w) => (w.syms || []).some((x) => x.key === s.key)).map((w) => w.name);
   const rules = (store.data?.rules || []).filter((r) => r.sym === s.key || (r.sym === "*" && s.m === "CRYPTO"));
   let html = `<div class="pane-wrap"><h2 class="side">${esc(s.t)} details</h2>`;
@@ -279,13 +316,11 @@ function renderDetails(c, it) {
       <button class="btn sm" data-addrule style="margin-top:8px">Add a rule for ${esc(s.t)}</button>`;
     html += `<h2>About</h2><div class="box"><p>${esc(s.n)} · ${esc(TYLABEL[s.ty] || "")} · ${esc(MKLABEL[s.m] || s.m)}</p><p class="hint">Data: ${esc(v.source)}${v.live ? ", refreshed when you opened the app" : ""}.</p></div>`;
   } else {
-    html += `<div class="notice">Price readings, fact tags and rules for stocks, ETFs and indices arrive once licensed data or your own broker connection is added. Charts and company data below are by TradingView.</div>
-      <div class="box" data-tvprof style="min-height:340px;padding:0;overflow:hidden"></div><div class="box" data-tvfin style="min-height:480px;padding:0;overflow:hidden"></div>`;
+    html += `<div class="notice">Prices for ${esc(s.t)} haven't loaded yet.</div>`;
   }
   html += `<h2>In your watchlists</h2><p>${lists.length ? lists.map(esc).join(", ") : "None"} · <button class="btn ghost sm" data-save>Change</button></p>
-    <p><a href="${esc(tvLink)}" target="_blank" rel="noopener">Open in TradingView ↗</a></p><p class="disclaimer">${esc(DISCLAIMER)}</p></div>`;
+    <p class="disclaimer">${esc(DISCLAIMER)}</p></div>`;
   pane.innerHTML = html;
-  if (!v) { TV.profile(pane.querySelector("[data-tvprof]"), s); TV.financials(pane.querySelector("[data-tvfin]"), s); }
   pane.querySelectorAll("[data-ind]").forEach((b) => (b.onclick = () => openIndicator(b.dataset.ind)));
   pane.querySelector("[data-addrule]")?.addEventListener("click", () => { location.hash = ""; showTab("profile", "rules", s.key); });
   pane.querySelectorAll("[data-save]").forEach((b) => (b.onclick = () => openListsFor(s)));
@@ -328,7 +363,7 @@ function catchupHtml() {
       <div class="fact"><span class="ic acc">↕</span><div><b>Scroll</b> for the next chart. Every chart is drawn the same way, so moves are easy to compare.</div></div>
       <div class="fact"><span class="ic acc">→</span><div><b>Swipe right</b> for the news behind the chart, with what it means for the company.</div></div>
       <div class="fact"><span class="ic acc">←</span><div><b>Swipe left</b> for the details: readings in plain words, ranges and your rules.</div></div>
-      <div class="fact"><span class="ic acc">+</span><div><b>Add stocks</b> and sort them into watchlists like “Semiconductors”.</div></div>
+      <div class="fact"><span class="ic acc">+</span><div><b>Add coins</b> and sort them into watchlists like “Semiconductors”.</div></div>
       <p class="hint">Information only, never advice. Swipe up to start.</p></div>`;
   }
   const cs = chartSettings();
@@ -343,7 +378,7 @@ function catchupHtml() {
   const fresh = (D.news.stories || []).filter((st) => st.syms.some((k) => keys.has(k)) && (!since || (st.ts || st.date) > since));
   if (fresh.length) {
     const top = fresh.find((st) => st.status === "confirmed") || fresh[0];
-    facts.push(`<div class="fact"><span class="ic acc">${fresh.length}</span><div><b>${fresh.length} new ${fresh.length === 1 ? "story" : "stories"}</b> about your stocks. ${top ? `Latest: “${esc(top.title.slice(0, 80))}${top.title.length > 80 ? "…" : ""}”` : ""}</div></div>`);
+    facts.push(`<div class="fact"><span class="ic acc">${fresh.length}</span><div><b>${fresh.length} new ${fresh.length === 1 ? "story" : "stories"}</b> about your coins. ${top ? `Latest: “${esc(top.title.slice(0, 80))}${top.title.length > 80 ? "…" : ""}”` : ""}</div></div>`);
   }
   const unread = store.alerts.filter((a) => !a.read).length;
   if (unread) facts.push(`<div class="fact"><span class="ic acc">!</span><div><b>${unread} rule${unread === 1 ? "" : "s"} met</b>. See Profile → Alerts.</div></div>`);
@@ -355,11 +390,11 @@ function catchupHtml() {
 function doneHtml(round) {
   return `<div class="special" style="align-items:flex-start"><svg class="done-ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="34"/><path d="M26 41l9 9 19-20"/></svg>
     <h1>You're all caught up.</h1><p>You've seen all ${APP.syms.length} in ${esc(listName())}${round > 1 ? ` (round ${round})` : ""}. Prices refresh each time you open the app; news every 2 hours.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="add">Add stocks</button><button class="btn" data-act="dash">Dashboard</button></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="add">Add coins</button><button class="btn" data-act="dash">Dashboard</button></div>
     <p class="hint">Keep scrolling to go round again.</p></div>`;
 }
 function emptyHtml() {
-  return `<div class="special"><h1>Nothing here yet.</h1><p>Add stocks, ETFs or coins to ${esc(listName())} to fill your feed.</p><button class="btn primary" data-act="add">Add stocks</button></div>`;
+  return `<div class="special"><h1>Nothing here yet.</h1><p>Add coins to ${esc(listName())} to fill your feed.</p><button class="btn primary" data-act="add">Add coins</button></div>`;
 }
 
 // ---------- sideways swipes between a card's views: news (finger moves right), chart, details (finger moves left).
@@ -425,7 +460,7 @@ function setupSwipe(c, it) {
 document.addEventListener("keydown", (e) => {
   if (APP.tab !== "feed" || !$("sheet").hidden || /input|select|textarea/i.test(e.target.tagName)) return;
   const c = feed.querySelector(".card.active");
-  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); feed.scrollBy({ top: (e.key === "ArrowDown" ? 1 : -1) * feed.clientHeight, behavior: "smooth" }); }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); stepFeed(e.key === "ArrowDown" ? 1 : -1); }
   else if (c?._go && (e.key === "ArrowLeft" || e.key === "ArrowRight")) { const cur = PANE[c.dataset.view || "main"]; c._go(cur + (e.key === "ArrowRight" ? 1 : -1)); }
 });
 
@@ -503,6 +538,12 @@ export function applyTheme() {
   try { ({ onboarding } = await init()); } catch { toast(store.error || "Couldn't start. Check your connection."); }
   // Cleaner cards (v2): candles on their own by default; moving averages and the lower panel are opt-in.
   const ch = store.data?.settings?.chart;
+  if (store.data && !store.data.settings?.coinsOnly) {
+    // Coins only (v3): drop stocks from watchlists; an untouched starter list becomes the top 10 coins.
+    const OLD = new Set(["CRYPTO:BTC", "NSE:RELIANCE", "NSE:HDFCBANK", "NASDAQ:NVDA", "CRYPTO:XRP", "ARCA:VOO", "CRYPTO:PAXG"]);
+    const wl = watchlists().map((w) => ((w.syms || []).every((x) => OLD.has(x.key)) && w.id === "w1" ? { ...w, syms: STARTER.slice() } : { ...w, syms: (w.syms || []).filter((x) => x.m === "CRYPTO") }));
+    save({ watchlists: wl, settings: { ...store.data.settings, coinsOnly: 1 } }).catch(() => {});
+  }
   if (ch && !ch.v2) save({ settings: { ...store.data.settings, chart: { ...ch, type: "candles", mas: [], lower: "none", v2: 1 } } }).catch(() => {});
   applyTheme();
   initPages();

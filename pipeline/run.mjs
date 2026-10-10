@@ -14,8 +14,7 @@ import { compute, ruleMet, METRICS, OPS, fmt } from "../web/js/indicators.js";
 
 const outDir = process.argv[2] || "web/data";
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
-const STARTER = [["CRYPTO", "BTC", "Bitcoin", "C"], ["CRYPTO", "ETH", "Ethereum", "C"], ["CRYPTO", "XRP", "XRP", "C"], ["CRYPTO", "PAXG", "PAX Gold", "C"],
-  ["NSE", "RELIANCE", "Reliance Industries", "S"], ["NSE", "HDFCBANK", "HDFC Bank", "S"], ["NASDAQ", "NVDA", "NVIDIA Corporation", "S"], ["ARCA", "VOO", "Vanguard S&P 500 ETF", "E"]]
+const STARTER = [["CRYPTO", "BTC", "Bitcoin", "C"], ["CRYPTO", "ETH", "Ethereum", "C"], ["CRYPTO", "BNB", "BNB", "C"], ["CRYPTO", "XRP", "XRP", "C"], ["CRYPTO", "SOL", "Solana", "C"], ["CRYPTO", "TRX", "TRON", "C"], ["CRYPTO", "ZEC", "Zcash", "C"], ["CRYPTO", "HYPE", "Hyperliquid", "C"], ["CRYPTO", "DOGE", "Dogecoin", "C"], ["CRYPTO", "LINK", "Chainlink", "C"]]
   .map(([m, t, n, ty]) => ({ key: `${m}:${t}`, m, t, n, ty }));
 
 async function main() {

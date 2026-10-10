@@ -47,13 +47,14 @@ p { margin: 6px 0; }
 .tabbar .dot { position: absolute; top: 10px; right: calc(50% - 17px); width: 8px; height: 8px; border-radius: 50%; background: var(--down); }
 
 /* ---------- feed */
-.feed { position: fixed; inset: 0; overflow-y: auto; scroll-snap-type: y mandatory; overscroll-behavior: contain; scrollbar-width: none; }
+.feed { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: contain; touch-action: none; scrollbar-width: none; }
 .feed::-webkit-scrollbar { display: none; }
 /* Each card is exactly one feed-height tall, so snap points always line up with the screen. */
-.card { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; overflow: hidden; }
+.card { position: relative; height: 100%; overflow: hidden; touch-action: none; }
 /* The three views of a card sit side by side on a track moved by a sideways-swipe handler (see setupSwipe in app.js).
    touch-action: pan-y leaves every vertical swipe to the feed, so scrolling to the next symbol always works. */
-.panes { display: flex; width: 300%; height: 100%; transform: translate3d(-33.3333%, 0, 0); transition: transform .32s cubic-bezier(.2,.8,.2,1); touch-action: pan-y; will-change: transform; }
+.panes { display: flex; width: 300%; height: 100%; transform: translate3d(-33.3333%, 0, 0); transition: transform .32s cubic-bezier(.2,.8,.2,1); touch-action: none; will-change: transform; }
+.pane.side { touch-action: pan-y; }
 .panes.dragging { transition: none; }
 .pane { flex: 0 0 33.3333%; width: 33.3333%; height: 100%; overflow-y: auto; overscroll-behavior: contain;
   padding: calc(100px + var(--safe-t)) 18px calc(var(--tab) + 18px + var(--safe-b)); }
@@ -263,3 +264,6 @@ button.row, a.row { width: 100%; background: none; border-left: 0; border-right:
 .tvfail { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 22px; text-align: left; }
 .tvfail p { color: var(--muted); font-size: 14px; margin: 0 0 6px; }
 .tvfail .btn { align-self: flex-start; }
+.chartbox.nodata { display: grid; place-items: center; border-radius: 14px; background: var(--surface); }
+.chartbox.nodata p { color: var(--muted); font-size: 14px; text-align: center; max-width: 260px; margin: 0; }
+.price.muted { color: var(--muted); }

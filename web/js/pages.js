@@ -7,7 +7,6 @@ import { loadSymbols, searchSymbols, searchIndicators, symbolIndex, MKLABEL, TYL
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
 import { D, view, storiesFor } from "./data.js";
-import * as TV from "./tv.js";
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
 import { APP, buildFeed, showTab, currentSyms, listName, applyTheme, doRefresh } from "./app.js";
 
@@ -28,7 +27,7 @@ export function initPages() {
 // ---------- add-stock sheet: search, then choose watchlists
 export function openAddSheet(prefill = "") {
   const curList = store.data?.settings?.list;
-  openSheet("Add stocks", "", (body) => mountSearch(body, prefill),
+  openSheet("Add coins", "", (body) => mountSearch(body, prefill),
     () => { buildFeed({ keepKey: APP.lastAdded || APP.seq[APP.active]?.sym?.key }); APP.lastAdded = null; });
 
   function mountSearch(body, initial = "") {
@@ -38,7 +37,7 @@ export function openAddSheet(prefill = "") {
     let rows = [];
     const draw = (extra = "") => {
       const text = q.value.trim(), inAny = new Set(allSyms().map((s) => s.key));
-      body.querySelector("#addRes").innerHTML = !text ? `<p class="hint">Search about 15,000 listings: NSE, US stocks and ETFs, major coins, Nifty 50 and Sensex. Nicknames work too, like “zomato” or “google”.</p>${starterHtml()}` :
+      body.querySelector("#addRes").innerHTML = !text ? `<p class="hint">Search coins by name or symbol, like “bitcoin”, “eth” or “sol”.</p>${starterHtml()}` :
         (rows.map((r, i) => `<button class="result ${inAny.has(r.key) ? "in" : ""}" data-i="${i}"><span class="t">${esc(r.t)}</span><span class="n">${esc(r.n)}</span><span class="x">${inAny.has(r.key) ? "Added" : esc(MKLABEL[r.m] + " · " + TYLABEL[r.ty])}</span></button>`).join("") ||
           `<p class="hint">No listing matches “${esc(text)}”.</p>`) + extra +
         (text.length >= 3 && !extra ? `<button class="btn ghost sm" id="askAI" style="margin-top:8px">Not it? Ask AI what “${esc(text)}” means</button>` : "");
@@ -89,14 +88,13 @@ export function openAddSheet(prefill = "") {
 
 // One-tap starter watchlists, built from published groupings only (index membership, coin size). Never picks.
 const STARTERS = {
-  niftybanks: { name: "Nifty Bank (top 6)", keys: ["NSE:HDFCBANK", "NSE:ICICIBANK", "NSE:SBIN", "NSE:KOTAKBANK", "NSE:AXISBANK", "NSE:INDUSINDBK"] },
-  usmega: { name: "US mega caps", keys: ["NASDAQ:AAPL", "NASDAQ:MSFT", "NASDAQ:NVDA", "NASDAQ:GOOGL", "NASDAQ:AMZN", "NASDAQ:META"] },
-  semis: { name: "Semiconductors", keys: ["NASDAQ:NVDA", "NASDAQ:AMD", "NASDAQ:AVGO", "NASDAQ:QCOM", "NASDAQ:INTC", "NASDAQ:MU"] },
-  coins: { name: "Top coins", keys: ["CRYPTO:BTC", "CRYPTO:ETH", "CRYPTO:XRP", "CRYPTO:SOL", "CRYPTO:ADA", "CRYPTO:DOGE"] },
+  top10: { name: "Top 10 coins by market cap", keys: ["CRYPTO:BTC", "CRYPTO:ETH", "CRYPTO:BNB", "CRYPTO:XRP", "CRYPTO:SOL", "CRYPTO:TRX", "CRYPTO:ZEC", "CRYPTO:HYPE", "CRYPTO:DOGE", "CRYPTO:LINK"] },
+  payments: { name: "Payment coins", keys: ["CRYPTO:BTC", "CRYPTO:XRP", "CRYPTO:LTC", "CRYPTO:BCH", "CRYPTO:XLM", "CRYPTO:DOGE"] },
+  platforms: { name: "Smart-contract platforms", keys: ["CRYPTO:ETH", "CRYPTO:SOL", "CRYPTO:ADA", "CRYPTO:AVAX", "CRYPTO:DOT", "CRYPTO:NEAR"] },
 };
 function starterHtml() {
   return `<div class="label" style="margin:16px 0 8px">Starter watchlists</div><div class="opts">${Object.entries(STARTERS).map(([k, s]) => `<button class="opt" data-starter="${k}">${esc(s.name)}</button>`).join("")}</div>
-    <p class="hint" style="margin-top:8px">Grouped by index, sector or size. Not recommendations.</p>`;
+    <p class="hint" style="margin-top:8px">Grouped by size or what the coin is for. Not recommendations.</p>`;
 }
 async function addStarter(k) {
   await loadSymbols();
@@ -127,11 +125,11 @@ export function openListsFor(sym) {
   }, () => buildFeed({ keepKey: sym.key }));
 }
 
-// Switch between "All my stocks" and one watchlist
+// Switch between "All my coins" and one watchlist
 export function openSwitcher() {
   const cur = store.data?.settings?.list || "all";
   const all = allSyms().length;
-  openSheet("Show in feed", `${[["all", "All my stocks", all], ...watchlists().map((w) => [w.id, w.name, (w.syms || []).length])].map(([id, name, n]) =>
+  openSheet("Show in feed", `${[["all", "All my coins", all], ...watchlists().map((w) => [w.id, w.name, (w.syms || []).length])].map(([id, name, n]) =>
     `<button class="row" data-l="${esc(id)}"><span class="main"><span class="t">${esc(name)}</span><span class="s">${n} symbol${n === 1 ? "" : "s"}</span></span>${id === cur ? `<span style="color:var(--accent);font-weight:800">✓</span>` : ""}</button>`).join("")}
     <div style="display:flex;gap:8px;margin-top:12px"><button class="btn sm" id="nwl">New watchlist</button><button class="btn sm" id="mwl">Manage</button></div>
     <div class="label" style="margin:18px 0 8px">Order</div><div class="opts">${[["watchlist", "Watchlist order"], ["move", "Biggest move"], ["news", "Most news"], ["rsi", "Lowest RSI"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-o="${k}" aria-pressed="${chartSettings().order === k}">${l}</button>`).join("")}</div>`, (body) => {
@@ -158,16 +156,13 @@ export function renderDash() {
     <div class="summary"><div><b>${ups}<span class="hint" style="font-size:14px">/${withData.length}</span></b><span>coins up today</span></div><div><b>${newsToday}</b><span>stories today</span></div><div><b>${rulesToday}</b><span>rules met today</span></div></div>
     ${withData.length ? `<div class="opts" style="margin-bottom:10px">${[["move", "Biggest move"], ["rsi", "Lowest RSI"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-s="${k}" aria-pressed="${sort === k}">${l}</button>`).join("")}</div>
     <div class="list">${withData.map(({ s, v }) => { const c = v.daily.now.changePct; return `<button class="row" data-open="${esc(s.key)}"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">RSI ${fmt(v.now.rsi14, 1)} · ${storiesFor(s.key).length} stories</span></span>${sparkline(v.win.map((b) => b.c))}<span class="r"><b>${esc(money(v.lastBar.c, s.m))}</b><span class="${c >= 0 ? "up" : "down"}">${arrow(c)} ${pct(c)}</span></span></button>`; }).join("")}</div>` : ""}
-    ${noData.length ? `<h2>Stocks, ETFs and indices</h2><div class="tvlist" id="tvq"></div>
-      <div class="list" style="margin-top:10px">${noData.map((s) => `<button class="row" data-open="${esc(s.key)}"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">${esc(s.n)}</span></span><span class="r"><span class="hint">${storiesFor(s.key).length} stories</span></span><span class="chev">›</span></button>`).join("")}</div>
-      <p class="hint">Quotes by TradingView. Our own readings for these arrive with licensed data.</p>` : ""}
-    ${!syms.length ? `<div class="empty">Nothing in this watchlist yet.<br><br><button class="btn primary" id="dAdd">Add stocks</button></div>` : ""}
+    ${noData.length ? `<p class="hint">Waiting for prices: ${noData.map((s) => esc(s.t)).join(", ")}.</p>` : ""}
+    ${!syms.length ? `<div class="empty">Nothing in this watchlist yet.<br><br><button class="btn primary" id="dAdd">Add coins</button></div>` : ""}
     <p class="disclaimer">${esc(DISCLAIMER)}</p>`;
   el.querySelector("#dSwitch").onclick = () => openSwitcher();
   el.querySelector("#dAdd")?.addEventListener("click", () => openAddSheet());
   el.querySelectorAll("[data-s]").forEach((b) => (b.onclick = () => { APP.dashSort = b.dataset.s; renderDash(); }));
   el.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { showTab("feed"); buildFeed({ keepKey: b.dataset.open }); }));
-  if (noData.length) TV.quotes(el.querySelector("#tvq"), noData);
 }
 
 // ---------- profile
@@ -197,7 +192,7 @@ function pWatchlists(el, back) {
     ${wl.map((w) => `<div class="box"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3>${esc(w.name)}</h3><span><button class="btn ghost sm" data-ren="${esc(w.id)}">Rename</button><button class="btn ghost sm danger" data-del="${esc(w.id)}">Delete</button></span></div>
       ${(w.syms || []).length ? `<div class="list" style="margin-top:8px;background:var(--surface2)">${w.syms.map((s, i) => `<div class="row"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">${esc(s.n)}</span></span>
         <button class="btn ghost sm" data-up="${esc(w.id)}|${esc(s.key)}" ${i === 0 ? "disabled" : ""} aria-label="Move up">↑</button><button class="btn ghost sm" data-dn="${esc(w.id)}|${esc(s.key)}" ${i === w.syms.length - 1 ? "disabled" : ""} aria-label="Move down">↓</button><button class="btn ghost sm" data-rm="${esc(w.id)}|${esc(s.key)}" aria-label="Remove">✕</button></div>`).join("")}</div>` : `<p class="hint">Empty.</p>`}</div>`).join("")}
-    <button class="btn primary block" id="wAdd">Add stocks</button><button class="btn block" id="wNew" style="margin-top:8px">New watchlist</button>`;
+    <button class="btn primary block" id="wAdd">Add coins</button><button class="btn block" id="wNew" style="margin-top:8px">New watchlist</button>`;
   const re = () => pWatchlists(el, back) || (el.querySelector("#pBack").onclick = () => renderProfile());
   el.querySelector("#wAdd").onclick = () => openAddSheet();
   el.querySelector("#wNew").onclick = async () => { const n = prompt("Name the watchlist", "Semiconductors"); if (n) { await newWatchlist(n); re(); } };
@@ -276,7 +271,7 @@ const RULE_METRICS = ["price", "changePct", "rsi14", "distSma20Pct", "distSma50P
 function pRules(el, back, preKey) {
   const coins = allSyms().filter((s) => s.m === "CRYPTO"), rules = store.data.rules || [];
   const label = (r) => `${r.sym === "*" ? "Any coin" : esc(r.sym.split(":")[1])}: ${esc(METRICS[r.metric]?.label || r.metric)} ${esc(OPS[r.op])} ${esc(r.value)}${esc(METRICS[r.metric]?.unit || "")}`;
-  el.innerHTML = `${back}<h1>Rules</h1><p class="hint">Get an alert when one of your own levels is hit. Rules run on coins after every data refresh; stocks join once licensed data is in.</p>
+  el.innerHTML = `${back}<h1>Rules</h1><p class="hint">Get an alert when one of your own levels is hit. Rules run after every data refresh.</p>
     ${coins.length ? `<form class="box" id="rForm"><div class="field"><label for="rSym">Applies to</label><select id="rSym"><option value="*">Any coin I follow</option>${coins.map((s) => `<option value="${esc(s.key)}" ${s.key === preKey ? "selected" : ""}>${esc(s.t)}</option>`).join("")}</select></div>
       <div class="field"><label for="rMetric">Reading</label><select id="rMetric">${RULE_METRICS.map((m) => `<option value="${m}">${esc(METRICS[m].label)}</option>`).join("")}</select></div>
       <div style="display:flex;gap:8px"><div class="field" style="flex:1"><label for="rOp">Condition</label><select id="rOp">${Object.entries(OPS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
@@ -366,7 +361,7 @@ function pLegal(el, back) {
     <h2>How AI is used</h2><p>Explanations of news, price moves and indicators are written by an AI model from linked sources, once per story or move, and are the same for every user. They describe what happened and what a number measures. They never say whether to buy, sell or hold and never predict prices. Each is labelled with its date and sources.</p>
     <h2>Fact tags and sorting</h2><p>Tags such as “Volume 2.1x usual” or “New 50-day high” state facts about the latest data. Sorting by move, news or RSI orders your own list by that fact. Neither is a signal or a ranking of investments.</p>
     <h2>Privacy</h2><p>We don't ask for or store your name, email, phone number, location or contacts, and use no tracking or advertising cookies. We keep a random account ID derived from your recovery code, your watchlists, chart style, rules and indicator choices, list nicknames and, if you turn on alerts, a push token. You can delete everything from Account.</p>
-    <h2>Data sources</h2><p>Coin prices from Kraken's public data, checked against CoinGecko. Stock, ETF and index charts, quotes and company data by TradingView. News found via the GDELT Project and linked to each publisher.</p>
+    <h2>Data sources</h2><p>Coin prices from Kraken's public data, checked against CoinGecko. News found via the GDELT Project and linked to each publisher.</p>
     <h2>Age</h2><p>For people aged 18 and over.</p>
     <h2>Grievance contact</h2><p>${esc(CONFIG.companyName)} · <a href="mailto:${esc(CONFIG.grievanceEmail)}">${esc(CONFIG.grievanceEmail)}</a>. Complaints acknowledged within 24 hours, resolved within 15 days.</p>
     <p class="hint">Summary only. Full terms and privacy notice to be reviewed by a lawyer before public launch.</p>`;
@@ -379,7 +374,7 @@ export function renderOnboarding() {
   const el = $("profile");
   el.innerHTML = `<div style="min-height:70dvh;display:flex;flex-direction:column;justify-content:center;gap:14px">
     <div class="label">${esc(CONFIG.appName)}</div><h1 style="font-size:34px">Your watchlist,<br>one chart at a time.</h1>
-    <p>Scroll through your stocks and coins like a feed. Swipe for the news and the meaning behind every move. No name, email or phone needed.</p>
+    <p>Scroll through your coins like a feed. Swipe for the news and the meaning behind every move. No name, email or phone needed.</p>
     <button class="btn primary block" id="oNew">Get started</button><button class="btn block" id="oHave">I have a recovery code</button>
     <p class="disclaimer">By continuing you confirm you are 18 or over. ${esc(DISCLAIMER)}</p></div>`;
   el.querySelector("#oNew").onclick = async (e) => {

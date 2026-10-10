@@ -6,7 +6,7 @@ const GECKO = { BTC: "bitcoin", ETH: "ethereum", XRP: "ripple", SOL: "solana", A
   POL: "polygon-ecosystem-token", HBAR: "hedera-hashgraph", ICP: "internet-computer", INJ: "injective-protocol", TON: "the-open-network", XMR: "monero",
   MKR: "maker", CRV: "curve-dao-token", LDO: "lido-dao", RNDR: "render-token", GRT: "the-graph", SAND: "the-sandbox", MANA: "decentraland",
   AXS: "axie-infinity", USDT: "tether", USDC: "usd-coin", PAXG: "pax-gold", TRUMP: "official-trump", WIF: "dogwifcoin", BONK: "bonk",
-  SEI: "sei-network", TIA: "celestia", ENA: "ethena", ONDO: "ondo-finance" };
+  SEI: "sei-network", BNB: "binancecoin", ZEC: "zcash", HYPE: "hyperliquid", TIA: "celestia", ENA: "ethena", ONDO: "ondo-finance" };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function kraken(t) {
