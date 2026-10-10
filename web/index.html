@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pulse</title>
+  <meta name="description" content="Your watchlist as a feed of charts, with the news and meaning behind every move. Information only, not investment advice.">
+  <meta name="theme-color" content="#0B0F14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <section class="screen" id="sFeed" aria-label="Feed">
+    <div class="topbar" id="topbar">
+      <div class="progress" id="progress" aria-hidden="true"></div>
+      <div class="toprow">
+        <button class="switcher" id="switcher" aria-haspopup="dialog"><span id="switchName">All my stocks</span><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
+        <button class="status" id="status" title="Refresh">Updating…</button>
+        <button class="iconbtn" id="addBtn" aria-label="Add stocks"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      </div>
+    </div>
+    <div class="feed" id="feed" tabindex="-1"></div>
+  </section>
+  <section class="screen" id="sDash" hidden aria-label="Dashboard"><div class="page"><div class="page-inner" id="dash"></div></div></section>
+  <section class="screen" id="sProfile" hidden aria-label="Profile"><div class="page"><div class="page-inner" id="profile"></div></div></section>
+
+  <nav class="tabbar" aria-label="Main">
+    <button data-tab="feed" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-6 4 4 4-7 5 9"/><path d="M3 21h18"/></svg>Feed</button>
+    <button data-tab="dash"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>Dashboard</button>
+    <button data-tab="profile"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>Profile<b class="dot" id="alertDot" hidden></b></button>
+  </nav>
+
+  <div class="backdrop" id="backdrop" hidden></div>
+  <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="shTitle" hidden></section>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

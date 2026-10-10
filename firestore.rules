@@ -1,0 +1,28 @@
+rules_version = '2';
+// No personal data is stored. Accounts are addressed by the SHA-256 of a recovery code only the user holds,
+// so knowing the document id is the key. Listing collections is never allowed from the app.
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+
+    match /accounts/{acct} {
+      allow get, create, update, delete: if signedIn() && acct.size() == 64;
+      match /alerts/{alert} {
+        allow read, update, delete: if signedIn() && acct.size() == 64;   // written by the data job only
+      }
+    }
+    // Which symbols anyone follows, so the data job knows what to fetch. Holds no account information.
+    match /follows/{sym} {
+      allow create: if signedIn() && request.resource.data.keys().hasOnly(['key', 't', 'n', 'm', 'ty', 'at']);
+      allow update: if signedIn() && request.resource.data.keys().hasOnly(['key', 't', 'n', 'm', 'ty', 'at']);
+    }
+    // Shared lists: anyone with the long random link can read and edit.
+    match /lists/{list} {
+      allow get, create, update: if signedIn() && list.size() >= 20;
+    }
+    // AI results, written only by the AI relay (service account), readable by every signed-in user.
+    match /explain/{id} { allow get: if signedIn(); }
+    match /moves/{id} { allow get: if signedIn(); }
+    match /indicatorDocs/{id} { allow get: if signedIn(); }
+  }
+}

@@ -1,0 +1,864 @@
+[
+ {
+  "id": "ma",
+  "name": "Moving averages (20 and 50 day)",
+  "aliases": [
+   "sma",
+   "simple moving average",
+   "ma",
+   "moving average",
+   "50 day",
+   "20 day",
+   "dma"
+  ],
+  "category": "Trend",
+  "metrics": [
+   "distSma20Pct",
+   "distSma50Pct"
+  ],
+  "tv": "MASimple@tv-basicstudies",
+  "computed": true,
+  "builtin": true,
+  "short": "How far the price sits above or below its average price of the last 20 and 50 days.",
+  "explainer": {
+   "measures": "The average closing price over the last 20 and 50 trading days, and how far today's price is from each. It smooths out daily noise to show the general level prices have been trading at.",
+   "calc": "Add the last N closing prices and divide by N. The app shows the gap between today's price and that average, as a percentage.",
+   "settings": "20 days for the short-term level, 50 days for the medium-term level. 200 days is common for the long term.",
+   "limits": "Averages lag: they only describe the past and turn after prices have already moved. In sideways markets the price crosses its average often without any lasting change.",
+   "sources": [
+    {
+     "label": "Wikipedia: Moving average",
+     "url": "https://en.wikipedia.org/wiki/Moving_average"
+    },
+    {
+     "label": "Investopedia: Moving average",
+     "url": "https://www.investopedia.com/terms/m/movingaverage.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "rsi",
+  "name": "RSI (Relative Strength Index)",
+  "aliases": [
+   "rsi",
+   "relative strength",
+   "relative strength index",
+   "wilder rsi"
+  ],
+  "category": "Momentum",
+  "metrics": [
+   "rsi14"
+  ],
+  "tv": "RSI@tv-basicstudies",
+  "computed": true,
+  "builtin": true,
+  "short": "How strong recent gains have been compared with recent losses, on a 0 to 100 scale.",
+  "explainer": {
+   "measures": "The balance of up days against down days over the last 14 trading days. Readings near 100 mean gains dominated; near 0, losses dominated. 70 and 30 are the levels most often quoted.",
+   "calc": "Average gain and average loss over 14 days are smoothed with Wilder's method; RSI = 100 − 100 ÷ (1 + average gain ÷ average loss).",
+   "settings": "14 days is standard. Shorter periods react faster and swing to extremes more often.",
+   "limits": "In a strong trend RSI can stay above 70 or below 30 for weeks. A reading describes recent momentum, not what comes next.",
+   "sources": [
+    {
+     "label": "Wikipedia: Relative strength index",
+     "url": "https://en.wikipedia.org/wiki/Relative_strength_index"
+    },
+    {
+     "label": "Investopedia: RSI",
+     "url": "https://www.investopedia.com/terms/r/rsi.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "macd",
+  "name": "MACD",
+  "aliases": [
+   "macd",
+   "moving average convergence divergence",
+   "macd histogram"
+  ],
+  "category": "Momentum",
+  "metrics": [
+   "macdHist"
+  ],
+  "tv": "MACD@tv-basicstudies",
+  "computed": true,
+  "builtin": true,
+  "short": "The gap between a fast and a slow average, and whether that gap is widening or narrowing.",
+  "explainer": {
+   "measures": "The difference between the 12-day and 26-day exponential averages (the MACD line), compared with its own 9-day average (the signal line). The histogram is the gap between the two.",
+   "calc": "MACD = EMA(12) − EMA(26). Signal = EMA(9) of MACD. Histogram = MACD − Signal.",
+   "settings": "12, 26 and 9 days are the standard settings.",
+   "limits": "Built from averages, so it lags. The histogram changes sign often in choppy markets.",
+   "sources": [
+    {
+     "label": "Wikipedia: MACD",
+     "url": "https://en.wikipedia.org/wiki/MACD"
+    },
+    {
+     "label": "Investopedia: MACD",
+     "url": "https://www.investopedia.com/terms/m/macd.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "bb",
+  "name": "Bollinger Bands (%B)",
+  "aliases": [
+   "bollinger",
+   "bollinger bands",
+   "%b",
+   "percent b",
+   "bands"
+  ],
+  "category": "Volatility",
+  "metrics": [
+   "pctB"
+  ],
+  "tv": "BB@tv-basicstudies",
+  "computed": true,
+  "builtin": true,
+  "short": "Where the price sits inside a band two standard deviations either side of its 20-day average.",
+  "explainer": {
+   "measures": "A band around the 20-day average whose width grows and shrinks with volatility. %B places today's price in the band: 0 is the lower band, 1 the upper band, 0.5 the middle.",
+   "calc": "Middle = 20-day average. Upper and lower = middle ± 2 standard deviations of the last 20 closes. %B = (price − lower) ÷ (upper − lower).",
+   "settings": "20 days and 2 standard deviations are standard.",
+   "limits": "Prices can ride along a band for long stretches. The band describes recent variability only.",
+   "sources": [
+    {
+     "label": "Wikipedia: Bollinger Bands",
+     "url": "https://en.wikipedia.org/wiki/Bollinger_Bands"
+    },
+    {
+     "label": "Investopedia: Bollinger Bands",
+     "url": "https://www.investopedia.com/terms/b/bollingerbands.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "range50",
+  "name": "50-day high and low",
+  "aliases": [
+   "52 week high",
+   "50 day high",
+   "range",
+   "high low",
+   "breakout"
+  ],
+  "category": "Trend",
+  "metrics": [
+   "distHigh50Pct"
+  ],
+  "tv": null,
+  "computed": true,
+  "builtin": true,
+  "short": "How far the price is from its highest point of the last 50 trading days.",
+  "explainer": {
+   "measures": "The highest and lowest prices of the last 50 trading days, and the distance of today's price from the high.",
+   "calc": "Highest high and lowest low over the last 50 daily bars.",
+   "settings": "50 days here; 52 weeks (about 250 days) is the other common window.",
+   "limits": "A new high or low says where price has been, not where it will be.",
+   "sources": [
+    {
+     "label": "Investopedia: 52-week high/low",
+     "url": "https://www.investopedia.com/terms/1/52weekhighlow.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "volume",
+  "name": "Volume vs average",
+  "aliases": [
+   "volume",
+   "relative volume",
+   "rvol",
+   "volume ratio"
+  ],
+  "category": "Volume",
+  "metrics": [
+   "volRatio"
+  ],
+  "tv": "Volume@tv-basicstudies",
+  "computed": true,
+  "builtin": true,
+  "short": "Today's trading volume compared with the average of the previous 20 days.",
+  "explainer": {
+   "measures": "How busy trading was today compared with normal. 2x means twice the usual number of shares or coins changed hands.",
+   "calc": "Today's volume ÷ average volume of the previous 20 days.",
+   "settings": "20 days is common.",
+   "limits": "Not available for indices. Crypto volume from one exchange is only a slice of the whole market.",
+   "sources": [
+    {
+     "label": "Investopedia: Volume",
+     "url": "https://www.investopedia.com/terms/v/volume.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "atr",
+  "name": "ATR (Average True Range)",
+  "aliases": [
+   "atr",
+   "average true range",
+   "volatility"
+  ],
+  "category": "Volatility",
+  "metrics": [
+   "atrPct"
+  ],
+  "tv": "ATR@tv-basicstudies",
+  "computed": true,
+  "builtin": false,
+  "short": "The typical size of a day's price move over the last 14 days, as a % of price.",
+  "explainer": {
+   "measures": "How much the price usually moves in a day, including overnight gaps.",
+   "calc": "True range = the largest of high − low, |high − previous close| and |low − previous close|, smoothed over 14 days with Wilder's method.",
+   "settings": "14 days is standard.",
+   "limits": "It measures the size of moves, not their direction.",
+   "sources": [
+    {
+     "label": "Wikipedia: Average true range",
+     "url": "https://en.wikipedia.org/wiki/Average_true_range"
+    },
+    {
+     "label": "Investopedia: ATR",
+     "url": "https://www.investopedia.com/terms/a/atr.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "stoch",
+  "name": "Stochastic oscillator",
+  "aliases": [
+   "stochastic",
+   "stoch",
+   "%k",
+   "stochastic oscillator"
+  ],
+  "category": "Momentum",
+  "metrics": [
+   "stochK"
+  ],
+  "tv": "Stochastic@tv-basicstudies",
+  "computed": true,
+  "builtin": false,
+  "short": "Where today's close sits within the high–low range of the last 14 days, 0 to 100.",
+  "explainer": {
+   "measures": "Whether the price is closing near the top or bottom of its recent range.",
+   "calc": "%K = 100 × (close − 14-day low) ÷ (14-day high − 14-day low).",
+   "settings": "14 days; a 3-day average of %K is often drawn as %D.",
+   "limits": "Swings between extremes quickly in volatile markets.",
+   "sources": [
+    {
+     "label": "Wikipedia: Stochastic oscillator",
+     "url": "https://en.wikipedia.org/wiki/Stochastic_oscillator"
+    },
+    {
+     "label": "Investopedia: Stochastic oscillator",
+     "url": "https://www.investopedia.com/terms/s/stochasticoscillator.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "willr",
+  "name": "Williams %R",
+  "aliases": [
+   "williams",
+   "williams r",
+   "%r"
+  ],
+  "category": "Momentum",
+  "metrics": [
+   "willR"
+  ],
+  "tv": "WilliamsR@tv-basicstudies",
+  "computed": true,
+  "builtin": false,
+  "short": "The stochastic idea on a −100 to 0 scale: how close the close is to the recent high.",
+  "explainer": {
+   "measures": "How close today's close is to the highest high of the last 14 days.",
+   "calc": "%R = −100 × (14-day high − close) ÷ (14-day high − 14-day low).",
+   "settings": "14 days.",
+   "limits": "Same as the stochastic oscillator: it moves fast and stays at extremes in trends.",
+   "sources": [
+    {
+     "label": "Wikipedia: Williams %R",
+     "url": "https://en.wikipedia.org/wiki/Williams_%25R"
+    },
+    {
+     "label": "Investopedia: Williams %R",
+     "url": "https://www.investopedia.com/terms/w/williamsr.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "cci",
+  "name": "CCI (Commodity Channel Index)",
+  "aliases": [
+   "cci",
+   "commodity channel"
+  ],
+  "category": "Momentum",
+  "metrics": [
+   "cci20"
+  ],
+  "tv": "CCI@tv-basicstudies",
+  "computed": true,
+  "builtin": false,
+  "short": "How far the typical price is from its 20-day average, scaled by its usual deviation.",
+  "explainer": {
+   "measures": "Distance of price from its average in units of typical deviation; most readings fall between −100 and +100.",
+   "calc": "CCI = (typical price − 20-day average of typical price) ÷ (0.015 × mean deviation). Typical price = (high + low + close) ÷ 3.",
+   "settings": "20 days.",
+   "limits": "Unbounded, so extreme readings vary by instrument.",
+   "sources": [
+    {
+     "label": "Wikipedia: Commodity channel index",
+     "url": "https://en.wikipedia.org/wiki/Commodity_channel_index"
+    },
+    {
+     "label": "Investopedia: CCI",
+     "url": "https://www.investopedia.com/terms/c/commoditychannelindex.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "adx",
+  "name": "ADX (Average Directional Index)",
+  "aliases": [
+   "adx",
+   "directional movement",
+   "dmi",
+   "trend strength"
+  ],
+  "category": "Trend",
+  "metrics": [
+   "adx14"
+  ],
+  "tv": "DM@tv-basicstudies",
+  "computed": true,
+  "builtin": false,
+  "short": "How strong the current trend is, whatever its direction, on a 0 to 100 scale.",
+  "explainer": {
+   "measures": "Trend strength. Low readings mean prices are moving sideways; higher readings mean a more persistent trend, up or down.",
+   "calc": "Compares upward and downward moves over 14 days (+DI and −DI) and smooths their difference with Wilder's method.",
+   "settings": "14 days.",
+   "limits": "Says nothing about direction and reacts slowly.",
+   "sources": [
+    {
+     "label": "Wikipedia: Average directional movement index",
+     "url": "https://en.wikipedia.org/wiki/Average_directional_movement_index"
+    },
+    {
+     "label": "Investopedia: ADX",
+     "url": "https://www.investopedia.com/terms/a/adx.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "roc",
+  "name": "Rate of change",
+  "aliases": [
+   "roc",
+   "rate of change",
+   "momentum"
+  ],
+  "category": "Momentum",
+  "metrics": [
+   "roc12"
+  ],
+  "tv": "ROC@tv-basicstudies",
+  "computed": true,
+  "builtin": false,
+  "short": "The % change in price over the last 12 trading days.",
+  "explainer": {
+   "measures": "Plain momentum: how much the price has changed over a fixed window.",
+   "calc": "ROC = (close − close 12 days ago) ÷ close 12 days ago × 100.",
+   "settings": "12 days here; 9, 14 and 25 are also common.",
+   "limits": "Very sensitive to the single price it compares against.",
+   "sources": [
+    {
+     "label": "Investopedia: Price rate of change",
+     "url": "https://www.investopedia.com/terms/p/pricerateofchange.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "ema",
+  "name": "Exponential moving average (20 day)",
+  "aliases": [
+   "ema",
+   "exponential moving average",
+   "20 ema"
+  ],
+  "category": "Trend",
+  "metrics": [
+   "ema20"
+  ],
+  "tv": "MAExp@tv-basicstudies",
+  "computed": true,
+  "builtin": false,
+  "short": "A 20-day average that gives more weight to recent prices.",
+  "explainer": {
+   "measures": "The recent price level, reacting faster than a simple average.",
+   "calc": "EMA today = price × k + EMA yesterday × (1 − k), with k = 2 ÷ (N + 1).",
+   "settings": "20 days.",
+   "limits": "Still lags, and its faster reaction means more false turns.",
+   "sources": [
+    {
+     "label": "Investopedia: EMA",
+     "url": "https://www.investopedia.com/terms/e/ema.asp"
+    }
+   ]
+  }
+ },
+ {
+  "id": "obv",
+  "name": "On-Balance Volume",
+  "aliases": [
+   "obv",
+   "on balance volume"
+  ],
+  "category": "Volume",
+  "metrics": [],
+  "tv": "OBV@tv-basicstudies",
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "vwap",
+  "name": "VWAP",
+  "aliases": [
+   "vwap",
+   "volume weighted average price"
+  ],
+  "category": "Volume",
+  "metrics": [],
+  "tv": "VWAP@tv-basicstudies",
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "ichimoku",
+  "name": "Ichimoku Cloud",
+  "aliases": [
+   "ichimoku",
+   "cloud",
+   "kumo"
+  ],
+  "category": "Trend",
+  "metrics": [],
+  "tv": "IchimokuCloud@tv-basicstudies",
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "psar",
+  "name": "Parabolic SAR",
+  "aliases": [
+   "sar",
+   "parabolic",
+   "psar"
+  ],
+  "category": "Trend",
+  "metrics": [],
+  "tv": "PSAR@tv-basicstudies",
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "stochrsi",
+  "name": "Stochastic RSI",
+  "aliases": [
+   "stoch rsi",
+   "stochastic rsi"
+  ],
+  "category": "Momentum",
+  "metrics": [],
+  "tv": "StochasticRSI@tv-basicstudies",
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "mfi",
+  "name": "Money Flow Index",
+  "aliases": [
+   "mfi",
+   "money flow"
+  ],
+  "category": "Volume",
+  "metrics": [],
+  "tv": "MF@tv-basicstudies",
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "cmf",
+  "name": "Chaikin Money Flow",
+  "aliases": [
+   "cmf",
+   "chaikin money flow"
+  ],
+  "category": "Volume",
+  "metrics": [],
+  "tv": "CMF@tv-basicstudies",
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "ao",
+  "name": "Awesome Oscillator",
+  "aliases": [
+   "awesome",
+   "ao"
+  ],
+  "category": "Momentum",
+  "metrics": [],
+  "tv": "AwesomeOscillator@tv-basicstudies",
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "momentum",
+  "name": "Momentum",
+  "aliases": [
+   "momentum indicator",
+   "mom"
+  ],
+  "category": "Momentum",
+  "metrics": [],
+  "tv": "Momentum@tv-basicstudies",
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "dema",
+  "name": "Double EMA",
+  "aliases": [
+   "dema",
+   "double exponential"
+  ],
+  "category": "Trend",
+  "metrics": [],
+  "tv": "DoubleEMA@tv-basicstudies",
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "tema",
+  "name": "Triple EMA",
+  "aliases": [
+   "tema",
+   "triple exponential"
+  ],
+  "category": "Trend",
+  "metrics": [],
+  "tv": "TripleEMA@tv-basicstudies",
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "keltner",
+  "name": "Keltner Channels",
+  "aliases": [
+   "keltner",
+   "kc"
+  ],
+  "category": "Volatility",
+  "metrics": [],
+  "tv": "KLTNR@tv-basicstudies",
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "pivots",
+  "name": "Pivot points",
+  "aliases": [
+   "pivot",
+   "pivot points"
+  ],
+  "category": "Levels",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "donchian",
+  "name": "Donchian Channels",
+  "aliases": [
+   "donchian",
+   "channel breakout"
+  ],
+  "category": "Volatility",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "supertrend",
+  "name": "Supertrend",
+  "aliases": [
+   "supertrend"
+  ],
+  "category": "Trend",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "aroon",
+  "name": "Aroon",
+  "aliases": [
+   "aroon"
+  ],
+  "category": "Trend",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "trix",
+  "name": "TRIX",
+  "aliases": [
+   "trix"
+  ],
+  "category": "Momentum",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "ultimate",
+  "name": "Ultimate Oscillator",
+  "aliases": [
+   "ultimate oscillator",
+   "uo"
+  ],
+  "category": "Momentum",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "fib",
+  "name": "Fibonacci retracement",
+  "aliases": [
+   "fibonacci",
+   "fib",
+   "retracement"
+  ],
+  "category": "Levels",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "hv",
+  "name": "Historical volatility",
+  "aliases": [
+   "historical volatility",
+   "hv"
+  ],
+  "category": "Volatility",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "ad",
+  "name": "Accumulation/Distribution",
+  "aliases": [
+   "a/d",
+   "accumulation distribution",
+   "adl"
+  ],
+  "category": "Volume",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "elder",
+  "name": "Elder-Ray Index",
+  "aliases": [
+   "elder ray",
+   "bull power",
+   "bear power"
+  ],
+  "category": "Momentum",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "kst",
+  "name": "Know Sure Thing (KST)",
+  "aliases": [
+   "kst",
+   "know sure thing"
+  ],
+  "category": "Momentum",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "vortex",
+  "name": "Vortex Indicator",
+  "aliases": [
+   "vortex",
+   "vi"
+  ],
+  "category": "Trend",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "cmo",
+  "name": "Chande Momentum Oscillator",
+  "aliases": [
+   "cmo",
+   "chande"
+  ],
+  "category": "Momentum",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "hma",
+  "name": "Hull Moving Average",
+  "aliases": [
+   "hma",
+   "hull"
+  ],
+  "category": "Trend",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "zigzag",
+  "name": "ZigZag",
+  "aliases": [
+   "zigzag",
+   "zig zag"
+  ],
+  "category": "Levels",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "pe",
+  "name": "P/E ratio",
+  "aliases": [
+   "pe",
+   "price to earnings",
+   "p/e"
+  ],
+  "category": "Fundamental",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ },
+ {
+  "id": "beta",
+  "name": "Beta",
+  "aliases": [
+   "beta"
+  ],
+  "category": "Risk",
+  "metrics": [],
+  "tv": null,
+  "computed": false,
+  "builtin": false,
+  "short": "",
+  "explainer": null
+ }
+]

@@ -1,0 +1,6 @@
+node_modules/
+__pycache__/
+*.pyc
+service-account*.json
+.dev.vars
+.wrangler/
