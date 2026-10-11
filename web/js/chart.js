@@ -67,6 +67,17 @@ const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct
 // Where to put date labels under the chart: at most about 6, never crowded.
 export function timeTicks(win, days) {
   const out = [];
+  if (win[0].t.length > 10) { // intraday candles ("2026-10-11T09:15", UTC): hours, and the date where a day starts
+    const loc = win.map((b) => new Date(b.t + ":00Z")), spanH = (loc[loc.length - 1] - loc[0]) / 36e5;
+    const stepH = [1, 2, 3, 6, 12, 24].find((h) => spanH / h <= 6) || 24;
+    loc.forEach((d, i) => {
+      if (i === 0) return;
+      const newDay = d.getDate() !== loc[i - 1].getDate();
+      if (newDay) out.push({ i, label: `${d.getDate()} ${MON[d.getMonth()]}`, major: true });
+      else if (i > win.length * 0.06 && d.getMinutes() === 0 && d.getHours() % stepH === 0 && stepH < 24 && !out.some((t) => Math.abs(t.i - i) < win.length / 8)) out.push({ i, label: String(d.getHours()).padStart(2, "0") + ":00" });
+    });
+    return out;
+  }
   if (days <= 45) { // short range: day numbers each week, the month name where a month starts
     let lastMonth = win[0].t.slice(5, 7);
     win.forEach((b, i) => {

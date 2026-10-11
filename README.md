@@ -86,7 +86,7 @@ web/                 the app (static files, no build step)
   js/interact.js     hold-to-read chart, alert from chart, tap-to-learn panels, quiz
   js/levels.js       support/resistance (swing levels) and pivot points
   js/coach.js        first-time guided tours
-  js/full.js         full-screen chart for one coin (up to its full weekly history)
+  js/full.js         full-screen interactive chart (drag, pinch, 1D to full history)
   js/describe.js     plain-language meaning of each reading
 pipeline/            data job run by GitHub Actions (no npm packages)
 worker/              AI relay for Cloudflare Workers
@@ -95,4 +95,4 @@ firestore.rules      database security rules
 
 ## Checks
 
-Run `scripts/check.sh` (needs Node 20+, Python 3 with Playwright and Chromium). It runs 89 checks across the app, the data job and the AI relay and prints one line per suite. See `DEVELOPMENT.md` for the process and what is and isn't covered.
+Run `scripts/check.sh` (needs Node 20+, Python 3 with Playwright and Chromium). It runs 92 checks across the app, the data job and the AI relay and prints one line per suite. See `DEVELOPMENT.md` for the process and what is and isn't covered.

@@ -30,9 +30,9 @@ def demo_mode(ctx):
 
 def kraken_route(route):
     pair = _re.search(r"pair=([A-Z]+)", route.request.url).group(1)
-    weekly = "interval=10080" in route.request.url
-    rnd = _random.Random(pair + ("w" if weekly else "")); price = rnd.uniform(0.2, 900); rows = []
-    step, count = (7 * 86400, 400) if weekly else (86400, 730); t0 = 1791504000 - (count - 1) * step
+    iv = int(_re.search(r"interval=(\d+)", route.request.url).group(1)) if "interval=" in route.request.url else 1440
+    rnd = _random.Random(pair + str(iv)); price = rnd.uniform(0.2, 900); rows = []
+    step, count = (iv * 60, 400 if iv == 10080 else 720 if iv != 1440 else 730); t0 = 1791504000 - (count - 1) * step
     for k in range(count):
         o = price; c = o * (1 + rnd.gauss(0, 0.03)); h = max(o, c) * (1 + abs(rnd.gauss(0, 0.01))); l = min(o, c) * (1 - abs(rnd.gauss(0, 0.01)))
         rows.append([t0 + k * step, f"{o:.6f}", f"{h:.6f}", f"{l:.6f}", f"{c:.6f}", f"{c:.6f}", f"{rnd.uniform(1e3, 1e6):.2f}", 100]); price = c
@@ -153,9 +153,16 @@ def phone_tests(b):
     check("phone: 'All my coins' changes every coin's chart (6M)", eth2.startswith("6M") and btc2.startswith("6M"), f"ETH={eth2} BTC={btc2}")
     p.click(".card.active [data-tf]"); p.wait_for_timeout(400); p.click("#sheet [data-k=range][data-v='3M']"); p.wait_for_timeout(300); p.click("#sheet [data-close]"); p.wait_for_timeout(900)
     # details pane is organised in clear sections
-    left(); secs = p.locator(".card.active [data-pane=details] .dsec h3").all_inner_texts(); right()
-    want = ["TODAY", "PERFORMANCE", "READINGS", "WHERE THE PRICE SITS", "YOUR ALERTS", "WATCHLISTS", "ABOUT"]
-    check("phone: details are in sections: Today, Performance, Readings, Ranges, Alerts, Watchlists, About", all(any(t.upper().startswith(w) for t in secs) for w in want), " | ".join(secs))
+    left(); secs = p.locator(".card.active [data-pane=details] .dsec h3").all_inner_texts()
+    nb = p.locator(".card.active [data-pane=details] .ibtn").count()
+    hid0 = p.locator(".card.active [data-pane=details] .how:visible").count()
+    p.locator(".card.active [data-pane=details] .ibtn").first.click(); p.wait_for_timeout(200)
+    howt = p.locator(".card.active [data-pane=details] .how:visible").first.inner_text() if p.locator(".card.active [data-pane=details] .how:visible").count() else ""
+    glance = p.locator(".card.active [data-pane=details] .glance li").count()
+    right()
+    check("phone: each analysis section has an ⓘ that opens a short how-to note; At a glance gives 3-4 facts", nb >= 8 and hid0 == 0 and "doesn't predict" in howt and 3 <= glance <= 4, f"i={nb} hidden0={hid0} glance={glance} '{howt[:50]}'")
+    want = ["AT A GLANCE", "TODAY", "PERFORMANCE", "TREND", "VOLATILITY", "READINGS", "WHERE THE PRICE SITS", "YOUR ALERTS", "WATCHLISTS", "ABOUT"]
+    check("phone: details are in sections: At a glance, Today, Performance, Trend, Volatility, Readings, Ranges, Alerts, Watchlists, About", all(any(t.upper().startswith(w) for t in secs) for w in want), " | ".join(secs))
 
     # the day's move sits next to the coin's name
     hd = p.evaluate("(()=>{const c=document.querySelector('.card.active'); return !!c.querySelector('.tkrow .tk') && !!c.querySelector('.tkrow .chg')})()")
@@ -288,6 +295,22 @@ def phone_tests(b):
     cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": fb[0] - 50, "y": fb[1]}]}); p.wait_for_timeout(150)
     fcard = p.evaluate("document.querySelector('#full .scrubcard')?.innerText||''")
     cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(300)
+    # interactive: wheel zoom, drag to pan, double-tap to reset, and intraday ranges
+    COUNT = "document.querySelectorAll('#full .chartbox svg .wick').length"
+    FIRST = "document.querySelector('#full .fnote').textContent.split('·')[1]"
+    n0 = p.evaluate(COUNT); first0 = p.evaluate(FIRST)
+    p.mouse.move(fb[0], fb[1]); p.mouse.wheel(0, 300); p.wait_for_timeout(300); n1 = p.evaluate(COUNT)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": fb[0], "y": fb[1]}]})
+    for k in range(1, 9): cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": fb[0] + 20 * k, "y": fb[1]}]}); time.sleep(0.02)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(300); first1 = p.evaluate(FIRST)
+    for _ in range(2):
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": fb[0], "y": fb[1]}]}); cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(120)
+    p.wait_for_timeout(300); n2 = p.evaluate(COUNT)
+    check("phone: full-screen chart zooms (wheel), pans (drag) and resets (double-tap)", n1 > n0 and first1 != first0 and n2 == n0, f"candles {n0}->{n1}->{n2} first {first0}->{first1}")
+    p.click("#full [data-fr='1D']"); p.wait_for_timeout(1200); d1 = p.evaluate("document.querySelector('#full .fnote').textContent")
+    p.click("#full [data-fr='1W']"); p.wait_for_timeout(1200); w1 = p.evaluate("document.querySelector('#full .fnote').textContent")
+    ax1 = p.locator("#full .xaxis span").all_inner_texts()
+    check("phone: 1D and 1W ranges show 15-minute and 1-hour candles with times or dates on the axis", "15-minute" in d1 and "1-hour" in w1 and len(ax1) >= 2, f"{d1[:40]} / {w1[:40]} / {ax1}")
     p.click("#full [data-fclose]"); p.wait_for_timeout(400)
     check("phone: hold-to-read works in full screen, and ✕ closes it back to the feed", "Open" in fcard and p.evaluate("document.getElementById('full').hidden") and active(p)[0] == "BTC", fcard[:60].replace("\n", " "))
 

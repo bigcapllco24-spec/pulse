@@ -6,7 +6,7 @@ import { loadSymbols, TYLABEL, findSymbol } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { describe } from "./describe.js";
 import { mainChart, lowerChart } from "./chart.js";
-import { levelsFor } from "./levels.js";
+import { levelsFor, swingLevels } from "./levels.js";
 import { startTour, coachEvent } from "./coach.js";
 import { openFull } from "./full.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
@@ -312,46 +312,77 @@ async function explain(key, root) {
 }
 
 // ---------- details pane
+// How to use each part of the details pane, shown behind a small ⓘ. Educational only: what the number
+// describes and how people read it, never what to do.
+const HOW = {
+  glance: "A short summary of the facts further down. It describes what has already happened; it doesn't predict what happens next.",
+  today: "Open is the first price of the day (UTC) and Close the latest. The bar shows where the price sits between the day's low and high. Volume compares today's trading with a usual day: a high number means more people traded than normal, often around news.",
+  perf: "Price change over each period up to the latest candle. Comparing short and long periods shows whether a move is recent or part of a longer run. Past performance doesn't tell you future returns.",
+  trend: "A moving average is the average closing price over the last 20, 50 or 200 days, which smooths out daily noise. Price above an average means it is higher than its recent typical level. Many people watch the 50- and 200-day lines, so they're useful context, not signals.",
+  vol: "The typical daily move is the 14-day Average True Range: how far the price usually travels in a day. Bigger numbers mean bigger swings, so the same news can move the price more. Comparing today's move with it shows whether today was unusual.",
+  readings: "Each reading is an indicator you switched on in Profile → Indicators, with what today's number means in plain words. Tap a reading for its full guide.",
+  ranges: "Where today's price sits between the lowest and highest prices of the period. The nearest support and resistance are prices where the chart turned more than once before. They describe the past, not where the price will go.",
+  alerts: "Get told when a price or reading crosses a level you choose. Quickest way: hold the chart, slide to a price and tap the alert button.",
+};
 function renderDetails(c, it) {
   const s = it.sym, v = view(s.key, { ...chartSettings(s.key), interval: "1D", range: "1Y" }), pane = c.querySelector('[data-pane="details"]');
   const lists = watchlists().filter((w) => (w.syms || []).some((x) => x.key === s.key)).map((w) => w.name);
   const rules = (store.data?.rules || []).filter((r) => r.sym === s.key || (r.sym === "*" && s.m === "CRYPTO"));
-  const sec = (title, body, extra = "") => `<section class="dsec"${extra}><h3>${title}</h3>${body}</section>`;
+  const sec = (title, key, body) => `<section class="dsec"><h3>${title}${key ? `<button class="ibtn" data-how="${key}" aria-label="How to use: ${title}" aria-expanded="false">i</button>` : ""}</h3>${key ? `<p class="how" hidden>${esc(HOW[key])}</p>` : ""}${body}</section>`;
+  const sign = (x, dg = 1) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(dg) + "%";
   let html = `<div class="pane-wrap det">`;
   if (!v) {
     html += `<div class="dhead"><div><h2>${esc(s.t)}</h2><span>${esc(s.n)}</span></div></div><div class="notice">Prices for ${esc(s.t)} haven't loaded yet.</div>`;
   } else {
     const all = D.series[s.key].bars, b = all.at(-1), d = v.daily.now, chg = d.changePct, last = b.c;
-    // 1. who and where: name, price, today's move
+    const rng = (n) => { const w = all.slice(-n); const lo = Math.min(...w.map((x) => x.l)), hi = Math.max(...w.map((x) => x.h)); return { lo, hi, p: hi > lo ? ((last - lo) / (hi - lo)) * 100 : 50 }; };
+    const yr = rng(Math.min(365, all.length)), typical = d.atrPct, moveX = typical ? Math.abs(chg) / typical : null;
+    const avgs = [["20-day", d.sma20], ["50-day", d.sma50], ["200-day", d.sma200]].filter(([, x]) => x != null);
     html += `<div class="dhead"><div><h2>${esc(s.t)}</h2><span>${esc(s.n)}</span></div><div class="r"><b>${esc(money(last, s.m))}</b><span class="${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)} today</span></div></div>`;
-    // 2. today: open/high/low/close, where the close sits in the day's range, volume
+    // 1. at a glance: three or four plain facts
+    const names = (ls) => (ls.length > 1 ? ls.slice(0, -1).map((l) => l.replace("-day", "")).join(", ") + " and " + ls.at(-1) : ls[0] || "");
+    const above = names(avgs.filter(([, x]) => last > x).map(([l]) => l)), below = names(avgs.filter(([, x]) => last <= x).map(([l]) => l));
+    const glance = [
+      `${chg >= 0 ? "Up" : "Down"} ${Math.abs(chg).toFixed(1)}% today${moveX != null ? `, ${moveX >= 1.5 ? "a bigger move than usual" : moveX <= 0.5 ? "a quiet day" : "a normal-sized move"}` : ""}${d.volRatio != null ? ` on ${fmt(d.volRatio, 1)}x the usual volume` : ""}.`,
+      avgs.length ? `${above ? `Above its ${above}-day average${above.includes(" and ") ? "s" : ""}`.replace("-day-day", "-day") : ""}${above && below ? "; " : ""}${below ? `${above ? "below" : "Below"} its ${below}-day average${below.includes(" and ") ? "s" : ""}`.replace("-day-day", "-day") : ""}.` : "",
+      `${yr.p >= 80 ? "Near the top" : yr.p <= 20 ? "Near the bottom" : yr.p >= 60 ? "In the upper part" : yr.p <= 40 ? "In the lower part" : "Around the middle"} of its ${all.length >= 365 ? "52-week" : `${all.length}-day`} range.`,
+      d.rsi14 != null ? `RSI ${d.rsi14.toFixed(0)}: ${describe("rsi14", d, v.daily.prev).toLowerCase()}` : "",
+    ].filter(Boolean);
+    html += sec("At a glance", "glance", `<ul class="glance">${glance.map((g) => `<li>${esc(g)}</li>`).join("")}</ul>`);
+    // 2. today
     const dayP = b.h > b.l ? ((b.c - b.l) / (b.h - b.l)) * 100 : 50;
-    html += sec(`Today · ${esc(fmtDay(b.t))}`, `<div class="stat-grid">${[["Open", b.o], ["High", b.h], ["Low", b.l], ["Close", b.c]].map(([k, x]) => `<div><span>${k}</span><b>${esc(money(x, s.m))}</b></div>`).join("")}</div>
+    html += sec(`Today · ${esc(fmtDay(b.t))}`, "today", `<div class="stat-grid">${[["Open", b.o], ["High", b.h], ["Low", b.l], ["Close", b.c]].map(([k, x]) => `<div><span>${k}</span><b>${esc(money(x, s.m))}</b></div>`).join("")}</div>
       <div class="rangerow"><span>Day's range</span><span>closed ${dayP.toFixed(0)}% of the way up</span></div><div class="rangebar"><i style="left:${dayP.toFixed(1)}%"></i></div><div class="rangerow"><span>${esc(money(b.l, s.m))}</span><span>${esc(money(b.h, s.m))}</span></div>
       ${d.volRatio != null ? `<p class="dline">Volume was <b>${fmt(d.volRatio, 1)}x</b> a usual day.</p>` : ""}`);
     if (bigMove(v)) html += `<section class="dsec box" data-movebox>${moveHtml(s, v)}</section>`;
-    // 3. performance over familiar periods
+    // 3. performance
     const back = (days) => { const cut = new Date(Date.parse(b.t) - days * 864e5).toISOString().slice(0, 10); const p = [...all].reverse().find((x) => x.t <= cut); return p ? ((last - p.c) / p.c) * 100 : null; };
     const perf = [["1W", 7], ["1M", 30], ["3M", 91], ["6M", 182], ["1Y", 365]].map(([l, n]) => [l, back(n)]).filter(([, x]) => x != null);
-    html += sec("Performance", `<div class="perf">${perf.map(([l, x]) => `<div><span>${l}</span><b class="${x >= 0 ? "up" : "down"}">${pct(x, 1)}</b></div>`).join("")}</div>`);
-    // 4. readings in plain words
+    html += sec("Performance", "perf", `<div class="perf">${perf.map(([l, x]) => `<div><span>${l}</span><b class="${x >= 0 ? "up" : "down"}">${pct(x, 1)}</b></div>`).join("")}</div>`);
+    // 4. trend: price against its moving averages
+    if (avgs.length) html += sec("Trend", "trend", `<div class="mas">${avgs.map(([l, x]) => { const dist = ((last - x) / x) * 100; return `<div class="marow"><span>${l} average</span><b>${esc(money(x, s.m))}</b><em class="${dist >= 0 ? "up" : "down"}">${sign(dist)} ${dist >= 0 ? "above" : "below"}</em></div>`; }).join("")}</div>`);
+    // 5. volatility
+    if (typical != null) html += sec("Volatility", "vol", `<div class="vol"><div><span>Typical daily move</span><b>±${typical.toFixed(1)}%</b></div><div><span>Today's move</span><b>${moveX != null ? `${moveX.toFixed(1)}x typical` : "–"}</b></div></div>`);
+    // 6. readings in plain words
     const act = (store.data?.indicators?.active || []).map((id) => APP.catalogue.find((x) => x.id === id)).filter(Boolean);
     const rows = act.flatMap((i) => (i.metrics || []).map((m) => ({ i, m })));
-    html += sec("Readings", rows.length ? `<div class="readings">${rows.map(({ i, m }) => { const meta = METRICS[m] || { label: m, digits: 2 }; return `<button class="reading" data-ind="${esc(i.id)}"><span class="k">${esc(meta.label)}</span><span class="v">${fmt(d[m], meta.digits)}${meta.unit && d[m] != null ? esc(meta.unit) : ""}</span><span class="d">${esc(describe(m, d, v.daily.prev))}</span></button>`; }).join("")}</div><p class="hint">Tap a reading to learn what it measures. Daily candles.</p>` : `<p class="hint">No indicators switched on. Choose them in Profile → Indicators.</p>`);
-    // 5. where the price sits in longer ranges
-    const rng = (n) => { const w = all.slice(-n); const lo = Math.min(...w.map((x) => x.l)), hi = Math.max(...w.map((x) => x.h)); return { lo, hi, p: hi > lo ? ((last - lo) / (hi - lo)) * 100 : 50 }; };
-    html += sec("Where the price sits", [[30, "30-day range"], [Math.min(365, all.length), all.length >= 365 ? "52-week range" : `${all.length}-day range`]].map(([n, l]) => { const r = rng(n); return `<div class="rng"><div class="rangerow"><b>${l}</b><span>${r.p.toFixed(0)}% of the way up</span></div><div class="rangebar"><i style="left:${r.p.toFixed(1)}%"></i></div><div class="rangerow"><span>${esc(money(r.lo, s.m))}</span><span>${esc(money(r.hi, s.m))}</span></div></div>`; }).join(""));
-    // 6. alerts the person set
-    html += sec("Your alerts", `${rules.length ? `<div class="list">${rules.map((r) => { const met = ruleMet(r, d, v.daily.prev); return `<div class="row"><div class="main"><span class="t">${esc(METRICS[r.metric]?.label || r.metric)} ${esc(OPS[r.op])} ${esc(r.metric === "price" ? money(+r.value, s.m) : r.value)}</span><span class="s">${met ? "Met on the latest candle" : "Not met yet"}${r.note ? " · " + esc(r.note) : ""}</span></div>${met ? `<span class="tag rule" style="opacity:1;transform:none">Met</span>` : ""}</div>`; }).join("")}</div>` : `<p class="hint">No alerts for ${esc(s.t)} yet. Hold the chart and slide to a price to set one in a tap.</p>`}
+    html += sec("Readings", "readings", rows.length ? `<div class="readings">${rows.map(({ i, m }) => { const meta = METRICS[m] || { label: m, digits: 2 }; return `<button class="reading" data-ind="${esc(i.id)}"><span class="k">${esc(meta.label)}</span><span class="v">${fmt(d[m], meta.digits)}${meta.unit && d[m] != null ? esc(meta.unit) : ""}</span><span class="d">${esc(describe(m, d, v.daily.prev))}</span></button>`; }).join("")}</div>` : `<p class="hint">No indicators switched on. Choose them in Profile → Indicators.</p>`);
+    // 7. ranges and the nearest past turning points
+    const lv = swingLevels({ bars: all, win: all.slice(-Math.min(182, all.length)), interval: "1D" }, { perSide: 1 });
+    const r1 = lv.find((l) => l.kind === "R"), s1 = lv.find((l) => l.kind === "S");
+    html += sec("Where the price sits", "ranges", [[30, "30-day range"], [Math.min(365, all.length), all.length >= 365 ? "52-week range" : `${all.length}-day range`]].map(([n, l]) => { const r = rng(n); return `<div class="rng"><div class="rangerow"><b>${l}</b><span>${r.p.toFixed(0)}% of the way up</span></div><div class="rangebar"><i style="left:${r.p.toFixed(1)}%"></i></div><div class="rangerow"><span>${esc(money(r.lo, s.m))}</span><span>${esc(money(r.hi, s.m))}</span></div></div>`; }).join("") +
+      (r1 || s1 ? `<div class="srrow">${s1 ? `<div><span>Nearest support</span><b class="up">${esc(money(s1.price, s.m))}</b><em>${sign(((s1.price - last) / last) * 100)} · turned ${s1.touches}×</em></div>` : ""}${r1 ? `<div><span>Nearest resistance</span><b class="down">${esc(money(r1.price, s.m))}</b><em>${sign(((r1.price - last) / last) * 100)} · turned ${r1.touches}×</em></div>` : ""}</div>` : ""));
+    // 8. alerts
+    html += sec("Your alerts", "alerts", `${rules.length ? `<div class="list">${rules.map((r) => { const met = ruleMet(r, d, v.daily.prev); return `<div class="row"><div class="main"><span class="t">${esc(METRICS[r.metric]?.label || r.metric)} ${esc(OPS[r.op])} ${esc(r.metric === "price" ? money(+r.value, s.m) : r.value)}</span><span class="s">${met ? "Met on the latest candle" : "Not met yet"}${r.note ? " · " + esc(r.note) : ""}</span></div>${met ? `<span class="tag rule" style="opacity:1;transform:none">Met</span>` : ""}</div>`; }).join("")}</div>` : `<p class="hint">No alerts for ${esc(s.t)} yet.</p>`}
       <button class="btn sm" data-addrule>Add an alert</button>`);
   }
-  // 7. watchlists and the small print
-  html += sec("Watchlists", `<p class="dline">${lists.length ? lists.map((n) => `<span class="pill">${esc(n)}</span>`).join(" ") : "Not in a watchlist"} <button class="btn ghost sm" data-save>Change</button></p>`);
-  html += sec("About", `<p class="dline">${esc(s.n)} · ${esc(TYLABEL[s.ty] || "")}</p><p class="hint">Prices: ${esc(v?.source || "Kraken")} daily candles${v?.live ? ", refreshed when you opened the app" : ""}.</p><p class="disclaimer">${esc(DISCLAIMER)}</p>`);
+  html += sec("Watchlists", "", `<p class="dline">${lists.length ? lists.map((n) => `<span class="pill">${esc(n)}</span>`).join(" ") : "Not in a watchlist"} <button class="btn ghost sm" data-save>Change</button></p>`);
+  html += sec("About", "", `<p class="dline">${esc(s.n)} · ${esc(TYLABEL[s.ty] || "")}</p><p class="hint">Prices: ${esc(v?.source || "Kraken")} daily candles${v?.live ? ", refreshed when you opened the app" : ""}. Facts and explanations only, never advice.</p><p class="disclaimer">${esc(DISCLAIMER)}</p>`);
   pane.innerHTML = html + `</div>`;
-  pane.querySelectorAll("[data-ind]").forEach((b) => (b.onclick = () => openIndicator(b.dataset.ind)));
+  pane.querySelectorAll("[data-how]").forEach((bt) => (bt.onclick = () => { const p = bt.closest("section").querySelector(".how"); p.hidden = !p.hidden; bt.setAttribute("aria-expanded", String(!p.hidden)); }));
+  pane.querySelectorAll("[data-ind]").forEach((bt) => (bt.onclick = () => openIndicator(bt.dataset.ind)));
   pane.querySelector("[data-addrule]")?.addEventListener("click", () => { location.hash = ""; showTab("profile", "rules", s.key); });
-  pane.querySelectorAll("[data-save]").forEach((b) => (b.onclick = () => openListsFor(s)));
+  pane.querySelectorAll("[data-save]").forEach((bt) => (bt.onclick = () => openListsFor(s)));
   const mb = pane.querySelector("[data-movebox]");
   if (mb) { const id = moveId(s, v); getShared("moves", id).then(() => { mb.innerHTML = moveHtml(s, v); wireMove(mb, s, v); }); wireMove(mb, s, v); }
 }

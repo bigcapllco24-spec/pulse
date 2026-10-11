@@ -388,3 +388,21 @@ body.fullopen .tabbar, body.fullopen .topbar { visibility: hidden; }
 .fnote .up { color: var(--up); } .fnote .down { color: var(--down); }
 .fload { margin: auto; color: var(--muted); }
 @media (orientation: landscape) and (max-height: 500px) { .full .lower .lplot { height: 34px; } .full .chartbox { min-height: 140px; } }
+/* details: ⓘ notes and new sections */
+.dsec h3 { display: flex; align-items: center; gap: 8px; }
+.ibtn { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--muted); background: transparent; color: var(--muted); font: italic 700 11px/1 Georgia, serif; display: inline-grid; place-items: center; padding: 0; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.ibtn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.dsec .how { margin: -4px 0 10px; font-size: 13px; line-height: 1.45; color: var(--muted); background: var(--surface2); border-radius: 10px; padding: 9px 11px; }
+.glance { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.glance li { position: relative; padding-left: 14px; font-size: 14.5px; line-height: 1.4; }
+.glance li::before { content: ""; position: absolute; left: 0; top: .55em; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.mas { display: grid; gap: 6px; }
+.marow { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: baseline; background: var(--surface2); border-radius: 10px; padding: 8px 10px; }
+.marow span { color: var(--muted); font-size: 13px; } .marow b { font-size: 14px; } .marow em { font-style: normal; font-size: 12.5px; font-weight: 700; min-width: 96px; text-align: right; }
+.marow em.up, .srrow b.up { color: var(--up); } .marow em.down, .srrow b.down { color: var(--down); }
+.vol, .srrow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.vol div, .srrow div { background: var(--surface2); border-radius: 10px; padding: 9px 10px; display: flex; flex-direction: column; gap: 2px; }
+.vol span, .srrow span { font-size: 12px; color: var(--muted); font-weight: 600; } .vol b, .srrow b { font-size: 16px; }
+.srrow { margin-top: 14px; } .srrow em { font-style: normal; font-size: 12px; color: var(--muted); }
+.full .flowers { flex: none; display: flex; flex-direction: column; gap: 8px; }
+.fnote .hint { font-size: 11.5px; }

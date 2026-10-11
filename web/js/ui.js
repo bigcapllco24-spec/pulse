@@ -11,7 +11,9 @@ export function money(x, m) {
 }
 export const pct = (x, d = 2) => (x == null || !isFinite(x) ? "–" : `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(d)}%`);
 export const arrow = (x) => (x >= 0 ? "▲" : "▼");
-export const fmtDay = (d) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }) : "");
+export const fmtDay = (d) => (!d ? "" : d.length > 10
+  ? new Date(d + ":00Z").toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) // intraday candle
+  : new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }));
 export const hhmm = (iso) => (iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : "");
 export function ago(iso) {
   if (!iso) return "";

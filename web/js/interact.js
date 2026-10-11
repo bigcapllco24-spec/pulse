@@ -35,6 +35,7 @@ export function initInteract(feed) {
   feed.addEventListener("pointercancel", (e) => up(e, true));
 }
 const cancelHold = () => { if (hold) clearTimeout(hold.timer); hold = null; };
+export const cancelPendingHold = cancelHold; // the full-screen chart calls this when a pinch or pan starts
 
 function start(feed, id) {
   const h = hold; hold = null;
@@ -71,7 +72,7 @@ function move(cx, cy) {
   yh.style.top = (y / H) * 100 + "%"; yh.firstChild.textContent = fmtPrice(s.level);
   if (i === s.i) return;
   s.i = i;
-  const b = s.v.win[i], g = s.v.bars.length - n + i, prev = s.v.bars[g - 1], chg = prev ? ((b.c - prev.c) / prev.c) * 100 : null;
+  const b = s.v.win[i], g = (s.v.from ?? s.v.bars.length - n) + i, prev = s.v.bars[g - 1], chg = prev ? ((b.c - prev.c) / prev.c) * 100 : null;
   s.head.price.textContent = money(b.c, "CRYPTO");
   const chgEl = s.head.chg;
   chgEl.className = `chg ${chg == null || chg >= 0 ? "up" : "down"}`; chgEl.textContent = chg == null ? "–" : `${arrow(chg)} ${pct(chg)}`;
