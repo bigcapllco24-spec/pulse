@@ -294,16 +294,19 @@ def phone_tests(b):
     # profile: grouped settings and a username that can be changed only twice
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
     groups = p.locator("#profile h2.pg").all_inner_texts()
-    p.click("#pName"); p.wait_for_timeout(400)
+    no_nag = p.locator("#pName").count() == 0 and "username" not in p.inner_text("#profile .phead").lower()
+    p.click("[data-p=account]"); p.wait_for_timeout(300); p.click("#aName"); p.wait_for_timeout(400)
     p.fill("#uIn", "ab"); bad1 = p.inner_text("#uMsg"); p.fill("#uIn", "pulse98765432"); bad2 = p.inner_text("#uMsg")
     names, lefts = ["chart_fan", "chart_fan2", "chart.fan3"], []
     for n in names:
-        if not p.is_visible("#sheet"): p.click("#pName"); p.wait_for_timeout(400)
+        if not p.is_visible("#sheet"):
+            (p.click("#pName") if p.locator("#pName").count() else p.click("#aName")); p.wait_for_timeout(400)
         p.fill("#uIn", n); p.click("#uSave"); p.wait_for_timeout(500)
+        if p.locator("#pBack").count(): p.click("#pBack"); p.wait_for_timeout(300)
         lefts.append(p.inner_text("#profile .phead b") + " | " + (p.inner_text("#profile .pleft") if p.locator("#profile .pleft").count() else ""))
     p.click("#pName"); p.wait_for_timeout(500)
     blocked = (p.inner_text("#toast") if p.is_visible("#toast") else "") and not p.is_visible("#sheet")
-    check("phone: profile is grouped (Charts, Alerts, Sharing, Account, Help)", len(groups) == 5, " | ".join(groups))
+    check("phone: profile is grouped (Charts, Alerts, Sharing, Account, Help) and doesn't push a username", len(groups) == 5 and no_nag, " | ".join(groups))
     check("phone: username rejects bad names (too short, phone-like numbers)", "3 to 20" in bad1 and "phone" in bad2, f"{bad1} / {bad2}")
     check("phone: username can be set, then changed twice, then no more", lefts[0].startswith("@chart_fan |") and "2 username changes left" in lefts[0] and "1 username change left" in lefts[1] and "No username changes left" in lefts[2] and bool(blocked), " ; ".join(lefts))
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(600)

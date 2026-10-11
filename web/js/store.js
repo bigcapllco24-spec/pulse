@@ -1,5 +1,5 @@
-// Account and storage. No personal data: an account is a random recovery code; its SHA-256 is the
-// Firestore document id. Firebase anonymous sign-in only proves a request comes from the app.
+// Account and storage. No personal data: an account is this device's anonymous Firebase sign-in, and its
+// Firestore document is accounts/{uid}, readable and writable only by that sign-in.
 // Without a Firebase config the app runs in demo mode and keeps everything in this browser.
 import { CONFIG } from "../config.js";
 
@@ -24,14 +24,7 @@ export const DEFAULT_ACCOUNT = () => ({
   rules: [], settings: { theme: "dark", list: "all", chart: { ...DEFAULT_CHART } }, lists: [], fcm: [],
 });
 
-// Crockford base32, 30 characters = 150 random bits, shown as 6 groups of 5.
 const B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-export function newCode() {
-  const b = crypto.getRandomValues(new Uint8Array(30));
-  const s = [...b].map((x) => B32[x & 31]).join("");
-  return s.match(/.{5}/g).join("-");
-}
-export const normCode = (c) => String(c || "").toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/O/g, "0").replace(/[IL]/g, "1");
 async function sha256hex(s) {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
   return [...new Uint8Array(d)].map((x) => x.toString(16).padStart(2, "0")).join("");
@@ -57,12 +50,16 @@ async function loadFirebase() {
   const app = initializeApp(CONFIG.firebase);
   const auth = authMod.getAuth(app);
   await authMod.signInAnonymously(auth);
-  fb = { app, auth, db: f.getFirestore(app), f, unsubs: [] };
+  fb = { app, auth, authMod, db: f.getFirestore(app), f, unsubs: [] };
   return fb;
 }
 
+// Start instantly: the feed draws from the copy saved on this phone (or the starter account on a first visit)
+// while Firebase signs in and loads the account in the background. No recovery code: an account belongs to this
+// device's anonymous sign-in, which Firebase keeps between visits.
+const LSACC = "pl.account", LSALERTS = "pl.accountAlerts";
+let pending = {}, connecting = null;
 export async function init() {
-  const code = ls.get(LS.code);
   if (store.mode === "demo") {
     store.data = ls.get(LS.demo);
     if (!store.data) { store.data = DEFAULT_ACCOUNT(); ls.set(LS.demo, store.data); }
@@ -71,27 +68,36 @@ export async function init() {
     store.id = "demo"; store.ready = true; store.emit("all");
     return { onboarding: false };
   }
-  try { await loadFirebase(); } catch (e) { store.error = "Couldn't reach the server. Check your connection."; store.emit("error"); throw e; }
-  if (!code) return { onboarding: true };
-  const ok = await openAccount(code);
-  return { onboarding: !ok };
+  store.data = { ...DEFAULT_ACCOUNT(), ...(ls.get(LSACC) || {}) };
+  store.alerts = ls.get(LSALERTS, []);
+  store.ready = true;
+  connecting = connect();
+  return { onboarding: false };
 }
-
-async function openAccount(code) {
-  const { db, f } = fb;
-  const id = await sha256hex(normCode(code));
-  const snap = await f.getDoc(f.doc(db, "accounts", id));
-  if (!snap.exists()) return false;
-  store.id = id; store.code = code; store.data = { ...DEFAULT_ACCOUNT(), ...snap.data() };
-  ls.set(LS.code, code);
+export const connected = () => connecting || Promise.resolve();
+async function connect() {
+  try { await loadFirebase(); } catch (e) { store.error = "Couldn't reach the server. Your changes are saved on this phone."; store.emit("error"); return; }
+  const { db, f, auth } = fb, id = auth.currentUser.uid, ref = f.doc(db, "accounts", id);
+  const snap = await f.getDoc(ref).catch(() => null);
+  if (!snap) return;
+  if (snap.exists()) {
+    store.data = { ...DEFAULT_ACCOUNT(), ...snap.data(), ...pending };
+    if (Object.keys(pending).length) await f.setDoc(ref, pending, { merge: true }).catch(() => {});
+  } else {
+    const { username, usernameChanges, ...first } = store.data; // a new account starts from what this phone has
+    await f.setDoc(ref, first);
+    STARTER.forEach((s) => noteFollow(s));
+  }
+  pending = {};
+  store.id = id;
+  ls.set(LSACC, store.data);
   fb.unsubs.forEach((u) => u()); fb.unsubs = [];
-  fb.unsubs.push(f.onSnapshot(f.doc(db, "accounts", id), (s) => { if (s.exists()) { store.data = { ...DEFAULT_ACCOUNT(), ...s.data() }; store.emit("account"); watchLists(); } }));
+  fb.unsubs.push(f.onSnapshot(ref, (s) => { if (s.exists()) { store.data = { ...DEFAULT_ACCOUNT(), ...s.data() }; ls.set(LSACC, store.data); store.emit("account"); watchLists(); } }));
   fb.unsubs.push(f.onSnapshot(f.query(f.collection(db, "accounts", id, "alerts"), f.orderBy("at", "desc"), f.limit(200)), (q) => {
-    store.alerts = q.docs.map((d) => ({ id: d.id, ...d.data() })); store.emit("alerts");
+    store.alerts = q.docs.map((d) => ({ id: d.id, ...d.data() })); ls.set(LSALERTS, store.alerts.slice(0, 50)); store.emit("alerts");
   }));
   watchLists();
-  store.ready = true; store.emit("all");
-  return true;
+  store.emit("account");
 }
 
 const listUnsubs = new Map();
@@ -107,26 +113,12 @@ function watchLists() {
   }
 }
 
-export async function createAccount() {
-  const code = newCode();
-  const { db, f } = fb;
-  const id = await sha256hex(normCode(code));
-  await f.setDoc(f.doc(db, "accounts", id), DEFAULT_ACCOUNT());
-  ls.set(LS.code, code);
-  STARTER.forEach((s) => noteFollow(s));
-  await openAccount(code);
-  return code;
-}
-
-export async function restore(code) {
-  if (store.mode === "demo") return false;
-  return openAccount(code);
-}
-
 export async function save(patch) {
   store.data = { ...store.data, ...patch };
   store.emit("account");
   if (store.mode === "demo") { ls.set(LS.demo, store.data); return; }
+  ls.set(LSACC, store.data);
+  if (!store.id) { pending = { ...pending, ...patch }; return; } // written once the account has loaded
   await fb.f.setDoc(fb.f.doc(fb.db, "accounts", store.id), patch, { merge: true });
 }
 
@@ -262,7 +254,7 @@ export async function enablePush() {
 }
 
 export function signOutDevice() {
-  ls.del(LS.code);
+  ls.del(LS.code); ls.del(LSACC); ls.del(LSALERTS);
   location.hash = "";
   location.reload();
 }
@@ -289,6 +281,8 @@ export async function setUsername(raw) {
   if (usernameChangesLeft() <= 0) throw new Error("You've used all your username changes.");
   const changes = (store.data.usernameChanges || 0) + (old ? 1 : 0);
   if (store.mode === "demo") { await save({ username: name, usernameChanges: changes }); return name; }
+  await connected();
+  if (!store.id) throw new Error("Couldn't reach the server. Try again in a moment.");
   const { db, f } = fb;
   await f.runTransaction(db, async (tx) => {
     const ref = f.doc(db, "usernames", name), taken = await tx.get(ref);
@@ -308,5 +302,6 @@ export async function deleteAccount() {
   await clearAlerts();
   if (store.data?.username) { const b = fb.f.writeBatch(fb.db); b.delete(fb.f.doc(fb.db, "usernames", store.data.username)); b.delete(fb.f.doc(fb.db, "accounts", store.id)); await b.commit(); }
   else await fb.f.deleteDoc(fb.f.doc(fb.db, "accounts", store.id));
+  await fb.authMod.signOut(fb.auth).catch(() => {}); // the next visit starts a brand-new anonymous account
   signOutDevice();
 }

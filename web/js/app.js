@@ -12,7 +12,7 @@ import { openFull } from "./full.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, renderOnboarding, demoRules } from "./pages.js";
+import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, demoRules } from "./pages.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
 const LOWER_KEY = { RSI: "rsi14", MACD: "macdHist", VOL: "volRatio" };
@@ -534,17 +534,17 @@ let lastRefresh = 0;
 export async function doRefresh(manual) {
   if (D.status === "refreshing") return;
   setStatus(); D.status = "refreshing"; setStatus();
-  await refresh(allSyms());
-  lastRefresh = Date.now();
-  setStatus();
-  if (store.mode === "demo") demoRules();
-  // redraw visible cards in place, keeping the user's position
-  const keep = APP.seq[APP.active]?.sym?.key;
-  if (manual || !APP.built) buildFeed({ keepKey: keep });
-  else whenIdle("refill", () => feed.querySelectorAll(".card").forEach((c) => {
+  // redraw nearby cards in place, keeping the user's position (only once nothing is moving)
+  const refill = () => whenIdle("refill", () => feed.querySelectorAll(".card").forEach((c) => {
     if (!c.dataset.filled || Math.abs(+c.dataset.i - APP.active) > 2 || (c.dataset.view && c.dataset.view !== "main")) return;
     delete c.dataset.filled; delete c.dataset.view; c.innerHTML = ""; fillCard(c, APP.seq[+c.dataset.i]); c.classList.toggle("active", +c.dataset.i === APP.active);
   }));
+  await refresh(allSyms(), () => { if (APP.built && !manual) refill(); });
+  lastRefresh = Date.now();
+  setStatus();
+  if (store.mode === "demo") demoRules();
+  const keep = APP.seq[APP.active]?.sym?.key;
+  if (manual || !APP.built) buildFeed({ keepKey: keep }); else refill();
   if (manual) toast("Up to date.");
 }
 document.addEventListener("visibilitychange", () => {
@@ -576,7 +576,9 @@ export function applyTheme() {
   document.title = CONFIG.appName;
   ls.set("pl.prevOpen", ls.get("pl.lastOpen"));
   loadCached();
-  APP.catalogue = await fetch("data/indicators.json").then((r) => r.json()).catch(() => []);
+  // nothing waits on the network before the first chart is drawn
+  APP.catalogue = [];
+  fetch("data/indicators.json").then((r) => r.json()).then((c) => (APP.catalogue = c)).catch(() => {});
   let onboarding = false;
   try { ({ onboarding } = await init()); } catch { toast(store.error || "Couldn't start. Check your connection."); }
   // Cleaner cards (v2): candles on their own by default; moving averages and the lower panel are opt-in.
@@ -598,7 +600,6 @@ export function applyTheme() {
     $("alertDot").hidden = !store.alerts.some((a) => !a.read);
     if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") renderDash(); }
   });
-  if (onboarding) { renderOnboarding(); return; }
   $("alertDot").hidden = !store.alerts.some((a) => !a.read);
   buildFeed();
   await doRefresh(false);
@@ -608,4 +609,7 @@ export function applyTheme() {
 })();
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.register("sw.js" + (CONFIG.firebase ? "?config=" + encodeURIComponent(JSON.stringify(CONFIG.firebase)) : "")).catch(() => {});
+  // When a new release takes over right after opening, reload once so the new version shows straight away.
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && performance.now() < 8000 && !sessionStorage.getItem("pl.swReload")) { sessionStorage.setItem("pl.swReload", "1"); location.reload(); } });
 }

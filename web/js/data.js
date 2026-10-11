@@ -34,7 +34,7 @@ async function kraken(t) {
 }
 
 // One refresh for the whole watchlist. A failed symbol never breaks the others.
-export async function refresh(syms) {
+export async function refresh(syms, onFile) {
   D.status = "refreshing"; D.error = null;
   try {
     const [candles, news] = await Promise.all([getJSON("data/candles.json").catch(() => null), getJSON("data/news.json").catch(() => null)]);
@@ -46,6 +46,7 @@ export async function refresh(syms) {
       D.generatedAt = candles.generatedAt;
     }
     if (news) D.news = news;
+    onFile?.(); // draw from the site's data file straight away; live Kraken prices patch in after
     const coins = [...new Set(syms.filter((s) => s.m === "CRYPTO").map((s) => s.t))].slice(0, 25);
     await Promise.all(coins.map(async (t) => {
       try { const bars = await kraken(t); if (bars.length > 30) D.series["CRYPTO:" + t] = { source: "Kraken", closeOnly: false, bars, live: true }; }

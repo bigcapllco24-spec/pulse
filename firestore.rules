@@ -1,9 +1,10 @@
 rules_version = '2';
-// No personal data is stored. Accounts are addressed by the SHA-256 of a recovery code only the user holds,
-// so knowing the document id is the key. Listing collections is never allowed from the app.
+// No personal data is stored. Each account is the document accounts/{uid} of a device's anonymous sign-in,
+// and only that sign-in can read or change it. Listing collections is never allowed from the app.
 service cloud.firestore {
   match /databases/{db}/documents {
     function signedIn() { return request.auth != null; }
+    function isOwner(acct) { return request.auth != null && request.auth.uid == acct; }
 
     // Username: a public display name. Set once, then changed at most twice; every change must claim the
     // new name in /usernames in the same write, so names stay unique.
@@ -19,11 +20,11 @@ service cloud.firestore {
     }
 
     match /accounts/{acct} {
-      allow get, delete: if signedIn() && acct.size() == 64;
-      allow create: if signedIn() && acct.size() == 64 && !request.resource.data.keys().hasAny(['username', 'usernameChanges']);
-      allow update: if signedIn() && acct.size() == 64 && usernameOk(acct);
+      allow get, delete: if isOwner(acct);
+      allow create: if isOwner(acct) && !request.resource.data.keys().hasAny(['username', 'usernameChanges']);
+      allow update: if isOwner(acct) && usernameOk(acct);
       match /alerts/{alert} {
-        allow read, update, delete: if signedIn() && acct.size() == 64;   // written by the data job only
+        allow read, update, delete: if isOwner(acct);   // written by the data job only
       }
     }
     // Which symbols anyone follows, so the data job knows what to fetch. Holds no account information.
@@ -34,9 +35,9 @@ service cloud.firestore {
     match /usernames/{name} {
       allow get: if signedIn();
       allow create: if signedIn() && name.matches('^[a-z0-9_.]{3,20}$') && request.resource.data.keys().hasOnly(['acct', 'at'])
-        && request.resource.data.acct is string && request.resource.data.acct.size() == 64
+        && request.resource.data.acct == request.auth.uid
         && getAfter(/databases/$(db)/documents/accounts/$(request.resource.data.acct)).data.username == name;
-      allow delete: if signedIn() && (!existsAfter(/databases/$(db)/documents/accounts/$(resource.data.acct))
+      allow delete: if signedIn() && resource.data.acct == request.auth.uid && (!existsAfter(/databases/$(db)/documents/accounts/$(resource.data.acct))
         || getAfter(/databases/$(db)/documents/accounts/$(resource.data.acct)).data.get('username', null) != name);
     }
     // Shared lists: anyone with the long random link can read and edit.

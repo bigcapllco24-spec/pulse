@@ -1,7 +1,7 @@
 // Dashboard, Profile, sheets (add stocks, watchlists, switcher) and onboarding.
 import { CONFIG } from "../config.js";
 import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
-  createAccount, restore, normCode, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList,
+  markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList,
   getShared, callAI, enablePush, signOutDevice, deleteAccount } from "./store.js";
 import { loadSymbols, searchSymbols, searchIndicators, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
@@ -206,15 +206,15 @@ export function renderProfile(sub, arg) {
     const unread = store.alerts.filter((a) => !a.read).length;
     const u = store.data?.username, left = usernameChangesLeft(), nW = watchlists().length, nC = allSyms().length;
     el.innerHTML = `<div class="phead">
-        <div class="pav" aria-hidden="true">${esc((u || "?")[0].toUpperCase())}</div>
-        <div class="pwho"><b>${u ? "@" + esc(u) : "Pick a username"}</b><span>${nC} coins · ${nW} watchlist${nW === 1 ? "" : "s"}${store.mode === "demo" ? " · saved on this phone" : ""}</span></div>
-        <button class="btn sm" id="pName">${u ? "Change" : "Set"}</button>
+        <div class="pav" aria-hidden="true">${u ? esc(u[0].toUpperCase()) : `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>`}</div>
+        <div class="pwho"><b>${u ? "@" + esc(u) : "Your profile"}</b><span>${nC} coins · ${nW} watchlist${nW === 1 ? "" : "s"}${store.mode === "demo" ? " · saved on this phone" : ""}</span></div>
+        ${u ? `<button class="btn sm" id="pName">Change</button>` : ""}
       </div>
       ${u ? `<p class="hint pleft">${left > 0 ? `${left} username change${left === 1 ? "" : "s"} left` : "No username changes left"}</p>` : ""}
-      ${store.mode === "demo" ? `<div class="notice warn">Demo mode: saved on this phone only.</div>` : ""}
+
       ${GROUPS.map(([g, rows]) => `<h2 class="pg">${g}</h2><div class="list pgl">${rows.map(([k, l, d]) => `<button class="row" data-p="${k}">${icon(k)}<span class="main"><span class="t">${l}${k === "alerts" && unread ? ` <span class="pill confirmed">${unread} new</span>` : ""}</span><span class="s">${d}</span></span><span class="chev">›</span></button>`).join("")}</div>`).join("")}
       <p class="disclaimer">${esc(DISCLAIMER)}</p>`;
-    el.querySelector("#pName").onclick = () => openUsernameSheet();
+    el.querySelector("#pName")?.addEventListener("click", () => openUsernameSheet());
     el.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => {
       if (b.dataset.p === "tour") { resetTours(); showTab("feed"); setTimeout(() => startTour("feed"), 300); return; }
       renderProfile(b.dataset.p);
@@ -228,11 +228,11 @@ export function renderProfile(sub, arg) {
 }
 
 // Username sheet: live checks, a clear count of changes left, and a warning against real names.
-export function openUsernameSheet() {
+export function openUsernameSheet(onDone, reason) {
   const cur = store.data?.username || "", left = usernameChangesLeft();
   if (cur && left <= 0) { toast("You've used all your username changes."); return; }
   openSheet(cur ? "Change username" : "Choose a username", `
-    <label class="field"><span>Username</span><div class="uname"><span>@</span><input id="uIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" value="${esc(cur)}" placeholder="e.g. chartwatcher"></div></label>
+    ${reason ? `<p>${esc(reason)}</p>` : ""}<label class="field"><span>Username</span><div class="uname"><span>@</span><input id="uIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" value="${esc(cur)}" placeholder="e.g. chartwatcher"></div></label>
     <p class="hint" id="uMsg">3–20 letters, numbers, dots or underscores.</p>
     <div class="notice">Your username is public in shared lists. Don't use your real name, email or phone number.</div>
     <p class="hint">${cur ? `Changing it uses 1 of your ${left} remaining change${left === 1 ? "" : "s"}.` : `After choosing one you can change it ${USERNAME_CHANGES} more times.`}</p>
@@ -242,7 +242,7 @@ export function openUsernameSheet() {
     inp.oninput = check; check(); setTimeout(() => inp.focus(), 250);
     btn.onclick = async () => {
       btn.disabled = true; btn.textContent = "Saving…";
-      try { const n = await setUsername(inp.value); closeSheet(); toast(`You're @${n}.`); renderProfile(); }
+      try { const n = await setUsername(inp.value); closeSheet(); toast(`You're @${n}.`); if (onDone) onDone(); else renderProfile(); }
       catch (e) { msg.textContent = e.message || "Couldn't save. Try again."; msg.className = "hint bad"; btn.disabled = false; btn.textContent = cur ? "Change username" : "Save username"; }
     };
   });
@@ -428,32 +428,40 @@ function pLists(el, back) {
   const lists = [...store.lists.values()];
   const link = (id) => location.origin + location.pathname + "#/join/" + id;
   el.innerHTML = `${back}<h1>Shared lists</h1><p class="hint">Anyone with a list's link can see and edit it. Members show by a nickname; we never ask for names.</p>
-    <form class="box" id="lForm"><div class="field"><label for="lName">New shared list</label><input id="lName" maxlength="40" required placeholder="e.g. Weekend watchlist"></div><div class="field"><label for="lNick">Your nickname in it</label><input id="lNick" value="${esc(store.data?.username || "")}" maxlength="24" required></div><button class="btn primary block">Create</button></form>
+    <form class="box" id="lForm"><div class="field"><label for="lName">New shared list</label><input id="lName" maxlength="40" required placeholder="e.g. Weekend watchlist"></div><p class="hint">Members see each other by username${store.data?.username ? `: you're @${esc(store.data.username)}` : ". You'll pick one when you create or join a list"}.</p><button class="btn primary block">Create</button></form>
     ${lists.map((l) => `<div class="box"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h3>${esc(l.name)}</h3><span><button class="btn sm" data-copy="${esc(l.id)}">Invite link</button> <button class="btn ghost sm" data-leave="${esc(l.id)}">Leave</button></span></div>
       <p class="hint">Members: ${esc(Object.values(l.members || {}).join(", ") || "just you")}</p><p>${(l.symbols || []).map((s) => esc(s.t)).join(", ") || `<span class="hint">Empty</span>`}</p>
       ${(l.symbols || []).length ? `<button class="btn sm" data-copyto="${esc(l.id)}">Copy into a watchlist</button>` : ""}</div>`).join("")}`;
   const re = () => { pLists(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
-  el.querySelector("#lForm").onsubmit = async (e) => { e.preventDefault(); try { await createList(el.querySelector("#lName").value.trim(), el.querySelector("#lNick").value.trim()); re(); } catch (err) { toast(err.message); } };
+  el.querySelector("#lForm").onsubmit = (e) => {
+    e.preventDefault();
+    const name = el.querySelector("#lName").value.trim();
+    withUsername(async () => { try { await createList(name, store.data.username); re(); } catch (err) { toast(err.message); } });
+  };
   el.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () => { try { await navigator.clipboard.writeText(link(b.dataset.copy)); toast("Invite link copied."); } catch { prompt("Copy this link", link(b.dataset.copy)); } }));
   el.querySelectorAll("[data-leave]").forEach((b) => (b.onclick = async () => { if (confirm("Leave this list?")) { await leaveList(b.dataset.leave); re(); } }));
   el.querySelectorAll("[data-copyto]").forEach((b) => (b.onclick = async () => { const l = store.lists.get(b.dataset.copyto); const id = await newWatchlist(l.name); await save({ watchlists: watchlists().map((w) => (w.id === id ? { ...w, syms: l.symbols } : w)) }); toast(`Copied into “${l.name}”.`); }));
 }
 async function joinFlow(id) {
-  const nick = store.data?.username || prompt("Your nickname in this shared list (others see only this):");
-  if (!nick) return;
-  try { await joinList(id, nick); toast("Joined. Find it in Profile → Shared lists."); renderProfile("lists"); } catch (e) { toast(e.message, { ms: 5000 }); }
   history.replaceState(null, "", location.pathname);
+  withUsername(async () => {
+    try { await joinList(id, store.data.username); toast("Joined. Find it in Profile → Shared lists."); renderProfile("lists"); } catch (e) { toast(e.message, { ms: 5000 }); }
+  });
+}
+// A username is only asked for when it's needed: shared lists show members by username.
+function withUsername(fn) {
+  if (store.data?.username) return fn();
+  openUsernameSheet(fn, "Shared lists show members by username, so pick one first.");
 }
 
 function pAccount(el, back) {
-  el.innerHTML = `${back}<h1>Account</h1>${store.mode === "demo" ? `<div class="notice warn">Demo mode keeps your data on this phone only.</div>` :
-    `<p>Your account has no name, email or phone number. This recovery code is the only key to it: use it to open your account on another phone.</p>
-    <div class="code" id="code">•••••-•••••-•••••-•••••-•••••-•••••</div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn sm" id="cShow">Show</button><button class="btn sm" id="cCopy">Copy</button></div>
-    <p class="hint">Lose this phone and the code, and the account can't be recovered. We hold nothing that could identify you.</p>`}
-    <h2>This phone</h2><div style="display:grid;gap:8px">${store.mode === "live" ? `<button class="btn" id="sOut">Sign out of this phone</button>` : ""}<button class="btn danger" id="del">Delete account and all its data</button></div>`;
-  el.querySelector("#cShow")?.addEventListener("click", () => (el.querySelector("#code").textContent = store.code));
-  el.querySelector("#cCopy")?.addEventListener("click", async () => { try { await navigator.clipboard.writeText(store.code); toast("Copied. Keep it somewhere safe."); } catch { el.querySelector("#code").textContent = store.code; } });
-  el.querySelector("#sOut")?.addEventListener("click", () => { if (confirm("Sign out? You'll need the recovery code to sign back in.")) signOutDevice(); });
+  const n = store.data?.username;
+  el.innerHTML = `${back}<h1>Account</h1>
+    <p>Your account has no name, email or phone number. It belongs to this app on this phone${store.mode === "demo" ? " (demo mode)" : ""}.</p>
+    <p class="hint">Uninstalling the app or clearing the browser's site data starts a fresh account. Moving to another phone will come later.</p>
+    <h2>Username</h2><p class="dline">${n ? `@${esc(n)} · ${usernameChangesLeft()} change${usernameChangesLeft() === 1 ? "" : "s"} left` : "Not set. You only need one for shared lists."} <button class="btn ghost sm" id="aName">${n ? "Change" : "Add"}</button></p>
+    <h2>Delete</h2><button class="btn danger" id="del">Delete my account and all its data</button>`;
+  el.querySelector("#aName").onclick = () => openUsernameSheet(() => pAccount(el, back) || (el.querySelector("#pBack").onclick = () => renderProfile()));
   el.querySelector("#del").onclick = async () => { if (confirm("Delete your account, watchlists, rules and alerts? This can't be undone.")) await deleteAccount(); };
 }
 function pAppearance(el, back) {
@@ -474,31 +482,3 @@ function pLegal(el, back) {
 }
 
 // ---------- onboarding (live mode, no account on this phone)
-export function renderOnboarding() {
-  $("sFeed").hidden = true; $("sProfile").hidden = false;
-  document.querySelector(".tabbar").style.display = "none";
-  const el = $("profile");
-  el.innerHTML = `<div style="min-height:70dvh;display:flex;flex-direction:column;justify-content:center;gap:14px">
-    <div class="label">${esc(CONFIG.appName)}</div><h1 style="font-size:34px">Your watchlist,<br>one chart at a time.</h1>
-    <p>Scroll through your coins like a feed. Swipe for the news and the meaning behind every move. No name, email or phone needed.</p>
-    <button class="btn primary block" id="oNew">Get started</button><button class="btn block" id="oHave">I have a recovery code</button>
-    <p class="disclaimer">By continuing you confirm you are 18 or over. ${esc(DISCLAIMER)}</p></div>`;
-  el.querySelector("#oNew").onclick = async (e) => {
-    e.target.disabled = true;
-    try {
-      const code = await createAccount();
-      el.innerHTML = `<h1>Save your recovery code</h1><p>It's the only way to open your account on another phone. We can't recover it for you.</p><div class="code">${esc(code)}</div>
-        <div style="display:grid;gap:8px;margin-top:14px"><button class="btn" id="oCopy">Copy code</button><button class="btn primary" id="oDone">I've saved it</button></div>`;
-      el.querySelector("#oCopy").onclick = async () => { try { await navigator.clipboard.writeText(code); toast("Copied."); } catch {} };
-      el.querySelector("#oDone").onclick = () => location.reload();
-    } catch (err) { toast("Couldn't create the account. " + err.message); e.target.disabled = false; }
-  };
-  el.querySelector("#oHave").onclick = () => {
-    el.innerHTML = `<h1>Open your account</h1><div class="field"><label for="oCode">Recovery code</label><input id="oCode" autocomplete="off" spellcheck="false" placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"></div><button class="btn primary block" id="oGo">Open</button>`;
-    el.querySelector("#oGo").onclick = async () => {
-      const code = el.querySelector("#oCode").value;
-      if (normCode(code).length !== 30) return toast("A recovery code has 30 letters and numbers.");
-      if (await restore(code)) location.reload(); else toast("No account found for that code.");
-    };
-  };
-}
