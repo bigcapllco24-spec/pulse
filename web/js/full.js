@@ -23,7 +23,7 @@ const HIST_DAYS = 1461; // about 4 years of daily candles
 const BINANCE = { HYPE: null }; // coins Binance doesn't list are left with the app's own 2 years
 const cache = new Map(); // `${t}:${interval}` → { at, bars }
 
-async function krakenBars(t, iv) {
+export async function krakenBars(t, iv) {
   const k = `${t}:${iv}`, hit = cache.get(k);
   if (hit && Date.now() - hit.at < (iv < 1440 ? 120e3 : 3600e3)) return hit.bars;
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 9000);

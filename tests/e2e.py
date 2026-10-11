@@ -32,7 +32,7 @@ def kraken_route(route):
     pair = _re.search(r"pair=([A-Z]+)", route.request.url).group(1)
     iv = int(_re.search(r"interval=(\d+)", route.request.url).group(1)) if "interval=" in route.request.url else 1440
     rnd = _random.Random(pair + str(iv)); price = rnd.uniform(0.2, 900); rows = []
-    step, count = (iv * 60, 400 if iv == 10080 else 720 if iv != 1440 else 730); t0 = 1791504000 - (count - 1) * step
+    step, count = (iv * 60, 400 if iv == 10080 else 720 if iv != 1440 else 730); t0 = (int(time.time()) // step * step if iv < 1440 else 1791504000) - (count - 1) * step  # intraday candles run up to now
     for k in range(count):
         o = price; c = o * (1 + rnd.gauss(0, 0.03)); h = max(o, c) * (1 + abs(rnd.gauss(0, 0.01))); l = min(o, c) * (1 - abs(rnd.gauss(0, 0.01)))
         rows.append([t0 + k * step, f"{o:.6f}", f"{h:.6f}", f"{l:.6f}", f"{c:.6f}", f"{c:.6f}", f"{rnd.uniform(1e3, 1e6):.2f}", 100]); price = c
@@ -434,7 +434,7 @@ def phone_tests(b):
     # daily recap on the first card after the first visit
     p.evaluate("localStorage.setItem('pl.lastOpen', JSON.stringify(new Date(Date.now()-3600e3).toISOString()))"); p.reload(); p.wait_for_timeout(2500)
     rc = p.inner_text(".card.active") if p.locator(".card.active").count() else ""
-    check("phone: the first card is a daily recap (up count, biggest rise and fall)", "daily recap" in rc.lower() and "biggest rise" in rc.lower() and "up today" in rc.lower(), rc[:150].replace("\n", " "))
+    check("phone: the first card is a daily recap measured from midnight (up count, biggest rise and fall)", "daily recap" in rc.lower() and "biggest rise" in rc.lower() and "up today" in rc.lower() and "midnight" in rc.lower(), rc[:150].replace("\n", " "))
     check("phone: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 

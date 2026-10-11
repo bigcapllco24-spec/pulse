@@ -8,7 +8,7 @@ import { describe } from "./describe.js";
 import { mainChart, lowerChart } from "./chart.js";
 import { levelsFor, swingLevels } from "./levels.js";
 import { startTour, coachEvent } from "./coach.js";
-import { openFull } from "./full.js";
+import { openFull, krakenBars } from "./full.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
@@ -412,10 +412,11 @@ function catchupHtml() {
       <p>Swipe through your watchlist like a feed. Every chart is drawn the same way, so moves are easy to compare.</p>
       <p class="hint">Information only, never advice.</p></div>`;
   }
-  // Daily recap: today's moves across the list, then what is new since the last visit.
-  const cs = chartSettings();
-  const vs = APP.syms.map((s) => ({ s, v: view(s.key, cs) })).filter((x) => x.v);
-  const chg = (x) => x.v.daily.now.changePct;
+  // Daily recap: every coin's change since the day started (12:00 AM your time), a fixed point that doesn't depend on
+  // when you last opened the app. Worked out from 15-minute candles; until they arrive, nothing misleading is shown.
+  const ref = since9Ref(), m9 = APP.s9?.ref === ref.key ? APP.s9.chg : null;
+  const vs = APP.syms.map((s) => ({ s, c: m9?.[s.key] })).filter((x) => x.c != null);
+  const chg = (x) => x.c;
   const ups = vs.filter((x) => chg(x) > 0).length;
   const best = vs.reduce((a, x) => (!a || chg(x) > chg(a) ? x : a), null), worst = vs.reduce((a, x) => (!a || chg(x) < chg(a) ? x : a), null);
   const keys = new Set(APP.syms.map((s) => s.key)), stories = D.news.stories || [];
@@ -430,9 +431,34 @@ function catchupHtml() {
   const unread = store.alerts.filter((a) => !a.read).length;
   if (unread) facts.push(`<div class="fact"><span class="ic acc">!</span><div><b>${unread} alert${unread === 1 ? "" : "s"}</b> waiting. See Profile → Alerts.</div></div>`);
   const today = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
-  return `<div class="special"><div class="label">Daily recap · ${esc(today)}${since ? ` · last visit ${esc(ago(since))}` : ""}</div>
-    <h1>${vs.length ? `${ups} of ${vs.length} up today.` : "Prices are loading."}</h1>${tiles}${facts.join("")}
+  if (!m9 && APP.syms.length) loadSince9(ref);
+  return `<div class="special" data-recap><div class="label">Daily recap · ${esc(today)}</div>
+    <h1>${vs.length ? `${ups} of ${vs.length} up today.` : APP.s9?.failed ? "Couldn't load the latest prices." : "Checking today's prices…"}</h1>
+    <p class="hint" style="margin:-4px 0 10px">Change from ${esc(ref.label)} to now.</p>${tiles}${facts.join("")}
     <p class="hint">${APP.syms.length} in ${esc(listName())} · swipe up to start</p></div>`;
+}
+// The start of today (12:00 AM) in the person's own time zone.
+function since9Ref() {
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  return { ms: d.getTime(), key: d.toISOString().slice(0, 16), label: "midnight (12:00 AM) your time" };
+}
+let s9busy = null;
+function loadSince9(ref) {
+  if (s9busy === ref.key) return;
+  s9busy = ref.key;
+  Promise.all(APP.syms.map(async (s) => {
+    try {
+      const bars = await krakenBars(s.t, 15), i = bars.findIndex((b) => Date.parse(b.t + ":00Z") >= ref.ms);
+      if (i < 0) return [s.key, 0]; // the first candle of the day hasn't closed yet
+      return [s.key, ((bars[bars.length - 1].c - bars[i].o) / bars[i].o) * 100];
+    } catch { return [s.key, null]; }
+  })).then((rows) => {
+    const chg = Object.fromEntries(rows.filter(([, x]) => x != null));
+    APP.s9 = { ref: ref.key, chg, failed: !Object.keys(chg).length };
+    s9busy = APP.s9.failed ? null : s9busy;
+    const c = document.querySelector(".card [data-recap]")?.closest(".card");
+    if (c) c.innerHTML = catchupHtml();
+  });
 }
 function doneHtml(round) {
   return `<div class="special done" style="align-items:flex-start"><svg class="done-ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="34"/><path d="M26 41l9 9 19-20"/></svg>
