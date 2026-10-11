@@ -5,7 +5,7 @@
 // mirror and are joined on before the app's own Kraken history, so you can keep dragging back in time.
 import { D } from "./data.js";
 import { buildSeries, compute, toWeekly, extendedSeries } from "./indicators.js";
-import { OVERLAYS, PANELS, MAX_OVERLAYS, MAX_PANELS, picks, keysOf } from "./studies.js";
+import { OVERLAYS, PANELS, MAX_OVERLAYS, maxPanels, picks, keysOf } from "./studies.js";
 import { mainChart, lowerChart } from "./chart.js";
 import { levelsFor } from "./levels.js";
 import { chartSettings, store, save } from "./store.js";
@@ -238,7 +238,7 @@ function wireBar() {
 function toggleStudy(code) {
   const isOver = !!OVERLAYS[code], list = isOver ? st.over : st.lower, i = list.indexOf(code);
   if (i >= 0) list.splice(i, 1);
-  else if (list.length >= (isOver ? MAX_OVERLAYS : MAX_PANELS)) { toast(`Up to ${isOver ? MAX_OVERLAYS : MAX_PANELS} ${isOver ? "on the price chart" : "panels"} at a time. Remove one first.`); return false; }
+  else if (list.length >= (isOver ? MAX_OVERLAYS : maxPanels())) { toast(`Up to ${isOver ? MAX_OVERLAYS : maxPanels()} ${isOver ? "on the price chart" : "panels"} at a time. Remove one first.`); return false; }
   else list.push(code);
   saveStudies(); return true;
 }

@@ -425,7 +425,7 @@ def phone_tests(b):
     # quick sets replace the picks in one tap
     p.click(".card.active [data-ind]"); p.wait_for_timeout(400); p.click("#sheet [data-sset=momentum]"); p.wait_for_timeout(300); p.click("#sheet [data-close]"); p.wait_for_timeout(600)
     ms = p.evaluate("[...document.querySelectorAll('.card.active .lower')].map(l=>l.dataset.learn).join(',') + '|' + (document.querySelector('.card.active .olegend')?.innerText||'')")
-    check("phone: the Momentum quick set shows RSI and MACD on the card (Stochastic in full screen) and clears the price-chart lines", ms == "RSI,MACD|", ms)
+    check("phone: the Momentum quick set shows RSI, MACD and Stochastic on the card (a 2 × 2 grid from iPhone 12 width) and clears the price-chart lines", ms == "RSI,MACD,STOCH|" and p.locator(".card.active .lowers.g2").count() == 1, ms)
     p.click(".card.active [data-ind]"); p.wait_for_timeout(400)
     p.click("#sheet [data-sset=none]"); p.wait_for_timeout(200)
     for c in ["BB", "RSI", "STOCH"]: p.click(f"#sheet [data-stog={c}]"); p.wait_for_timeout(150)

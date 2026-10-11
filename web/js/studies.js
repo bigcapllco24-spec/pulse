@@ -41,7 +41,11 @@ export const PANELS = {
   AO: { name: "Awesome Oscillator", label: "AO % of price", group: "Momentum", short: "The 5 average of each candle's midpoint minus the 34 average.", hist: "aoPct", zero: true, sym: true, metric: "aoPct", guide: "ao" },
   UO: { name: "Ultimate Oscillator", label: "Ultimate", group: "Momentum", short: "Close position blended over 7, 14 and 28 candles, 0 to 100.", lines: [["uo", C.acc]], range: [0, 100], refs: [30, 70], metric: "uo", guide: "ultimate" },
 };
-export const MAX_OVERLAYS = 4, MAX_PANELS = 4, FEED_PANELS = 2;
+export const MAX_OVERLAYS = 4;
+// Panels below the chart: up to 4 (as a 2 × 2 grid on cards) on screens at least as wide as an iPhone 12
+// (390 px); narrower phones get 2, which is all that stays readable there.
+export const WIDE_PX = 390;
+export const maxPanels = () => ((typeof innerWidth === "number" ? innerWidth : WIDE_PX) >= WIDE_PX ? 4 : 2);
 
 export const keysOf = (st) => [...(st.lines || []).map((l) => l[0]), ...(st.fill || []), ...(st.cloud || []), st.dots, st.trend, st.hist].filter(Boolean);
 const needsExt = (st) => !st.base && keysOf(st).some((k) => !(st.baseKeys || []).includes(k));

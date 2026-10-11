@@ -6,7 +6,7 @@ import { store, save, chartSettings, setUsername, checkUsername, usernameChanges
 import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
-import { OVERLAYS, PANELS, MAX_OVERLAYS, MAX_PANELS, FEED_PANELS, SETS, picks } from "./studies.js";
+import { OVERLAYS, PANELS, MAX_OVERLAYS, maxPanels, SETS, picks } from "./studies.js";
 import { D, view, storiesFor, RANGE_LABEL, resolveInterval } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
 import { startTour, resetTours } from "./coach.js";
@@ -444,22 +444,22 @@ export function openIndicatorsSheet(onChange) {
         <button class="stog" data-stog="${code}" aria-pressed="${on}">${on ? "On" : "Add"}</button></div>`;
     }).join("")).join("");
   };
-  const body = () => `<p class="hint">Your picks show on every coin. Cards show the lines and the first ${FEED_PANELS} panels; open a chart full screen (⤢) to see them all. Tap a name to learn how it works.</p>
+  const body = () => `<p class="hint">Your picks show on every coin. ${maxPanels() > 2 ? "Up to 4 panels fit under each card, two by two." : "This screen fits 2 panels under each card; wider phones fit 4."} Tap a name to learn how it works.</p>
     <h3 class="shd">Quick sets <span>ways to look at a chart, not strategies</span></h3>
-    <div class="ssets">${SETS.map((x) => `<button class="sset" data-sset="${x.id}" aria-pressed="${x.over.join() === pk.over.join() && x.lower.join() === pk.lower.join()}"><b>${esc(x.name)}</b><span>${esc(x.q)}</span></button>`).join("")}<button class="sset clear" data-sset="none"><b>Clear all</b><span>Just the price</span></button></div>
+    <div class="ssets">${SETS.map((x) => `<button class="sset" data-sset="${x.id}" aria-pressed="${x.over.join() === pk.over.join() && x.lower.slice(0, maxPanels()).join() === pk.lower.join()}"><b>${esc(x.name)}</b><span>${esc(x.q)}</span></button>`).join("")}<button class="sset clear" data-sset="none"><b>Clear all</b><span>Just the price</span></button></div>
     <h3 class="shd">On the price chart <span>${pk.over.length}/${MAX_OVERLAYS}</span></h3>${rows(OVERLAYS, pk.over)}
-    <h3 class="shd">Panels below <span>${pk.lower.length}/${MAX_PANELS}</span></h3>${rows(PANELS, pk.lower)}
+    <h3 class="shd">Panels below <span>${pk.lower.length}/${maxPanels()}</span></h3>${rows(PANELS, pk.lower)}
     <p class="disclaimer">Indicators are arithmetic on past prices and volume. They describe what happened, not what will happen.</p>`;
   const wire = (root) => {
     const redo = () => { const top = root.scrollTop; root.innerHTML = body(); wire(root); root.scrollTop = top; };
     root.querySelectorAll("[data-stog]").forEach((b) => (b.onclick = () => {
       const code = b.dataset.stog, isOver = !!OVERLAYS[code], list = isOver ? pk.over : pk.lower, i = list.indexOf(code);
       if (i >= 0) list.splice(i, 1);
-      else if (list.length >= (isOver ? MAX_OVERLAYS : MAX_PANELS)) return toast(`Up to ${isOver ? MAX_OVERLAYS : MAX_PANELS} ${isOver ? "on the price chart" : "panels"} at a time. Remove one first.`);
+      else if (list.length >= (isOver ? MAX_OVERLAYS : maxPanels())) return toast(`Up to ${isOver ? MAX_OVERLAYS : maxPanels()} ${isOver ? "on the price chart" : "panels"} at a time. Remove one first.`);
       else list.push(code);
       persist(); redo();
     }));
-    root.querySelectorAll("[data-sset]").forEach((b) => (b.onclick = () => { const x = SETS.find((y) => y.id === b.dataset.sset) || { over: [], lower: [] }; pk.over.splice(0, 99, ...x.over); pk.lower.splice(0, 99, ...x.lower); persist(); redo(); }));
+    root.querySelectorAll("[data-sset]").forEach((b) => (b.onclick = () => { const x = SETS.find((y) => y.id === b.dataset.sset) || { over: [], lower: [] }; pk.over.splice(0, 99, ...x.over); pk.lower.splice(0, 99, ...x.lower.slice(0, maxPanels())); persist(); redo(); }));
     root.querySelectorAll("[data-sguide]").forEach((b) => (b.onclick = () => openIndicator(b.dataset.sguide)));
   };
   openSheet("Indicators", body(), wire);

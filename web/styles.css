@@ -451,3 +451,9 @@ body.fullopen .backdrop { z-index: 80; } body.fullopen .sheet { z-index: 81; } b
 .lfact { margin: 3px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.35; }
 .head .hr2 { display: flex; gap: 6px; }
 .fxchip i { font-style: italic; font-family: Georgia, serif; font-weight: 700; font-size: 13px; }
+/* panels under a feed card: stacked when 1–2, a 2 × 2 grid when 3–4 */
+.lowers { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.lowers.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+.lowers.g2 .lower .lplot { height: 44px; }
+.lowers.g2 .lower-label { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lowers.g2 .lower .ax { font-size: 9.5px; }
