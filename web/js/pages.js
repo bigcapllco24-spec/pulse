@@ -324,22 +324,22 @@ function pIndicators(el, back) {
   const found = term ? searchIndicators(pool, term).slice(0, 8) : [];
   el.innerHTML = `${back}<h1>Indicators</h1><p class="hint">Switch on up to ${MAX_ACTIVE}; they appear as readings in every card's details. Tap a name to learn what it measures.</p>
     <div class="list">${added.map((i) => `<div class="row"><button class="main" data-info="${esc(i.id)}" style="background:none;border:0;text-align:left;color:var(--text);cursor:pointer"><span class="t">${esc(i.name)}${i.custom ? ` <span class="pill single">Not yet reviewed</span>` : ""}</span><span class="s" style="white-space:normal">${esc(i.short || "")}</span></button>
-      <label class="switch"><input type="checkbox" data-act="${esc(i.id)}" ${active.has(i.id) ? "checked" : ""} aria-label="Show ${esc(i.name)}"><span></span></label></div>`).join("")}</div>
+      ${i.note ? "" : `<label class="switch"><input type="checkbox" data-act="${esc(i.id)}" ${active.has(i.id) ? "checked" : ""} aria-label="Show ${esc(i.name)}"><span></span></label>`}</div>`).join("")}</div>
     <h2>Add an indicator</h2><input class="input" id="indQ" value="${esc(term)}" placeholder="e.g. stochastic, vwap, ichimoku" autocomplete="off">
-    <div style="margin-top:8px">${term ? (found.length ? `<div class="list">${found.map((i) => `<div class="row"><span class="main"><span class="t">${esc(i.name)}</span><span class="s">${esc(i.category)}</span></span><button class="btn sm primary" data-add="${esc(i.id)}">Add</button></div>`).join("")}</div>` : "") +
-      `<p class="hint" style="margin-top:8px">No indicator matches “${esc(term)}”. Try another name, like “rsi” or “bollinger”.</p>` : ""}</div>`;
+    <div style="margin-top:8px">${term ? (found.length ? `<div class="list">${found.map((i) => `<div class="row"><span class="main"><span class="t">${esc(i.name)}</span><span class="s" style="white-space:normal">${esc(i.note || i.category)}</span></span>${i.note ? `<button class="btn sm ghost" data-info="${esc(i.id)}">Learn</button>` : `<button class="btn sm primary" data-add="${esc(i.id)}">Add</button>`}</div>`).join("")}</div>` : `<p class="hint" style="margin-top:8px">No indicator matches “${esc(term)}”. Try another name, like “rsi” or “bollinger”.</p>`) : ""}</div>`;
   const re = () => { pIndicators(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
   const inp = el.querySelector("#indQ");
   inp.oninput = () => { APP.indQ = inp.value; const p = inp.selectionStart; re(); const n = el.querySelector("#indQ"); n.focus(); n.setSelectionRange(p, p); };
   el.querySelectorAll("[data-act]").forEach((c) => (c.onchange = async () => {
     const on = new Set(store.data.indicators.active);
     if (c.checked) { if (on.size >= MAX_ACTIVE) { c.checked = false; return toast(`Up to ${MAX_ACTIVE} at a time.`); } on.add(c.dataset.act); } else on.delete(c.dataset.act);
-    await save({ indicators: { ...store.data.indicators, active: [...on] } });
+    await save({ indicators: { ...store.data.indicators, active: [...on] } }); APP.needsRebuild = true;
   }));
   el.querySelectorAll("[data-info]").forEach((b) => (b.onclick = () => openIndicator(b.dataset.info)));
   el.querySelectorAll("[data-add]").forEach((b) => (b.onclick = async () => {
-    const on = new Set(ind.active); if (on.size < MAX_ACTIVE) on.add(b.dataset.add);
-    APP.indQ = ""; await save({ indicators: { added: [...ind.added, b.dataset.add], active: [...on] } }); re(); openIndicator(b.dataset.add);
+    const on = new Set(ind.active), fits = on.size < MAX_ACTIVE; if (fits) on.add(b.dataset.add);
+    APP.indQ = ""; await save({ indicators: { added: [...ind.added, b.dataset.add], active: [...on] } }); APP.needsRebuild = true; re();
+    toast(fits ? "Added. Its reading is in every coin's details: swipe left on a card." : `Added, but switched off: up to ${MAX_ACTIVE} can be on at once.`);
   }));
 }
 export async function openIndicator(id) {

@@ -432,12 +432,19 @@
    "on balance volume"
   ],
   "category": "Volume",
-  "metrics": [],
+  "metrics": [
+   "obvFlow20"
+  ],
   "tv": "OBV@tv-basicstudies",
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Adds volume on up days and subtracts it on down days.",
+  "explainer": {
+   "measures": "Whether trading volume has leaned towards up days or down days.",
+   "calc": "A running total: add the day's volume when the close is higher than yesterday's, subtract it when lower. Here we show its change over 20 days as a share of all volume traded in that time.",
+   "settings": "No settings; usually read over a few weeks.",
+   "limits": "A single huge-volume day can dominate it, and it ignores how far the price moved."
+  }
  },
  {
   "id": "vwap",
@@ -451,8 +458,9 @@
   "tv": "VWAP@tv-basicstudies",
   "computed": false,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Needs minute-by-minute prices, so it has no daily reading here.",
+  "explainer": null,
+  "note": "Needs minute-by-minute prices, so it has no daily reading here."
  },
  {
   "id": "ichimoku",
@@ -463,12 +471,19 @@
    "kumo"
   ],
   "category": "Trend",
-  "metrics": [],
+  "metrics": [
+   "ichiCloud"
+  ],
   "tv": "IchimokuCloud@tv-basicstudies",
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Price compared with the Ichimoku cloud.",
+  "explainer": {
+   "measures": "Whether price is above, inside or below the cloud built from past highs and lows.",
+   "calc": "Span A = midpoint of the 9- and 26-day high–low midpoints; Span B = the 52-day midpoint. Both are drawn 26 days ahead, so today's cloud comes from 26 days ago.",
+   "settings": "9, 26, 52 (the original settings).",
+   "limits": "Built for daily markets with gaps; on round-the-clock coins the spans are just periods of days."
+  }
  },
  {
   "id": "psar",
@@ -479,12 +494,19 @@
    "psar"
   ],
   "category": "Trend",
-  "metrics": [],
+  "metrics": [
+   "sarDist"
+  ],
   "tv": "PSAR@tv-basicstudies",
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Trailing dots that follow the trend.",
+  "explainer": {
+   "measures": "Whether price is above or below a trailing level that speeds up as a move continues.",
+   "calc": "Each day the SAR moves towards the extreme price by an acceleration factor starting at 0.02, rising by 0.02 to 0.2. It flips side when price crosses it.",
+   "settings": "0.02 step, 0.2 maximum.",
+   "limits": "Flips often when prices move sideways."
+  }
  },
  {
   "id": "stochrsi",
@@ -494,12 +516,19 @@
    "stochastic rsi"
   ],
   "category": "Momentum",
-  "metrics": [],
+  "metrics": [
+   "stochRsi"
+  ],
   "tv": "StochasticRSI@tv-basicstudies",
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Where RSI sits within its own recent range, 0 to 100.",
+  "explainer": {
+   "measures": "How today's RSI compares with its highest and lowest values over 14 days.",
+   "calc": "(RSI − lowest RSI in 14 days) / (highest − lowest) × 100.",
+   "settings": "14-day RSI over a 14-day window.",
+   "limits": "Very jumpy: it often swings from 0 to 100 within days."
+  }
  },
  {
   "id": "mfi",
@@ -509,12 +538,19 @@
    "money flow"
   ],
   "category": "Volume",
-  "metrics": [],
+  "metrics": [
+   "mfi14"
+  ],
   "tv": "MF@tv-basicstudies",
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "A volume-weighted version of RSI, 0 to 100.",
+  "explainer": {
+   "measures": "The balance of buying and selling pressure, using both price and volume.",
+   "calc": "Typical price (high + low + close) / 3 times volume gives money flow. MFI = 100 − 100 / (1 + up-day flow / down-day flow) over 14 days.",
+   "settings": "14 days; 80 and 20 are the levels people commonly mark.",
+   "limits": "Readings can stay above 80 or below 20 for a long time in a strong move."
+  }
  },
  {
   "id": "cmf",
@@ -524,12 +560,19 @@
    "chaikin money flow"
   ],
   "category": "Volume",
-  "metrics": [],
+  "metrics": [
+   "cmf20"
+  ],
   "tv": "CMF@tv-basicstudies",
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Average of volume-weighted close position over 20 days.",
+  "explainer": {
+   "measures": "Over 20 days, whether closes sat near the highs or lows of their days, weighted by volume.",
+   "calc": "Sum of (close-location multiplier × volume) over 20 days, divided by total volume. Ranges from −1 to +1.",
+   "settings": "20 days is the common default.",
+   "limits": "Like A/D, it ignores gaps between one day's close and the next day's open."
+  }
  },
  {
   "id": "ao",
@@ -539,12 +582,19 @@
    "ao"
   ],
   "category": "Momentum",
-  "metrics": [],
+  "metrics": [
+   "aoPct"
+  ],
   "tv": "AwesomeOscillator@tv-basicstudies",
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Gap between the 5-day and 34-day averages of each day's midpoint.",
+  "explainer": {
+   "measures": "Whether recent prices are above or below the longer-run average.",
+   "calc": "5-day simple average of (high + low) / 2 minus the 34-day one. Shown here as a percentage of price so coins can be compared.",
+   "settings": "5 and 34 days.",
+   "limits": "Lags the price, as all moving-average measures do."
+  }
  },
  {
   "id": "momentum",
@@ -554,12 +604,19 @@
    "mom"
   ],
   "category": "Momentum",
-  "metrics": [],
+  "metrics": [
+   "mom10"
+  ],
   "tv": "Momentum@tv-basicstudies",
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Price change over the last 10 days.",
+  "explainer": {
+   "measures": "How far the price has moved over a fixed number of days.",
+   "calc": "(Today's close − close 10 days ago) / close 10 days ago, shown as a percentage.",
+   "settings": "10 days is common; some use 12 or 14.",
+   "limits": "It depends only on two prices, so the start date matters a lot."
+  }
  },
  {
   "id": "dema",
@@ -569,12 +626,19 @@
    "double exponential"
   ],
   "category": "Trend",
-  "metrics": [],
+  "metrics": [
+   "demaDist"
+  ],
   "tv": "DoubleEMA@tv-basicstudies",
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "A faster-reacting 20-day average.",
+  "explainer": {
+   "measures": "How far price sits from an average that reacts faster than a normal EMA.",
+   "calc": "DEMA = 2 × EMA(20) − EMA of that EMA(20). Shown as the price's % distance from it.",
+   "settings": "20 days.",
+   "limits": "Faster means more false turns in choppy markets."
+  }
  },
  {
   "id": "tema",
@@ -584,12 +648,19 @@
    "triple exponential"
   ],
   "category": "Trend",
-  "metrics": [],
+  "metrics": [
+   "temaDist"
+  ],
   "tv": "TripleEMA@tv-basicstudies",
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "An even faster 20-day average.",
+  "explainer": {
+   "measures": "How far price sits from a triple-exponential average.",
+   "calc": "TEMA = 3 × EMA − 3 × EMA(EMA) + EMA(EMA(EMA)), over 20 days. Shown as % distance.",
+   "settings": "20 days.",
+   "limits": "Very responsive, so it overshoots in choppy markets."
+  }
  },
  {
   "id": "keltner",
@@ -599,12 +670,19 @@
    "kc"
   ],
   "category": "Volatility",
-  "metrics": [],
+  "metrics": [
+   "keltPos"
+  ],
   "tv": "KLTNR@tv-basicstudies",
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Bands at ±2 ATR around a 20-day average.",
+  "explainer": {
+   "measures": "Where price sits between bands set by the average daily range.",
+   "calc": "Middle = EMA(20); bands = middle ± 2 × ATR(10). Position is 0% at the lower band, 100% at the upper.",
+   "settings": "EMA 20, ATR 10, multiplier 2.",
+   "limits": "Price can ride along a band for a long time."
+  }
  },
  {
   "id": "pivots",
@@ -618,8 +696,9 @@
   "tv": null,
   "computed": false,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Shown on the chart: tap the S/R button on a card and choose Pivot points.",
+  "explainer": null,
+  "note": "Shown on the chart: tap the S/R button on a card and choose Pivot points."
  },
  {
   "id": "donchian",
@@ -629,12 +708,19 @@
    "channel breakout"
   ],
   "category": "Volatility",
-  "metrics": [],
+  "metrics": [
+   "donPos"
+  ],
   "tv": null,
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Where the close sits in the 20-day high–low channel.",
+  "explainer": {
+   "measures": "How close the price is to its 20-day high or low.",
+   "calc": "(Close − 20-day low) / (20-day high − 20-day low) × 100.",
+   "settings": "20 days.",
+   "limits": "A single spike sets the channel edge for 20 days."
+  }
  },
  {
   "id": "supertrend",
@@ -643,12 +729,19 @@
    "supertrend"
   ],
   "category": "Trend",
-  "metrics": [],
+  "metrics": [
+   "stDist"
+  ],
   "tv": null,
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "A line set a multiple of ATR away from price.",
+  "explainer": {
+   "measures": "Whether price is above or below a volatility-based trailing line.",
+   "calc": "Bands at the day's midpoint ± 3 × ATR(10). The line follows the lower band while price stays above it and switches to the upper band when price closes below.",
+   "settings": "ATR 10, multiplier 3.",
+   "limits": "In sideways markets it switches sides frequently."
+  }
  },
  {
   "id": "aroon",
@@ -657,12 +750,19 @@
    "aroon"
   ],
   "category": "Trend",
-  "metrics": [],
+  "metrics": [
+   "aroonOsc"
+  ],
   "tv": null,
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "How recent the 25-day high is versus the 25-day low.",
+  "explainer": {
+   "measures": "Whether new highs or new lows have been more recent.",
+   "calc": "Aroon Up = 100 × (25 − days since 25-day high) / 25; Aroon Down likewise for the low. The oscillator is Up − Down, from −100 to +100.",
+   "settings": "25 days.",
+   "limits": "It only looks at timing, not at how big the moves were."
+  }
  },
  {
   "id": "trix",
@@ -671,12 +771,19 @@
    "trix"
   ],
   "category": "Momentum",
-  "metrics": [],
+  "metrics": [
+   "trix15"
+  ],
   "tv": null,
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Daily change of a triple-smoothed average.",
+  "explainer": {
+   "measures": "The direction of a heavily smoothed trend, with day-to-day noise filtered out.",
+   "calc": "Take a 15-day exponential average three times in a row, then its 1-day % change.",
+   "settings": "15 days.",
+   "limits": "The heavy smoothing makes it slow to respond to turns."
+  }
  },
  {
   "id": "ultimate",
@@ -686,12 +793,19 @@
    "uo"
   ],
   "category": "Momentum",
-  "metrics": [],
+  "metrics": [
+   "uo"
+  ],
   "tv": null,
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Close position blended across 7, 14 and 28 days, 0 to 100.",
+  "explainer": {
+   "measures": "Where closes sit within their true ranges, across three time spans at once.",
+   "calc": "Buying pressure (close − true low) / true range, averaged over 7, 14 and 28 days and weighted 4:2:1.",
+   "settings": "7, 14 and 28 days.",
+   "limits": "Blending periods smooths it, so short sharp moves show less."
+  }
  },
  {
   "id": "fib",
@@ -706,8 +820,9 @@
   "tv": null,
   "computed": false,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "A drawing tool rather than a reading, so it has no daily number here.",
+  "explainer": null,
+  "note": "A drawing tool rather than a reading, so it has no daily number here."
  },
  {
   "id": "hv",
@@ -717,12 +832,19 @@
    "hv"
   ],
   "category": "Volatility",
-  "metrics": [],
+  "metrics": [
+   "hv20"
+  ],
   "tv": null,
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "How much prices swung over 20 days, as a yearly figure.",
+  "explainer": {
+   "measures": "The size of daily price swings, scaled to a year so it can be compared across coins.",
+   "calc": "Standard deviation of daily log returns over 20 days × √365 × 100 (coins trade every day).",
+   "settings": "20 days.",
+   "limits": "It describes the past; volatility can change quickly."
+  }
  },
  {
   "id": "ad",
@@ -733,12 +855,19 @@
    "adl"
   ],
   "category": "Volume",
-  "metrics": [],
+  "metrics": [
+   "adFlow20"
+  ],
   "tv": null,
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Volume weighted by where each day closed in its range.",
+  "explainer": {
+   "measures": "Whether volume has come with closes near the day's high or near its low.",
+   "calc": "Each day, a multiplier from −1 (closed at the low) to +1 (at the high) times volume, added to a running total. We show its 20-day change as a share of volume.",
+   "settings": "No settings.",
+   "limits": "Ignores gaps between days, so a big overnight move can be missed."
+  }
  },
  {
   "id": "elder",
@@ -749,12 +878,20 @@
    "bear power"
   ],
   "category": "Momentum",
-  "metrics": [],
+  "metrics": [
+   "elderBull",
+   "elderBear"
+  ],
   "tv": null,
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Highs and lows compared with a 13-day average.",
+  "explainer": {
+   "measures": "How far buyers pushed the high above, and sellers pushed the low below, the 13-day average.",
+   "calc": "Bull power = high − EMA(13); bear power = low − EMA(13). Shown as % of price.",
+   "settings": "13 days.",
+   "limits": "One unusual day can swing both readings."
+  }
  },
  {
   "id": "kst",
@@ -764,12 +901,19 @@
    "know sure thing"
   ],
   "category": "Momentum",
-  "metrics": [],
+  "metrics": [
+   "kst"
+  ],
   "tv": null,
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Weighted sum of four smoothed rates of change.",
+  "explainer": {
+   "measures": "Price change across short and long spans in one number.",
+   "calc": "Rates of change over 10, 15, 20 and 30 days, each smoothed (10, 10, 10, 15 days) and weighted 1, 2, 3, 4, then added.",
+   "settings": "Martin Pring's standard daily settings.",
+   "limits": "The number itself has no fixed scale; its sign and turns are what people read."
+  }
  },
  {
   "id": "vortex",
@@ -779,12 +923,19 @@
    "vi"
   ],
   "category": "Trend",
-  "metrics": [],
+  "metrics": [
+   "vortex"
+  ],
   "tv": null,
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Upward versus downward movement over 14 days.",
+  "explainer": {
+   "measures": "Whether today's highs stretch further from yesterday's lows than lows from yesterday's highs.",
+   "calc": "VI+ = sum |high − previous low| / sum true range; VI− = sum |low − previous high| / sum true range, over 14 days. We show VI+ − VI−.",
+   "settings": "14 days.",
+   "limits": "Choppy markets make the two lines cross often."
+  }
  },
  {
   "id": "cmo",
@@ -794,12 +945,19 @@
    "chande"
   ],
   "category": "Momentum",
-  "metrics": [],
+  "metrics": [
+   "cmo14"
+  ],
   "tv": null,
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Up-day gains minus down-day losses, from −100 to +100.",
+  "explainer": {
+   "measures": "The balance between gains on up days and losses on down days.",
+   "calc": "(Sum of gains − sum of losses) / (sum of gains + sum of losses) × 100 over 14 days.",
+   "settings": "14 days.",
+   "limits": "Like RSI, it can stay at extremes during long trends."
+  }
  },
  {
   "id": "hma",
@@ -809,12 +967,19 @@
    "hull"
   ],
   "category": "Trend",
-  "metrics": [],
+  "metrics": [
+   "hmaDist"
+  ],
   "tv": null,
-  "computed": false,
+  "computed": true,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Alan Hull's low-lag 20-day average.",
+  "explainer": {
+   "measures": "How far price sits from a smooth average designed to lag less.",
+   "calc": "Weighted average over √20 days of (2 × WMA(10) − WMA(20)). Shown as % distance.",
+   "settings": "20 days.",
+   "limits": "Can overshoot after sharp moves."
+  }
  },
  {
   "id": "zigzag",
@@ -828,8 +993,9 @@
   "tv": null,
   "computed": false,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "A drawing tool rather than a reading, so it has no daily number here.",
+  "explainer": null,
+  "note": "A drawing tool rather than a reading, so it has no daily number here."
  },
  {
   "id": "pe",
@@ -844,8 +1010,9 @@
   "tv": null,
   "computed": false,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Needs company earnings; coins don't have them.",
+  "explainer": null,
+  "note": "Needs company earnings; coins don't have them."
  },
  {
   "id": "beta",
@@ -858,7 +1025,8 @@
   "tv": null,
   "computed": false,
   "builtin": false,
-  "short": "",
-  "explainer": null
+  "short": "Needs a market index to compare with; not available for coins yet.",
+  "explainer": null,
+  "note": "Needs a market index to compare with; not available for coins yet."
  }
 ]

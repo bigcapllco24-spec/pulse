@@ -377,10 +377,13 @@ def phone_tests(b):
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(300); p.click("#pBack") if p.locator("#pBack").count() else None
     p.click("[data-p=indicators]"); p.wait_for_timeout(300)
     p.locator("[data-act=bb]").check(); p.wait_for_timeout(300)
+    p.fill("#indQ", "money flow"); p.wait_for_timeout(300); p.click("[data-add=mfi]"); p.wait_for_timeout(400)
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(1200)
     p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
     left(); txt = p.inner_text(".card.active [data-pane=details]")
     check("phone: switching on Bollinger %B adds it to details", "Bollinger" in txt)
+    mfi = p.evaluate("""[...document.querySelectorAll('.card.active .reading')].map(r => r.innerText).find(t => t.includes('Money Flow')) || ''""")
+    check("phone: a newly added indicator (Money Flow Index) shows a reading in details", "Money Flow" in mfi and "weighted" in mfi, mfi)
     right()
 
     # rules make alerts (demo mode checks rules on the phone)

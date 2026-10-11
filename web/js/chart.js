@@ -12,7 +12,8 @@ export const MA_COLORS = ["var(--ma1)", "var(--ma2)", "var(--ma3)"];
 export function mainChart(win, ov, opts) {
   const n = win.length;
   if (!n) return "";
-  const pw = W - PR, step = pw / n, bw = Math.max(1.5, step * 0.62);
+  // opts.count/opts.shift: the full-screen chart scrolls smoothly by fractions of a candle
+  const pw = W - PR, step = pw / (opts.count || n), sh = opts.shift || 0, bw = Math.max(1.5, step * 0.62);
   const vals = [];
   win.forEach((b) => vals.push(opts.closeOnly ? b.c : b.h, opts.closeOnly ? b.c : b.l));
   (opts.maKeys || []).forEach((k) => (ov[k] || []).forEach((x) => x != null && vals.push(x)));
@@ -22,11 +23,12 @@ export function mainChart(win, ov, opts) {
   for (const l of lv) { lo = Math.min(lo, l.price); hi = Math.max(hi, l.price); }
   const pad = (hi - lo) * 0.06 || hi * 0.01 || 1; lo -= pad; hi += pad;
   const Y = (v) => PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB);
-  const X = (i) => i * step + step / 2;
+  const X = (i) => (i - sh) * step + step / 2;
   const first = win[0].c, last = win[n - 1].c, up = last >= first;
   let body = "";
-  // grid: three quiet lines
-  for (const g of [0.25, 0.5, 0.75]) body += `<line x1="0" x2="${pw}" y1="${(PT + g * (H - PT - PB)).toFixed(1)}" y2="${(PT + g * (H - PT - PB)).toFixed(1)}" class="grid"/>`;
+  // grid: three quiet lines (the full-screen chart gets more, each with its price)
+  const gl = opts.full ? [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875] : [0.25, 0.5, 0.75];
+  for (const g of gl) body += `<line x1="0" x2="${pw}" y1="${(PT + g * (H - PT - PB)).toFixed(1)}" y2="${(PT + g * (H - PT - PB)).toFixed(1)}" class="grid"/>`;
   const type = opts.closeOnly && opts.type === "candles" ? "area" : opts.type;
   if (type === "candles") {
     win.forEach((b, i) => {
@@ -60,7 +62,9 @@ export function mainChart(win, ov, opts) {
   const xaxis = `<div class="xaxis" aria-hidden="true">${ticks.map((t) => `<span class="${t.major ? "maj" : ""}" style="left:${((X(t.i) / W) * 100).toFixed(2)}%">${t.label}</span>`).join("")}</div>`;
   const labels = `<span class="ax" style="top:${top(PT)}">${f(hi - pad)}</span><span class="ax" style="top:${top(H - PB)}">${f(lo + pad)}</span>` +
     `<span class="axlast ${up ? "pu" : "pd"}" style="top:${top(ly)}">${f(last)}</span>`;
-  return `<div class="plot"><svg class="chart" data-lo="${lo}" data-hi="${hi}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${n} ${opts.interval === "1W" ? "weeks" : "days"}, ${up ? "up" : "down"} ${Math.abs(((last - first) / first) * 100).toFixed(1)}%, last ${f(last)}, from ${win[0].t} to ${win[n - 1].t}">${body}</svg>${labels}${lvHtml}</div>${xaxis}`;
+  const gridLabels = opts.full ? gl.filter((g) => Math.abs(PT + g * (H - PT - PB) - ly) > 9).map((g) => `<span class="ax gl" style="top:${top(PT + g * (H - PT - PB))}">${f(hi - g * (hi - lo))}</span>`).join("") : "";
+  if (sh || opts.count) body = `<clipPath id="pclip"><rect x="0" y="0" width="${pw}" height="${H}"/></clipPath><g clip-path="url(#pclip)">${body}</g>`;
+  return `<div class="plot"><svg class="chart" data-lo="${lo}" data-hi="${hi}" data-step="${step}" data-shift="${sh}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${n} ${opts.interval === "1W" ? "weeks" : "days"}, ${up ? "up" : "down"} ${Math.abs(((last - first) / first) * 100).toFixed(1)}%, last ${f(last)}, from ${win[0].t} to ${win[n - 1].t}">${body}</svg>${labels}${gridLabels}${lvHtml}</div>${xaxis}`;
 }
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -95,32 +99,41 @@ export function timeTicks(win, days) {
 }
 
 // Lower panel: RSI with 30/70 lines, MACD histogram + lines, or volume bars.
-export function lowerChart(win, s, kind) {
-  const n = win.length, pw = W - PR, step = pw / n, X = (i) => i * step + step / 2;
+export function lowerChart(win, s, kind, opts = {}) {
+  const n = win.length, pw = W - PR, step = pw / (opts.count || n), sh = opts.shift || 0, X = (i) => (i - sh) * step + step / 2;
   if (!n || kind === "none") return "";
-  let body = "", label = "";
+  const full = !!opts.full, LHf = full ? 96 : LH;
+  const at = (y) => ((y / LHf) * 100).toFixed(1) + "%", hline = (y, cls = "ref") => `<line x1="0" x2="${pw}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" class="${cls}"/>`;
+  let body = "", label = "", axes = "";
+  // the full-screen chart lines its panels up with the price chart's dates
+  if (full) for (const t of timeTicks(win, opts.days || 91)) body += `<line x1="${X(t.i).toFixed(1)}" x2="${X(t.i).toFixed(1)}" y1="0" y2="${LHf}" class="grid vgrid"/>`;
   if (kind === "RSI") {
-    const Y = (v) => 4 + (1 - v / 100) * (LH - 8);
-    body += `<line x1="0" x2="${pw}" y1="${Y(70)}" y2="${Y(70)}" class="ref"/><line x1="0" x2="${pw}" y1="${Y(30)}" y2="${Y(30)}" class="ref"/>`;
-    body += `<path d="${path(s.rsi14.map((v, i) => (v == null ? null : [X(i), Y(v)])))}" class="rsi draw" pathLength="1"/>`;
+    const Y = (v) => 4 + (1 - v / 100) * (LHf - 8);
+    if (full) { body += `<rect x="0" width="${pw}" y="${Y(70).toFixed(1)}" height="${(Y(30) - Y(70)).toFixed(1)}" class="band"/>`; for (const g of [10, 20, 40, 60, 80, 90]) body += hline(Y(g), "grid"); body += hline(Y(50), "grid mid"); }
+    body += hline(Y(70)) + hline(Y(30));
+    body += `<path d="${path(s.rsi14.map((v, i) => (v == null ? null : [X(i), Y(v)])))}" class="rsi${full ? "" : " draw"}" pathLength="1"/>`;
     const lv = s.rsi14[n - 1];
-    label = `RSI 14 <b>${lv == null ? "–" : lv.toFixed(1)}</b>`;
-    label += `<span class="ax" style="top:${((Y(70) / LH) * 100).toFixed(1)}%">70</span><span class="ax" style="top:${((Y(30) / LH) * 100).toFixed(1)}%">30</span>`;
+    label = `RSI 14 <b>${lv == null ? "–" : lv.toFixed(1)}</b>${full ? ` <i>${lv == null ? "" : lv >= 70 ? "above 70" : lv <= 30 ? "below 30" : "between 30 and 70"}</i>` : ""}`;
+    axes = (full ? [70, 50, 30] : [70, 30]).map((g) => `<span class="ax" style="top:${at(Y(g))}">${g}</span>`).join("");
   } else if (kind === "MACD") {
     const all = [...s.macdHist, ...s.macd, ...s.macdSignal].filter((x) => x != null);
-    const m = Math.max(...all.map(Math.abs)) || 1, Y = (v) => LH / 2 - (v / m) * (LH / 2 - 4);
+    const m = Math.max(...all.map(Math.abs)) || 1, Y = (v) => LHf / 2 - (v / m) * (LHf / 2 - 4);
+    if (full) { body += hline(Y(0), "grid mid"); for (const g of [0.5, -0.5]) body += hline(Y(g * m), "grid"); }
     s.macdHist.forEach((v, i) => { if (v != null) body += `<rect x="${(X(i) - step * 0.3).toFixed(1)}" y="${Math.min(Y(v), Y(0)).toFixed(1)}" width="${(step * 0.6).toFixed(1)}" height="${Math.abs(Y(v) - Y(0)).toFixed(1)}" class="${v >= 0 ? "cu" : "cd"} soft"/>`; });
     body += `<path d="${path(s.macd.map((v, i) => (v == null ? null : [X(i), Y(v)])))}" class="macd"/><path d="${path(s.macdSignal.map((v, i) => (v == null ? null : [X(i), Y(v)])))}" class="sig"/>`;
     const h = s.macdHist[n - 1];
-    label = `MACD hist <b>${h == null ? "–" : f(h)}</b>`;
+    label = `MACD hist <b>${h == null ? "–" : f(h)}</b>${full ? ` <i><em class="kmacd"></em>MACD <em class="ksig"></em>signal</i>` : ""}`;
+    if (full) axes = [[m * 0.5, f(m * 0.5)], [0, "0"], [-m * 0.5, f(-m * 0.5)]].map(([v, t]) => `<span class="ax" style="top:${at(Y(v))}">${t}</span>`).join("");
   } else if (kind === "VOL") {
     const m = Math.max(...win.map((b) => b.v || 0)) || 1;
-    win.forEach((b, i) => (body += `<rect x="${(X(i) - step * 0.3).toFixed(1)}" y="${(LH - ((b.v || 0) / m) * (LH - 6)).toFixed(1)}" width="${(step * 0.6).toFixed(1)}" height="${(((b.v || 0) / m) * (LH - 6)).toFixed(1)}" class="${b.c >= b.o ? "cu" : "cd"} soft"/>`));
+    if (full) for (const g of [0.25, 0.5, 0.75]) body += hline(LHf - g * (LHf - 6), "grid");
+    win.forEach((b, i) => (body += `<rect x="${(X(i) - step * 0.3).toFixed(1)}" y="${(LHf - ((b.v || 0) / m) * (LHf - 6)).toFixed(1)}" width="${(step * 0.6).toFixed(1)}" height="${(((b.v || 0) / m) * (LHf - 6)).toFixed(1)}" class="${b.c >= b.o ? "cu" : "cd"} soft"/>`));
     const r = s.volRatio[n - 1];
     label = `Volume <b>${r == null ? "–" : r.toFixed(1) + "x"}</b> usual`;
+    if (full) axes = `<span class="ax" style="top:${at(6)}">${f(m)}</span><span class="ax" style="top:${at(LHf / 2 + 3)}">${f(m / 2)}</span>`;
   }
-  const [lab, ...axes] = label.split("<span class=\"ax\"");
-  return `<div class="lower" data-learn="${kind}" role="button" aria-label="What ${kind === "VOL" ? "volume" : kind} shows"><span class="lower-label">${lab}</span><div class="lplot">${axes.map((a) => "<span class=\"ax\"" + a).join("")}<svg class="chart" viewBox="0 0 ${W} ${LH}" preserveAspectRatio="none" aria-hidden="true">${body}</svg></div></div>`;
+  if (sh || opts.count) body = `<clipPath id="lclip"><rect x="0" y="0" width="${pw}" height="${LHf}"/></clipPath><g clip-path="url(#lclip)">${body}</g>`;
+  return `<div class="lower${full ? " lfull" : ""}" data-learn="${kind}" role="button" aria-label="What ${kind === "VOL" ? "volume" : kind} shows"><span class="lower-label">${label}</span><div class="lplot">${axes}<svg class="chart" viewBox="0 0 ${W} ${LHf}" preserveAspectRatio="none" aria-hidden="true">${body}</svg></div></div>`;
 }
 
 export function sparkline(vals, w = 80, h = 28) {
