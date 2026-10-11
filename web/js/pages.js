@@ -2,7 +2,7 @@
 import { CONFIG } from "../config.js";
 import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
   markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList,
-  enablePush, signOutDevice, deleteAccount, makePrediction, myScore } from "./store.js";
+  enablePush, signOutDevice, deleteAccount, makePrediction, myScore, isAdmin, listFeedback, setFeedbackStatus, myUid } from "./store.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { HORIZONS, BANDS, CHANCE, SCORE_MIN, SCORE_MAX, PROVISIONAL_UNDER, checkPrediction, canPredict, allowedRange, dailyVol, targetTime, closenessText } from "./score.js";
 import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
@@ -13,6 +13,7 @@ import { D, view, storiesFor, RANGE_LABEL, resolveInterval, dailyOf } from "./da
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, haptic, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
 import { startTour, resetTours } from "./coach.js";
 import { openLearn } from "./interact.js";
+import { setFeedbackMode } from "./feedback.js";
 import { APP, buildFeed, showTab, currentSyms, listName, applyTheme, doRefresh } from "./app.js";
 
 const symDoc = (r) => ({ key: r.key, t: r.t, n: r.n, m: r.m, ty: r.ty });
@@ -180,7 +181,7 @@ const ICON = {
   chart: '<path d="M3 17l5-6 4 4 4-7 5 9"/>', indicators: '<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>', rules: '<path d="M12 3a6 6 0 016 6c0 5 2 6 2 6H4s2-1 2-6a6 6 0 016-6zM10 19a2 2 0 004 0"/>',
   alerts: '<path d="M4 4h16v12H5l-1 4z"/>', lists: '<circle cx="8" cy="9" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M2 20c1-4 4-5 6-5s5 1 6 5M14 20c.5-2.5 2-3.5 3.5-3.5S21 17.5 22 20"/>',
   account: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>', appearance: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z"/>',
-  tour: '<path d="M5 3l14 9-14 9z"/>', legal: '<path d="M7 3h8l4 4v14H7zM15 3v4h4M10 12h6M10 16h6"/>',
+  tour: '<path d="M5 3l14 9-14 9z"/>', feedback: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>', inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 2h6l1-2h5"/>', legal: '<path d="M7 3h8l4 4v14H7zM15 3v4h4M10 12h6M10 16h6"/>',
   predictions: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.6"/>', how: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-1 .7-1.5 1.2-1.5 2.5M12 17h.01"/>',
 };
 const GROUPS = [
@@ -189,8 +190,9 @@ const GROUPS = [
   ["Alerts", [["rules", "Alert rules", "Get told when your levels are hit"], ["alerts", "Alerts", "Everything that has fired"]]],
   ["Sharing", [["lists", "Shared lists", "Follow a list with friends"]]],
   ["Account & privacy", [["account", "Account", "Username, delete your data"], ["appearance", "Appearance", "Dark, light or match phone"]]],
-  ["Help", [["tour", "Show the app tour again", "Swipes, charts and watchlists in a minute"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]]],
+  ["Help", [["feedback", "Give feedback", "Tap anything in the app to comment on it"], ["tour", "Show the app tour again", "Swipes, charts and watchlists in a minute"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]]],
 ];
+let admin = null; // whether this sign-in may read feedback (checked once, after connecting)
 const icon = (k) => `<svg class="pic" viewBox="0 0 24 24" aria-hidden="true">${ICON[k] || ""}</svg>`;
 export function renderProfile(sub, arg) {
   const el = $("profile");
@@ -207,16 +209,18 @@ export function renderProfile(sub, arg) {
       ${u ? `<p class="hint pleft">${left > 0 ? `${left} username change${left === 1 ? "" : "s"} left` : "No username changes left"}</p>` : ""}
       ${scoreCard(true)}
 
-      ${GROUPS.map(([g, rows]) => `<h2 class="pg">${g}</h2><div class="list pgl">${rows.map(([k, l, d]) => `<button class="row" data-p="${k}">${icon(k)}<span class="main"><span class="t">${l}${k === "alerts" && unread ? ` <span class="pill confirmed">${unread} new</span>` : ""}</span><span class="s">${k === "predictions" ? esc(predCounts()) : d}</span></span><span class="chev">›</span></button>`).join("")}</div>`).join("")}
+      ${(admin ? [...GROUPS, ["Admin", [["inbox", "Feedback inbox", "Everyone's notes, newest first"]]]] : GROUPS).map(([g, rows]) => `<h2 class="pg">${g}</h2><div class="list pgl">${rows.map(([k, l, d]) => `<button class="row" data-p="${k}">${icon(k)}<span class="main"><span class="t">${l}${k === "alerts" && unread ? ` <span class="pill confirmed">${unread} new</span>` : ""}</span><span class="s">${k === "predictions" ? esc(predCounts()) : d}</span></span><span class="chev">›</span></button>`).join("")}</div>`).join("")}
       <p class="disclaimer">${esc(DISCLAIMER)}</p>`;
     el.querySelector("#pName")?.addEventListener("click", () => openUsernameSheet());
+    if (admin === null) isAdmin().then((a) => { admin = a; if (a && APP.tab === "profile" && !APP.profileSub) renderProfile(); });
     el.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => {
       if (b.dataset.p === "tour") { resetTours(); showTab("feed"); setTimeout(() => startTour("feed"), 300); return; }
+      if (b.dataset.p === "feedback") { setFeedbackMode(true); showTab("feed"); return; }
       renderProfile(b.dataset.p);
     }));
     return;
   }
-  const fn = { watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal, predictions: pPredictions, how: pHow }[sub];
+  const fn = { watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal, predictions: pPredictions, how: pHow, inbox: pInbox }[sub];
   fn(el, back, arg);
   el.querySelector("#pBack").onclick = () => renderProfile();
   el.parentElement.scrollTop = 0;
@@ -409,7 +413,9 @@ function pAccount(el, back) {
     <p>Your account has no name, email or phone number. It belongs to this app on this phone${store.mode === "demo" ? " (demo mode)" : ""}.</p>
     <p class="hint">Uninstalling the app or clearing the browser's site data starts a fresh account. Moving to another phone will come later.</p>
     <h2>Username</h2><p class="dline">${n ? `@${esc(n)} · ${usernameChangesLeft()} change${usernameChangesLeft() === 1 ? "" : "s"} left` : "Not set. You only need one for shared lists."} <button class="btn ghost sm" id="aName">${n ? "Change" : "Add"}</button></p>
-    <h2>Delete</h2><button class="btn danger" id="del">Delete my account and all its data</button>`;
+    <h2>Delete</h2><button class="btn danger" id="del">Delete my account and all its data</button>
+    <h2>Sign-in id</h2><p class="dline"><code class="uid">${esc(myUid() || "connecting…")}</code> <button class="btn ghost sm" id="aUid">Copy</button></p><p class="hint">Only needed if you help run the app: an admin adds this id to give access to the feedback inbox.</p>`;
+  el.querySelector("#aUid").onclick = () => navigator.clipboard?.writeText(myUid() || "").then(() => toast("Copied."), () => toast("Couldn't copy."));
   el.querySelector("#aName").onclick = () => openUsernameSheet(() => pAccount(el, back) || (el.querySelector("#pBack").onclick = () => renderProfile()));
   el.querySelector("#del").onclick = async () => { if (confirm("Delete your account, watchlists, rules and alerts? This can't be undone.")) await deleteAccount(); };
 }
@@ -619,4 +625,29 @@ export function openLinesSheet(onChange) {
     body.querySelectorAll("[data-line]").forEach((b) => (b.onclick = async () => { await setLines(b.dataset.line); haptic(); onChange?.(); closeSheet(); }));
   };
   openSheet("Lines on the chart", "", draw);
+}
+
+// ---------- feedback inbox (admins only): every note with where it was left; copy the open ones to hand to Claude
+function pInbox(el, back) {
+  const st = APP.inboxFilter || "open";
+  el.innerHTML = `${back}<h1>Feedback inbox</h1><p class="hint">Loading…</p>`;
+  listFeedback().then((all) => {
+    const shown = all.filter((x) => st === "all" || (x.status || "open") === st), n = (k) => all.filter((x) => (x.status || "open") === k).length;
+    const when = (t) => (t ? new Date(t).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
+    el.innerHTML = `${back}<h1>Feedback inbox</h1>
+      <div class="seg" role="group" aria-label="Show">${[["open", `Open ${n("open")}`], ["done", `Done ${n("done")}`], ["declined", `Declined ${n("declined")}`], ["all", "All"]].map(([k, l]) => `<button data-fs="${k}" aria-pressed="${st === k}">${l}</button>`).join("")}</div>
+      ${st === "open" && shown.length ? `<p><button class="btn block" id="fbCopy">Copy all open notes for Claude</button></p>` : ""}
+      ${shown.length ? `<div class="fblist">${shown.map((x) => `<article class="fbitem" data-id="${esc(x.id)}">
+          <div class="fbmeta"><b>${esc(x.where || "")}</b><span>${esc(x.screen || "")}${x.coin ? ` · ${esc(x.coin)}` : ""} · ${esc(when(x.createdAt))}</span></div>
+          <p>${esc(x.text)}</p>${x.note ? `<p class="hint">Note: ${esc(x.note)}</p>` : ""}
+          <div class="fbact">${(x.status || "open") === "open" ? `<button class="btn sm" data-fset="done">Done</button><button class="btn ghost sm" data-fset="declined">Decline</button>` : `<span class="pill ${x.status === "done" ? "confirmed" : "single"}">${esc(x.status)}</span><button class="btn ghost sm" data-fset="open">Reopen</button>`}</div>
+        </article>`).join("")}</div>` : `<div class="empty">Nothing here.</div>`}`;
+    el.querySelector("#pBack").onclick = () => renderProfile();
+    el.querySelectorAll("[data-fs]").forEach((b) => (b.onclick = () => { APP.inboxFilter = b.dataset.fs; pInbox(el, back); }));
+    el.querySelectorAll("[data-fset]").forEach((b) => (b.onclick = async () => { await setFeedbackStatus(b.closest("[data-id]").dataset.id, b.dataset.fset); pInbox(el, back); }));
+    el.querySelector("#fbCopy")?.addEventListener("click", () => {
+      const text = shown.map((x, i) => `${i + 1}. [${x.screen}${x.coin ? " · " + x.coin : ""}] ${x.where}\n   "${x.text}" (id ${x.id})`).join("\n");
+      navigator.clipboard?.writeText(`Pulse feedback, ${shown.length} open notes:\n${text}`).then(() => toast("Copied. Paste it into Claude."), () => toast("Couldn't copy."));
+    });
+  }).catch(() => { el.innerHTML = `${back}<h1>Feedback inbox</h1><div class="empty">Couldn't load feedback. Only admins can see it.</div>`; el.querySelector("#pBack").onclick = () => renderProfile(); });
 }

@@ -325,3 +325,30 @@ export async function deleteAccount() {
   await fb.authMod.signOut(fb.auth).catch(() => {}); // the next visit starts a brand-new anonymous account
   signOutDevice();
 }
+
+// ---------- feedback: anyone can add a note; only admins (a document in /admins with their sign-in id) can read them
+const LSFB = "pl.demoFeedback";
+const fbNow = () => new Date().toISOString();
+export async function sendFeedback(item) {
+  const doc = { text: String(item.text).slice(0, 1000), where: String(item.where || "").slice(0, 200), screen: String(item.screen || "").slice(0, 120),
+    coin: item.coin || null, detail: String(item.detail || "").slice(0, 200), ctx: item.ctx || {}, status: "open" };
+  if (store.mode === "demo") { const l = ls.get(LSFB, []); l.unshift({ ...doc, id: randomId(10), uid: "demo", createdAt: fbNow() }); ls.set(LSFB, l.slice(0, 300)); return; }
+  await connected();
+  if (!fb) throw new Error("offline");
+  await fb.f.addDoc(fb.f.collection(fb.db, "feedback"), { ...doc, uid: fb.auth.currentUser.uid, createdAt: fb.f.serverTimestamp() });
+}
+export async function isAdmin() {
+  if (store.mode === "demo") return true;
+  await connected();
+  try { return !!fb && (await fb.f.getDoc(fb.f.doc(fb.db, "admins", fb.auth.currentUser.uid))).exists(); } catch { return false; }
+}
+export async function listFeedback() {
+  if (store.mode === "demo") return ls.get(LSFB, []);
+  const { f, db } = fb, q = await f.getDocs(f.query(f.collection(db, "feedback"), f.orderBy("createdAt", "desc"), f.limit(300)));
+  return q.docs.map((d) => { const x = d.data(); return { ...x, id: d.id, createdAt: x.createdAt?.toDate?.().toISOString?.() || "" }; });
+}
+export async function setFeedbackStatus(id, status, note = "") {
+  if (store.mode === "demo") { ls.set(LSFB, ls.get(LSFB, []).map((x) => (x.id === id ? { ...x, status, note, doneAt: fbNow() } : x))); return; }
+  await fb.f.updateDoc(fb.f.doc(fb.db, "feedback", id), { status, note: String(note).slice(0, 500), doneAt: fbNow() });
+}
+export const myUid = () => (store.mode === "demo" ? "demo" : fb?.auth?.currentUser?.uid || null);

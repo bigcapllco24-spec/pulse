@@ -362,7 +362,7 @@ def phone_tests(b):
         lefts.append(p.inner_text("#profile .phead b") + " | " + (p.inner_text("#profile .pleft") if p.locator("#profile .pleft").count() else ""))
     p.click("#pName"); p.wait_for_timeout(500)
     blocked = (p.inner_text("#toast") if p.is_visible("#toast") else "") and not p.is_visible("#sheet")
-    check("phone: profile is grouped (Prediction game, Charts, Alerts, Sharing, Account, Help) and doesn't push a username", len(groups) == 6 and groups[0].lower() == "prediction game" and no_nag, " | ".join(groups))
+    check("phone: profile is grouped (Prediction game, Charts, Alerts, Sharing, Account, Help, and Admin for admins) and doesn't push a username", len(groups) in (6, 7) and groups[0].lower() == "prediction game" and groups[5].lower() == "help" and no_nag, " | ".join(groups))
     check("phone: username rejects bad names (too short, phone-like numbers)", "3 to 20" in bad1 and "phone" in bad2, f"{bad1} / {bad2}")
     check("phone: username can be set, then changed twice, then no more", lefts[0].startswith("@chart_fan |") and "2 username changes left" in lefts[0] and "1 username change left" in lefts[1] and "No username changes left" in lefts[2] and bool(blocked), " ; ".join(lefts))
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(600)
@@ -435,6 +435,24 @@ def phone_tests(b):
     left(); txt = p.inner_text(".card.active [data-pane=details]")
     check("phone: the feed card shows the same indicators, and details read them in plain words", "BB" in fd["leg"] and fd["panels"] == "RSI,STOCH" and "Bollinger" in txt and "Stochastic" in txt, f"{fd} / {'Bollinger' in txt} {'Stochastic' in txt}")
     right()
+
+    # feedback: triple-tap any part to leave a note about it; Feedback mode makes every tap (buttons too) a note
+    p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(600)
+    fbox = p.locator(".card.active .chartbox").bounding_box(); fx, fy = fbox["x"] + fbox["width"] * 0.5, fbox["y"] + fbox["height"] * 0.5
+    for _ in range(3): p.touchscreen.tap(fx, fy); p.wait_for_timeout(90)
+    p.wait_for_timeout(700); fs1 = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+    p.fill("#fbText", "Chart could use a crosshair hint"); p.click("#fbSend"); p.wait_for_timeout(500)
+    check("phone: triple-tapping the chart opens a feedback box about the price chart of that coin", "Price chart" in fs1 and _re.search(r"Feed · [A-Z]{2,5}", fs1), fs1[:80].replace("\n", " "))
+    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500); p.click("#pBack") if p.locator("#pBack").count() else None
+    p.click("[data-p=feedback]"); p.wait_for_timeout(600)
+    p.click(".card.active [data-lv]"); p.wait_for_timeout(600); fs2 = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+    p.fill("#fbText", "What does S/R mean?"); p.click("#fbSend"); p.wait_for_timeout(500); p.click("#fbBar [data-fbdone]"); p.wait_for_timeout(300)
+    check("phone: Feedback mode turns a button tap into a note about that button (S/R), and Done turns it off", "S/R button" in fs2 and not p.locator("#fbBar").count(), fs2[:80].replace("\n", " "))
+    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(700); p.click("[data-p=inbox]"); p.wait_for_timeout(700)
+    ib = p.inner_text("#profile")
+    p.click(".fbitem [data-fset=done] >> nth=0"); p.wait_for_timeout(500); ib2 = p.inner_text("#profile .seg")
+    check("phone: the feedback inbox lists both notes with where they were left, and marking one done moves it", "Price chart" in ib and "S/R button" in ib and "Open 1" in ib2 and "Done 1" in ib2, ib2)
+    p.click("#pBack"); p.wait_for_timeout(300)
 
     # rules make alerts (demo mode checks rules on the phone)
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(300); p.click("#pBack") if p.locator("#pBack").count() else None

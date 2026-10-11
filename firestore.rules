@@ -5,6 +5,8 @@ service cloud.firestore {
   match /databases/{db}/documents {
     function signedIn() { return request.auth != null; }
     function isOwner(acct) { return request.auth != null && request.auth.uid == acct; }
+    // Admins: a document /admins/{uid}, added by hand in the Firebase console. They can read and triage feedback.
+    function isAdmin() { return request.auth != null && exists(/databases/$(db)/documents/admins/$(request.auth.uid)); }
 
     // Username: a public display name. Set once, then changed at most twice; every change must claim the
     // new name in /usernames in the same write, so names stay unique.
@@ -58,6 +60,22 @@ service cloud.firestore {
         && getAfter(/databases/$(db)/documents/accounts/$(request.resource.data.acct)).data.username == name;
       allow delete: if signedIn() && resource.data.acct == request.auth.uid && (!existsAfter(/databases/$(db)/documents/accounts/$(resource.data.acct))
         || getAfter(/databases/$(db)/documents/accounts/$(resource.data.acct)).data.get('username', null) != name);
+    }
+    // Feedback on any part of the app: anyone signed in can add a note (never read others'); admins read and mark
+    // them done or declined. No personal details are stored, only the sign-in id and where in the app it was left.
+    match /feedback/{id} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['text', 'where', 'screen', 'coin', 'detail', 'ctx', 'uid', 'status', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid && request.resource.data.status == 'open'
+        && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000
+        && request.resource.data.where is string && request.resource.data.where.size() <= 200
+        && request.resource.data.createdAt == request.time;
+      allow read: if isAdmin();
+      allow update: if isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'note', 'doneAt'])
+        && request.resource.data.status in ['open', 'done', 'declined'];
+    }
+    match /admins/{uid} {
+      allow get: if isOwner(uid);
     }
     // Shared lists: anyone with the long random link can read and edit.
     match /lists/{list} {

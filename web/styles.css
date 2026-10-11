@@ -544,3 +544,17 @@ div.pscard { cursor: default; margin-bottom: 4px; }
 /* card foot: the swipe dots in the middle, Predict on the right within thumb reach */
 .cfoot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; flex: none; }
 .cfoot .dots { padding-top: 0; } .cfoot .pdbtn { justify-self: end; }
+/* feedback: the note sheet, the mode banner and the admin inbox */
+.fbwhere { display: grid; gap: 2px; background: var(--surface2); border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; }
+.fbwhere b { font-size: var(--t-m); } .fbwhere span:last-child { font-size: var(--t-s); color: var(--muted); }
+.fbtext { width: 100%; min-height: 110px; resize: vertical; font: inherit; font-size: var(--t-m); line-height: 1.45; }
+.fbrow { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 4px; }
+.fbbar { position: fixed; z-index: 85; left: 50%; transform: translateX(-50%); top: calc(8px + var(--safe-t)); display: flex; align-items: center; gap: 10px; background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 6px 6px 6px 14px; font-size: var(--t-s); font-weight: 700; box-shadow: 0 6px 18px rgba(0,0,0,.35); max-width: calc(100% - 24px); }
+.fbbar .btn { background: var(--accent-ink); color: var(--accent); padding: 6px 12px; }
+body.fbmode .card, body.fbmode .page, body.fbmode .tabbar { outline: 2px dashed var(--accent); outline-offset: -4px; }
+.fblist { display: grid; gap: 10px; margin-top: 12px; }
+.fbitem { background: var(--surface); border-radius: 14px; padding: 12px 14px; }
+.fbitem .fbmeta { display: grid; gap: 2px; } .fbitem .fbmeta b { font-size: var(--t-m); } .fbitem .fbmeta span { font-size: var(--t-s); color: var(--muted); }
+.fbitem > p { margin: 8px 0; font-size: var(--t-m); line-height: 1.5; white-space: pre-wrap; }
+.fbact { display: flex; gap: 8px; align-items: center; }
+code.uid { font-size: var(--t-s); word-break: break-all; }

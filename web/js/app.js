@@ -11,6 +11,7 @@ import { levelsFor, swingLevels } from "./levels.js";
 import { picks, studyWindow, maxPanels, OVERLAYS, PANELS } from "./studies.js";
 import { startTour, coachEvent } from "./coach.js";
 import { openFull } from "./full.js";
+import { initFeedback } from "./feedback.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, krakenBars, INTRA, intraState, IV_LABEL, resolveInterval, dailyOf } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
@@ -85,6 +86,7 @@ export function goCard(i, { v = 0 } = {}) {
 const stepFeed = (dir) => goCard((anim ? fTarget : Math.round(feed.scrollTop / feedH())) + dir);
 // Finger (and mouse) drags up and down. Sideways drags are handled per card in setupSwipe.
 initInteract(feed);
+initFeedback(); // triple-tap anything (or Feedback mode in Profile) to leave a note about that part
 let vd = null;
 feed.addEventListener("pointerdown", (e) => {
   if (e.pointerType === "mouse" && e.button !== 0) return;
