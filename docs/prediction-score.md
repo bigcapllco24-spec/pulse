@@ -155,11 +155,16 @@ the lock that the call is no longer a real call, the prediction is voided and sh
 the target time, the end price is taken from the candle containing that exact moment: 1-minute candles while Kraken
 still has them (12 hours), then 15-minute, hourly, 4-hourly or daily ones.
 
-**Live accounts** (`pipeline/lib/predictions.mjs`, in the data job every 2 hours): locks, scores and moves each due
-prediction from `accounts/{uid}/predictions/{TICKER}_{period}` to `accounts/{uid}/results/{id}`, then writes the
-profile score to `accounts/{uid}.pscore`. `firestore.rules` lets the app only create an open prediction (one per coin
-and period, as its id is fixed); nobody can change or cancel one, or write results or scores. A 30-minute prediction
-is therefore scored within about 2 hours, still against the price at its exact minute.
+**Live accounts** (`pipeline/lib/predictions.mjs`): locks, scores and moves each due prediction from
+`accounts/{uid}/predictions/{TICKER}_{period}` to `accounts/{uid}/results/{id}`, then writes the profile score to
+`accounts/{uid}.pscore`. It runs in two places: `pipeline/settle.mjs` every 15 minutes (`.github/workflows/settle.yml`,
+one collection-group query finds every open prediction, so only those accounts are touched) and the full data job every
+2 hours (which also refreshes every profile score as older results fade). `firestore.rules` lets the app only create an
+open prediction (one per coin and period, as its id is fixed); nobody can change or cancel one, or write results or
+scores. A 30-minute prediction is therefore scored within about 15 minutes, still against the price at its exact minute.
+
+**Instant result on the phone**: once a prediction's time is up, Profile → Your predictions works it out on the phone
+with the same code and candles and shows it marked "confirming" until the official result arrives.
 
 **Demo mode**: the phone settles its own predictions the same way each time prices refresh, and works out the score.
 
