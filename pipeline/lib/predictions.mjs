@@ -24,7 +24,8 @@ export async function settlePredictions(db, accounts, { now = Date.now(), fetchR
   const rows = rowCache(async (t, iv) => { try { return await fetchRows(t, iv); } catch (e) { log(`predictions: ${t} ${iv}m candles failed: ${e.message}`); return []; } });
   const tally = { locked: 0, scored: 0, void: 0, profiles: 0 };
   for (const a of accounts) {
-    const open = await db.list(`accounts/${a.id}/predictions`);
+    const open = a.open || await db.list(`accounts/${a.id}/predictions`);
+    let resolved = 0;
     for (const p of open) {
       const { id, path, ...doc } = p;
       let res;
@@ -35,10 +36,10 @@ export async function settlePredictions(db, accounts, { now = Date.now(), fetchR
       const rid = `${id}_${Date.parse(doc.createdAt)}`;
       await db.set(`accounts/${a.id}/results/${rid}`, { ...doc, ...res.patch });
       await db.del(`accounts/${a.id}/predictions/${id}`);
-      tally[res.status === "scored" ? "scored" : "void"]++;
+      tally[res.status === "scored" ? "scored" : "void"]++; resolved++;
     }
     // Every run, not only when something resolved: older results fade, so the score moves with time.
-    if (!open.length && !a.pscore) continue;
+    if (a.open ? !resolved : !open.length && !a.pscore) continue; // the quick run updates only scores that changed
     const results = (await db.list(`accounts/${a.id}/results`)).filter((r) => r.status === "scored");
     if (!results.length) continue;
     const ps = profileScore(results, now);
@@ -47,4 +48,15 @@ export async function settlePredictions(db, accounts, { now = Date.now(), fetchR
   }
   log(`predictions: ${tally.locked} locked, ${tally.scored} scored, ${tally.void} voided, ${tally.profiles} profile scores`);
   return tally;
+}
+
+// The quick run (every 15 minutes): one query finds every open prediction, so only accounts with something open
+// are touched and 30-minute and 1-hour calls are scored soon after they're due. Fading is left to the full run.
+export async function settleOpen(db, opts = {}) {
+  const by = new Map();
+  for (const p of await db.group("predictions")) {
+    const acct = (p.path || "").split("/")[1];
+    if (acct) (by.get(acct) || by.set(acct, []).get(acct)).push(p);
+  }
+  return settlePredictions(db, [...by].map(([id, open]) => ({ id, open })), opts);
 }

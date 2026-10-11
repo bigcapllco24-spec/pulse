@@ -11,10 +11,10 @@ export const OUTLETS = {
   "reuters.com": "Reuters", "apnews.com": "AP", "cnbc.com": "CNBC", "asia.nikkei.com": "Nikkei Asia",
   "axios.com": "Axios", "business-standard.com": "Business Standard", "economictimes.indiatimes.com": "Economic Times",
   "thehindubusinessline.com": "BusinessLine", "ptinews.com": "PTI", "coindesk.com": "CoinDesk",
-  "theblock.co": "The Block", "decrypt.co": "Decrypt", "blockworks.co": "Blockworks", "dlnews.com": "DL News", "fortune.com": "Fortune",
+  "theblock.co": "The Block", "decrypt.co": "Decrypt", "blockworks.co": "Blockworks", "dlnews.com": "DL News", "fortune.com": "Fortune", "cointelegraph.com": "Cointelegraph",
   "prnewswire.com": "Company release", "businesswire.com": "Company release", "globenewswire.com": "Company release",
 };
-const BY_NAME = { reuters: "Reuters", "associated press": "AP", "ap news": "AP", cnbc: "CNBC", nikkei: "Nikkei Asia", axios: "Axios",
+const BY_NAME = { cointelegraph: "Cointelegraph", reuters: "Reuters", "associated press": "AP", "ap news": "AP", cnbc: "CNBC", nikkei: "Nikkei Asia", axios: "Axios",
   "business standard": "Business Standard", "economic times": "Economic Times", businessline: "BusinessLine",
   "press trust of india": "PTI", pti: "PTI", coindesk: "CoinDesk", "the block": "The Block", decrypt: "Decrypt", blockworks: "Blockworks", "dl news": "DL News" };
 const RELEASES = ["prnewswire", "businesswire", "globenewswire", "company release"];
@@ -109,10 +109,16 @@ export function queryFor(sym) {
   return `"${name || sym.ticker}"`;
 }
 
-export async function gdelt(query, { days = 3, max = 50 } = {}) {
+// Search terms GDELT accepts: it refuses very short keywords such as "BNB", so those search by longer names.
+const TERMS = { BNB: ['"BNB Chain"', '"Binance Coin"'], TRX: ['"TRON"', '"Tron network"'], HYPE: ['"Hyperliquid"'], ZEC: ['"Zcash"'] };
+export const termsFor = (sym) => TERMS[sym.ticker] || [queryFor(sym)];
+
+// GDELT allows about one request every 5 seconds per address, and GitHub's runners share addresses, so a busy
+// period answers 429. Waits grow (8, 16, 32 s) before giving up. domains: false leaves the outlet filter to us.
+export async function gdelt(query, { days = 3, max = 50, domains = true } = {}) {
   const url = "https://api.gdeltproject.org/api/v2/doc/doc?format=json&mode=ArtList&sort=DateDesc&sourcelang=english" +
-    `&maxrecords=${max}&timespan=${days}d&query=` + encodeURIComponent(`${query} ${DOMAIN_FILTER}`);
-  for (let attempt = 0; attempt < 2; attempt++) {
+    `&maxrecords=${max}&timespan=${days}d&query=` + encodeURIComponent(domains ? `${query} ${DOMAIN_FILTER}` : query);
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const r = await fetch(url, { headers: { "user-agent": "market-feed-pipeline/1.0" } });
       const text = await r.text();
@@ -124,8 +130,8 @@ export async function gdelt(query, { days = 3, max = 50 } = {}) {
         return { title: (a.title || "").trim(), url: a.url, outlet: outletFor(a.domain || a.url), date: ts.slice(0, 10), ts };
       });
     } catch (e) {
-      if (attempt === 1) { console.warn("gdelt failed:", query, e.message); return []; }
-      await sleep(6000);
+      if (attempt === 3 || /too short|too long/i.test(e.message)) { console.warn("gdelt failed:", query.slice(0, 80), e.message.slice(0, 80)); return []; }
+      await sleep(8000 * 2 ** attempt);
     }
   }
   return [];
@@ -143,6 +149,7 @@ export function mentions(title, sym) {
 export const FEEDS = [
   ["https://www.coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"], ["https://www.theblock.co/rss.xml", "The Block"],
   ["https://decrypt.co/feed", "Decrypt"], ["https://blockworks.co/feed", "Blockworks"], ["https://www.dlnews.com/arc/outboundfeeds/rss/", "DL News"],
+  ["https://cointelegraph.com/rss", "Cointelegraph"], ["https://fortune.com/feed/fortune-feeds/?id=3230629", "Fortune"],
 ];
 const unxml = (x) => String(x || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
 export async function rss(url, outlet, { days = 7 } = {}) {
@@ -188,18 +195,25 @@ export async function officialNews(sym) {
   return out.slice(0, 6);
 }
 
-export async function fetchNews(symbols, { log = console.log } = {}) {
-  const items = [];
+export async function fetchNews(symbols, { log = console.log, pause = 6000 } = {}) {
+  const items = [], syms = symbols.map((s) => ({ ...s, ticker: s.t, name: s.n }));
   const feeds = (await Promise.all(FEEDS.map(([u, o]) => rss(u, o)))).flat();
-  log(`rss: ${feeds.length} headlines from ${FEEDS.length} crypto desks`);
-  for (const s of symbols) {
-    const sym = { ...s, ticker: s.t, name: s.n };
-    const got = (await gdelt(queryFor(sym), { days: 7, max: 40 })).filter((x) => mentions(x.title, sym));
-    const fromFeeds = feeds.filter((x) => mentions(x.title, sym));
+  log(`rss: ${feeds.length} headlines from ${FEEDS.length} outlet feeds`);
+  // One GDELT search covers many coins at once ("Bitcoin" OR "Ethereum" OR …), kept to short queries; results are
+  // then kept only from the outlet list and matched to coins by headline. A few requests instead of one per coin.
+  const terms = [...new Set(syms.flatMap(termsFor))], groups = [];
+  for (const t of terms) { const g = groups[groups.length - 1]; if (g && g.join(" OR ").length + t.length < 300) g.push(t); else groups.push([t]); }
+  const pool = [];
+  for (const [i, g] of groups.entries()) {
+    if (i) await sleep(pause);
+    pool.push(...(await gdelt(g.length > 1 ? `(${g.join(" OR ")})` : g[0], { days: 7, max: 250, domains: false })).filter((x) => x.outlet));
+  }
+  log(`gdelt: ${pool.length} headlines from listed outlets in ${groups.length} searches`);
+  for (const sym of syms) {
+    const got = pool.filter((x) => mentions(x.title, sym)), fromFeeds = feeds.filter((x) => mentions(x.title, sym));
     const official = await officialNews(sym);
-    [...got, ...fromFeeds, ...official].forEach((x) => items.push({ ...x, sym: s.key }));
-    log(`news ${s.key}: ${got.length} gdelt + ${fromFeeds.length} rss + ${official.length} official`);
-    await sleep(5500);
+    [...got, ...fromFeeds, ...official].forEach((x) => items.push({ ...x, sym: sym.key }));
+    log(`news ${sym.key}: ${got.length} gdelt + ${fromFeeds.length} rss + ${official.length} official`);
   }
   return groupStories(items);
 }

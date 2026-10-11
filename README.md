@@ -24,7 +24,7 @@ Open http://localhost:8000 on your computer (or your phone on the same Wi-Fi, us
 1. Create a GitHub repository and push this folder to its `main` branch.
 2. Repository **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 3. **Settings → Secrets and variables → Actions → Variables**: add `SITE_URL` = your Pages address (for example `https://yourname.github.io/pulse`).
-4. The workflow in `.github/workflows/deploy.yml` publishes the app about a minute after every push (reusing the live prices and news), and every 2 hours refreshes coin candles and news, checks everyone's rules, and publishes again.
+4. The workflow in `.github/workflows/deploy.yml` publishes the app about a minute after every push (reusing the live prices and news), and every 2 hours refreshes coin candles and news, checks everyone's rules, and publishes again. `.github/workflows/settle.yml` scores prediction-game calls every 15 minutes (`pipeline/settle.mjs`, about 20 seconds a run).
 
 ### 2. Firebase (free Spark plan) — accounts with no personal data, push alerts
 1. https://console.firebase.google.com → **Add project**.

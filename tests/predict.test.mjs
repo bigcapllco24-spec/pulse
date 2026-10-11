@@ -1,7 +1,7 @@
 // Prediction game settling: start-price lock, exact-time resolution, voids, and the data job's Firestore step,
 // with simulated Kraken candles and an in-memory Firestore.
 import { settle, priceAt, intervalFor, sigmaBefore, rowCache } from "../web/js/predict.js";
-import { settlePredictions } from "../pipeline/lib/predictions.mjs";
+import { settlePredictions, settleOpen } from "../pipeline/lib/predictions.mjs";
 import { scorePrediction, typicalMove, HORIZONS } from "../web/js/score.js";
 
 const MIN = 60e3, DAY = 864e5;
@@ -47,6 +47,7 @@ const r6 = await settle({ coin: "CRYPTO:BTC", t: "BTC", horizon: "30m", target: 
 // 7. the data job against an in-memory Firestore
 const store = new Map();
 const db = {
+  async group(id) { return [...store].filter(([k]) => k.split("/").at(-2) === id).map(([k, v]) => ({ id: k.split("/").pop(), path: k, ...v })); },
   async list(coll) { const pre = coll + "/"; return [...store].filter(([k]) => k.startsWith(pre) && !k.slice(pre.length).includes("/")).map(([k, v]) => ({ id: k.slice(pre.length), path: k, ...v })); },
   async set(path, data) { store.set(path, { ...(store.get(path) || {}), ...data }); },
   async del(path) { store.delete(path); },
@@ -58,6 +59,8 @@ store.set("accounts/u2", {});
 calls.length = 0;
 const tally = await settlePredictions(db, await db.list("accounts"), { now: NOW, fetchRows: fakeRows(NOW), log: () => {} });
 const res = await db.list("accounts/u1/results"), openLeft = await db.list("accounts/u1/predictions");
+// the 15-minute run: one query finds open predictions; with nothing newly due, it only touches the open account
+const quick = await settleOpen(db, { now: NOW + 60e3, fetchRows: fakeRows(NOW), log: () => {} });
 
 const checks = [
   ["candle sizes: 1 minute for the last 12 hours, then 15 minutes, hourly, 4-hourly, daily", intervalFor(NOW - 11 * 3600e3, NOW) === 1 && intervalFor(NOW - 2 * DAY, NOW) === 15 && intervalFor(NOW - 20 * DAY, NOW) === 60 && intervalFor(NOW - 100 * DAY, NOW) === 240 && intervalFor(NOW - 300 * DAY, NOW) === 1440 && intervalFor(NOW - 800 * DAY, NOW) === null],
@@ -71,6 +74,7 @@ const checks = [
   ["nothing is scored until a minute after the target time", r6.status === "open" && r6.patch.actual === undefined],
   ["data job: the due call moves to results, the other stays open with its start price locked", res.length === 1 && res[0].status === "scored" && openLeft.length === 1 && openLeft[0].id === "BTC_1d" && near(openLeft[0].p0, priceOf(made2))],
   ["data job: the profile score is written to the account, and only for accounts with results", store.get("accounts/u1").pscore?.score > 300 && store.get("accounts/u1").pscore?.n === 1 && store.get("accounts/u1").pscore?.provisional === true && !store.get("accounts/u2").pscore],
+  ["15-minute run: finds the still-open call through one query and leaves it open, scoring nothing twice", quick.scored === 0 && quick.void === 0 && (await db.list("accounts/u1/predictions")).length === 1 && (await db.list("accounts/u1/results")).length === 1],
   ["data job: each coin and candle size is fetched once per run", new Set(calls).size === calls.length && tally.scored === 1 && tally.locked === 2],
 ];
 let ok = 0; for (const [n, pass] of checks) { if (pass) ok++; else console.log("FAIL predict: " + n); }

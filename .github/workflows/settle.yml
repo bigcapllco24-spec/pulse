@@ -1,0 +1,31 @@
+name: Score predictions
+# Every 15 minutes: score predictions that are due, so 30-minute and 1-hour calls resolve soon after their time.
+# About 20 seconds a run; it touches only accounts with an open prediction. Prices and news stay in deploy.yml.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: settle
+  cancel-in-progress: false
+
+jobs:
+  settle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            pipeline
+            web/js
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node pipeline/settle.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

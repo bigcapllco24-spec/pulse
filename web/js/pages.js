@@ -3,6 +3,7 @@ import { CONFIG } from "../config.js";
 import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
   markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList,
   enablePush, signOutDevice, deleteAccount, makePrediction, myScore } from "./store.js";
+import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { HORIZONS, BANDS, CHANCE, SCORE_MIN, SCORE_MAX, PROVISIONAL_UNDER, checkPrediction, canPredict, allowedRange, dailyVol, targetTime, closenessText } from "./score.js";
 import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
@@ -510,15 +511,33 @@ export function openPredictSheet(sym, onDone) {
   });
 }
 
+// A due prediction gets its result straight away on the phone, worked out the same way the server will
+// (same candles, same code); it shows as "Confirming" until the 15-minute scoring run makes it official.
+const previews = new Map(); // `${t}_${horizon}_${createdAt}` → settle() result, or "pending"
+const pkey = (p) => `${p.t}_${p.horizon}_${p.createdAt}`;
+const previewRows = rowCache((t, iv) => krakenRows(t, iv));
+function previewDue(open, rerender) {
+  const now = Date.now();
+  for (const p of open) {
+    const k = pkey(p);
+    if (previews.has(k) || now < Date.parse(targetTime(p.createdAt, p.horizon)) + SETTLE_DELAY) continue;
+    previews.set(k, "pending");
+    settle(p, { now, rows: previewRows }).then((r) => { previews.set(k, r); rerender(); }).catch(() => previews.delete(k));
+  }
+}
 function pPredictions(el, back) {
   const open = [...store.preds].sort((a, b) => Date.parse(targetTime(a.createdAt, a.horizon)) - Date.parse(targetTime(b.createdAt, b.horizon)));
+  previewDue(open, () => { if (el.isConnected && el.querySelector("[data-preds]")) { pPredictions(el, back); const b = el.querySelector("#pBack"); if (b) b.onclick = () => renderProfile(); } });
+  const pv = (p) => { const r = previews.get(pkey(p)); return r && r !== "pending" ? r : null; };
   const done = [...store.results].sort((a, b) => Date.parse(b.resolvedAt || 0) - Date.parse(a.resolvedAt || 0));
   const m = (x) => money(x, "CRYPTO");
   el.innerHTML = `${back}<h1>Your predictions</h1>${scoreCard(false)}
     <h2>Open${open.length ? ` · ${open.length}` : ""}</h2>
-    ${open.length ? `<div class="list">${open.map((p) => { const due = targetTime(p.createdAt, p.horizon); return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · from ${p.p0 != null ? esc(m(p.p0)) : `about ${esc(m(p.clientP0))}`}</span></span><span class="r"><b>${esc(untilText(due))}</b><span class="hint">${esc(when(due, p.horizon))}</span></span></div>`; }).join("")}</div>`
+    ${open.length ? `<div class="list" data-preds>${open.map((p) => { const due = targetTime(p.createdAt, p.horizon), r = pv(p);
+      if (r?.status === "scored") { const x = { ...p, ...r.patch }; return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · it was ${esc(m(x.actual))}</span></span><span class="r"><span class="pill ${LABEL_CLASS[x.label] || ""}">${esc(x.label)}</span><span class="hint">${esc(closenessText(x).split(" · ")[0])} · confirming</span></span></div>`; }
+      return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · from ${p.p0 != null ? esc(m(p.p0)) : `about ${esc(m(p.clientP0))}`}</span></span><span class="r"><b>${esc(previews.get(pkey(p)) === "pending" ? "Checking…" : untilText(due))}</b><span class="hint">${esc(when(due, p.horizon))}</span></span></div>`; }).join("")}</div>`
       : `<div class="empty">Nothing open. Tap <b>Predict</b> on any coin's chart.</div>`}
-    ${store.mode === "live" && open.length ? `<p class="hint">Predictions are scored within about 2 hours of their time, against the price at that exact minute.</p>` : ""}
+    ${store.mode === "live" && open.length ? `<p class="hint">When a prediction's time is up you see the result here straight away (marked “confirming”); it becomes official within about 15 minutes, against the price at that exact minute.</p>` : ""}
     <h2>Scored${done.length ? ` · ${done.length}` : ""}</h2>
     ${done.length ? `<div class="list">${done.map((p) => p.status === "scored"
       ? `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · it was ${esc(m(p.actual))}</span></span><span class="r"><span class="pill ${LABEL_CLASS[p.label] || ""}">${esc(p.label)}</span><span class="hint">${esc(closenessText(p).split(" · ")[0])}</span></span></div>`

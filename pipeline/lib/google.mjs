@@ -86,6 +86,11 @@ export function firestore(sa) {
       return call("PATCH", `${base()}/${path}?${mask}${pre}`, { fields: toFs(data).mapValue.fields });
     },
     async del(path) { return call("DELETE", `${base()}/${path}`); },
+    // Every document in all collections with this id (for example every account's "predictions"), in one query.
+    async group(collectionId) {
+      const j = await call("POST", `${base()}:runQuery`, { structuredQuery: { from: [{ collectionId, allDescendants: true }] } });
+      return (j || []).filter((x) => x.document).map((x) => docOut(x.document));
+    },
   };
 }
 
