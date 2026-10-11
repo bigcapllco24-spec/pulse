@@ -21,10 +21,29 @@ service cloud.firestore {
 
     match /accounts/{acct} {
       allow get, delete: if isOwner(acct);
-      allow create: if isOwner(acct) && !request.resource.data.keys().hasAny(['username', 'usernameChanges']);
-      allow update: if isOwner(acct) && usernameOk(acct);
+      // pscore (the prediction game's profile score) is written by the data job only
+      allow create: if isOwner(acct) && !request.resource.data.keys().hasAny(['username', 'usernameChanges', 'pscore']);
+      allow update: if isOwner(acct) && usernameOk(acct) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pscore']);
       match /alerts/{alert} {
         allow read, update, delete: if isOwner(acct);   // written by the data job only
+      }
+      // Prediction game. One open prediction per coin and period: its id is "<TICKER>_<period>", and the app can
+      // only create it, never change or cancel it. The data job locks the real start price, scores it when it is
+      // due and moves it to results. Both can be removed only once the account itself has been deleted.
+      match /predictions/{pid} {
+        allow get, list: if isOwner(acct);
+        allow create: if isOwner(acct)
+          && request.resource.data.keys().hasOnly(['coin', 't', 'horizon', 'target', 'createdAt', 'clientP0', 'clientSigma'])
+          && request.resource.data.horizon in ['30m', '1h', '1d', '1y']
+          && request.resource.data.t is string && request.resource.data.coin == 'CRYPTO:' + request.resource.data.t
+          && pid == request.resource.data.t + '_' + request.resource.data.horizon
+          && request.resource.data.target is number && request.resource.data.target > 0
+          && request.resource.data.createdAt == request.time;
+        allow delete: if isOwner(acct) && !exists(/databases/$(db)/documents/accounts/$(acct));
+      }
+      match /results/{rid} {
+        allow get, list: if isOwner(acct);
+        allow delete: if isOwner(acct) && !exists(/databases/$(db)/documents/accounts/$(acct));
       }
     }
     // Which symbols anyone follows, so the data job knows what to fetch. Holds no account information.

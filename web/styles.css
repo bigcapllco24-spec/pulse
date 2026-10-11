@@ -457,3 +457,26 @@ body.fullopen .backdrop { z-index: 80; } body.fullopen .sheet { z-index: 81; } b
 .lowers.g2 .lower .lplot { height: 44px; }
 .lowers.g2 .lower-label { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lowers.g2 .lower .ax { font-size: 9.5px; }
+/* prediction game: Predict chip, prediction sheet, score card */
+.pdbtn svg { stroke-dasharray: none; }
+.pdbtn b { margin-left: 2px; min-width: 16px; height: 16px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-size: 10.5px; display: inline-grid; place-items: center; padding: 0 4px; }
+.pnow { display: flex; justify-content: space-between; align-items: baseline; background: var(--surface2); border-radius: 14px; padding: 12px 14px; }
+.pnow span { color: var(--muted); font-size: 13px; font-weight: 600; } .pnow b { font-size: 22px; font-weight: 800; }
+.pseg { display: flex; width: 100%; margin-bottom: 0; } .pseg button { flex: 1; padding: 8px 4px; display: grid; justify-items: center; line-height: 1.2; }
+.pseg button:disabled { opacity: .45; cursor: default; } .pseg small { font-size: 10px; font-weight: 600; }
+.pscard { display: block; width: 100%; text-align: left; color: var(--text); border: 0; background: var(--surface); border-radius: 18px; padding: 14px; margin: 10px 0 2px; cursor: pointer; font: inherit; }
+div.pscard { cursor: default; margin-bottom: 4px; }
+.pscard .pst { display: flex; justify-content: space-between; align-items: center; }
+.pscard .psn { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 10px; }
+.pscard .psn b { font-size: 40px; font-weight: 800; letter-spacing: -.03em; line-height: 1.05; } .pscard .psn span { font-weight: 700; color: var(--muted); }
+.psbar { position: relative; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--down-soft) 0%, var(--surface2) 41.7%, var(--up-soft) 100%); }
+.psbar i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.psbar em { position: absolute; top: -5px; width: 6px; height: 18px; border-radius: 3px; background: var(--text); transform: translateX(-3px); box-shadow: 0 0 0 2px var(--surface); }
+.psx { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-weight: 600; margin: 5px 0 6px; }
+.pscard .hint { margin: 0; }
+.pill.cl-a { background: var(--up-soft); color: var(--up); } .pill.cl-b { background: var(--accent-soft); color: var(--accent); }
+.pill.cl-c { background: var(--warn-soft); color: var(--warn); } .pill.cl-d { background: var(--down-soft); color: var(--down); }
+.row .r .pill { display: inline-block; } .row .r .hint { display: block; font-size: 12px; }
+/* card foot: the swipe dots in the middle, Predict on the right within thumb reach */
+.cfoot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; flex: none; }
+.cfoot .dots { padding-top: 0; } .cfoot .pdbtn { justify-self: end; }

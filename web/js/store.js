@@ -2,9 +2,11 @@
 // Firestore document is accounts/{uid}, readable and writable only by that sign-in.
 // Without a Firebase config the app runs in demo mode and keeps everything in this browser.
 import { CONFIG } from "../config.js";
+import { HORIZONS, checkPrediction, canPredict, profileScore } from "./score.js";
+import { settle, rowCache } from "./predict.js";
 
 const FB = "https://www.gstatic.com/firebasejs/10.14.1/";
-const LS = { code: "pl.code", demo: "pl.demoAccount", demoAlerts: "pl.demoAlerts", demoLists: "pl.demoLists", hidden: "pl.hidden" };
+const LS = { code: "pl.code", demo: "pl.demoAccount", demoAlerts: "pl.demoAlerts", demoLists: "pl.demoLists", hidden: "pl.hidden", demoPreds: "pl.demoPreds", preds: "pl.preds" };
 const ls = {
   get(k, d = null) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
@@ -35,6 +37,7 @@ const listeners = new Set();
 export const store = {
   mode: CONFIG.firebase ? "live" : "demo",
   id: null, code: null, data: null, alerts: [], lists: new Map(),
+  preds: [], results: [], // prediction game: open predictions, and scored or voided ones
   ready: false, error: null,
   on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   emit(what) { listeners.forEach((fn) => fn(what)); },
@@ -65,11 +68,13 @@ export async function init() {
     if (!store.data) { store.data = DEFAULT_ACCOUNT(); ls.set(LS.demo, store.data); }
     store.alerts = ls.get(LS.demoAlerts, []);
     for (const l of ls.get(LS.demoLists, [])) store.lists.set(l.id, l);
+    ({ open: store.preds = [], results: store.results = [] } = ls.get(LS.demoPreds, {}));
     store.id = "demo"; store.ready = true; store.emit("all");
     return { onboarding: false };
   }
   store.data = { ...DEFAULT_ACCOUNT(), ...(ls.get(LSACC) || {}) };
   store.alerts = ls.get(LSALERTS, []);
+  ({ open: store.preds = [], results: store.results = [] } = ls.get(LS.preds, {}));
   store.ready = true;
   connecting = connect();
   return { onboarding: false };
@@ -84,7 +89,7 @@ async function connect() {
     store.data = { ...DEFAULT_ACCOUNT(), ...snap.data(), ...pending };
     if (Object.keys(pending).length) await f.setDoc(ref, pending, { merge: true }).catch(() => {});
   } else {
-    const { username, usernameChanges, ...first } = store.data; // a new account starts from what this phone has
+    const { username, usernameChanges, pscore, ...first } = store.data; // a new account starts from what this phone has
     await f.setDoc(ref, first);
     STARTER.forEach((s) => noteFollow(s));
   }
@@ -96,6 +101,11 @@ async function connect() {
   fb.unsubs.push(f.onSnapshot(f.query(f.collection(db, "accounts", id, "alerts"), f.orderBy("at", "desc"), f.limit(200)), (q) => {
     store.alerts = q.docs.map((d) => ({ id: d.id, ...d.data() })); ls.set(LSALERTS, store.alerts.slice(0, 50)); store.emit("alerts");
   }));
+  // prediction game: open predictions, and the latest scored or voided ones (the data job writes those)
+  const rows = (q) => q.docs.map((d) => { const x = d.data({ serverTimestamps: "estimate" }); if (x.createdAt?.toDate) x.createdAt = x.createdAt.toDate().toISOString(); return { id: d.id, ...x }; });
+  const keepPreds = () => { ls.set(LS.preds, { open: store.preds, results: store.results.slice(0, 100) }); store.emit("preds"); };
+  fb.unsubs.push(f.onSnapshot(f.collection(db, "accounts", id, "predictions"), (q) => { store.preds = rows(q); keepPreds(); }, () => {}));
+  fb.unsubs.push(f.onSnapshot(f.query(f.collection(db, "accounts", id, "results"), f.orderBy("resolvedAt", "desc"), f.limit(300)), (q) => { store.results = rows(q); keepPreds(); }, () => {}));
   watchLists();
   store.emit("account");
 }
@@ -224,7 +234,7 @@ export async function enablePush() {
 }
 
 export function signOutDevice() {
-  ls.del(LS.code); ls.del(LSACC); ls.del(LSALERTS);
+  ls.del(LS.code); ls.del(LSACC); ls.del(LSALERTS); ls.del(LS.preds);
   location.hash = "";
   location.reload();
 }
@@ -266,12 +276,50 @@ export async function setUsername(raw) {
   return name;
 }
 
+// ---- prediction game. One open prediction per coin and period; it can't be changed or cancelled once made.
+const PERIOD = (h) => HORIZONS[h].label.replace(/^1 /, "");
+export async function makePrediction({ sym, horizon, target, p0, sigmaD }) {
+  if (!canPredict(store.preds, sym.key, horizon)) throw new Error(`You already have an open ${PERIOD(horizon)} prediction on ${sym.t}.`);
+  const chk = checkPrediction({ horizon, p0, target, sigmaD });
+  if (!chk.ok) throw new Error(chk.error);
+  const doc = { coin: sym.key, t: sym.t, horizon, target, clientP0: p0, clientSigma: sigmaD };
+  if (store.mode === "demo") {
+    store.preds = [...store.preds, { id: `${sym.t}_${horizon}`, ...doc, createdAt: new Date().toISOString() }];
+    saveDemoPreds(); return;
+  }
+  await connected();
+  if (!store.id) throw new Error("Couldn't reach the server. Try again in a moment.");
+  try { await fb.f.setDoc(fb.f.doc(fb.db, "accounts", store.id, "predictions", `${sym.t}_${horizon}`), { ...doc, createdAt: fb.f.serverTimestamp() }); }
+  catch (e) { throw new Error(e?.code === "permission-denied" ? `You already have an open ${PERIOD(horizon)} prediction on ${sym.t}.` : "Couldn't save. Try again."); }
+}
+function saveDemoPreds() { ls.set(LS.demoPreds, { open: store.preds, results: store.results }); store.emit("preds"); }
+// Demo mode settles predictions on the phone, the same way the data job does for live accounts.
+export async function settleDemoPredictions(fetchRows) {
+  if (store.mode !== "demo" || !store.preds.length) return 0;
+  const rows = rowCache(fetchRows), keep = [], done = [];
+  for (const p of store.preds) {
+    let r; try { r = await settle(p, { rows }); } catch { keep.push(p); continue; }
+    if (r.status === "open") keep.push({ ...p, ...r.patch }); else done.push({ ...p, ...r.patch, id: `${p.id}_${Date.parse(p.createdAt)}` });
+  }
+  store.preds = keep; store.results = [...done, ...store.results];
+  saveDemoPreds();
+  return done.length;
+}
+// The profile score: written by the data job for live accounts, worked out on the phone in demo mode.
+export function myScore() {
+  if (store.mode !== "demo") return store.data?.pscore || null;
+  const ps = profileScore(store.results.filter((r) => r.status === "scored"));
+  return ps.score == null ? null : { score: ps.score, band: ps.band, provisional: ps.provisional, n: ps.n };
+}
+
 export async function deleteAccount() {
-  if (store.mode === "demo") { [LS.demo, LS.demoAlerts, LS.demoLists, LS.hidden].forEach(ls.del); location.reload(); return; }
+  if (store.mode === "demo") { [LS.demo, LS.demoAlerts, LS.demoLists, LS.hidden, LS.demoPreds].forEach(ls.del); location.reload(); return; }
   for (const l of store.data.lists || []) await leaveList(l.id);
   await clearAlerts();
   if (store.data?.username) { const b = fb.f.writeBatch(fb.db); b.delete(fb.f.doc(fb.db, "usernames", store.data.username)); b.delete(fb.f.doc(fb.db, "accounts", store.id)); await b.commit(); }
   else await fb.f.deleteDoc(fb.f.doc(fb.db, "accounts", store.id));
+  // predictions and results can be removed only once the account is gone (so results can't be picked over)
+  for (const [coll, list] of [["predictions", store.preds], ["results", store.results]]) for (const p of list) await fb.f.deleteDoc(fb.f.doc(fb.db, "accounts", store.id, coll, p.id)).catch(() => {});
   await fb.authMod.signOut(fb.auth).catch(() => {}); // the next visit starts a brand-new anonymous account
   signOutDevice();
 }

@@ -143,7 +143,26 @@ The miss costs the steady person more because it breaks a reliable record; the s
 Every number above is a constant at the top of `web/js/score.js`. If the weights change, re-run `scripts/check.sh score`:
 the calibration checks say whether `CAL` needs updating.
 
-## Not built yet
+## How it runs
 
-The prediction sheet, the profile page, Firestore storage and rules, and the data-job step that resolves predictions
-(from Kraken 1-minute candles at the exact target time) and writes scores.
+**Making a prediction** (`web/js/pages.js`, `openPredictSheet`): the Predict chip on each coin's card opens a sheet
+with the four periods, the price now, and the nearest prices that count as a real call. Periods that already have an
+open prediction for that coin are greyed out.
+
+**Settling** (`web/js/predict.js`, shared): the real start price is locked from Kraken's candles at the moment the
+prediction was made, with the coin's daily volatility from the 30 full days before. If the price moved so much before
+the lock that the call is no longer a real call, the prediction is voided and shown as "Not counted". A minute after
+the target time, the end price is taken from the candle containing that exact moment: 1-minute candles while Kraken
+still has them (12 hours), then 15-minute, hourly, 4-hourly or daily ones.
+
+**Live accounts** (`pipeline/lib/predictions.mjs`, in the data job every 2 hours): locks, scores and moves each due
+prediction from `accounts/{uid}/predictions/{TICKER}_{period}` to `accounts/{uid}/results/{id}`, then writes the
+profile score to `accounts/{uid}.pscore`. `firestore.rules` lets the app only create an open prediction (one per coin
+and period, as its id is fixed); nobody can change or cancel one, or write results or scores. A 30-minute prediction
+is therefore scored within about 2 hours, still against the price at its exact minute.
+
+**Demo mode**: the phone settles its own predictions the same way each time prices refresh, and works out the score.
+
+**Shown**: one prediction score on the Profile tab (with how many predictions it's built on, and Provisional under
+10), a list of open and scored predictions showing only how close each was, and a "How the score works" page.
+The trade score is never shown. There is no leaderboard yet.

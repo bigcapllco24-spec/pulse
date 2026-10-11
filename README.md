@@ -5,7 +5,8 @@ A phone-first web app (installable PWA). Your watchlist as a feed of charts, one
 - **Scroll** up or down for the next symbol. The feed loops: after the last one comes "You're all caught up", then round 2.
 - **Swipe right** (finger moves right) for that symbol's news, cross-checked across outlets. Only stories confirmed by two or more independent outlets show by default.
 - **Swipe left** for details: today's numbers, "Why did it move?" on unusual days, readings in plain words, ranges, your rules.
-- **Dashboard** tab: the whole list at a glance. **Profile** tab: watchlists, chart style, indicators, rules, alerts, shared lists, account, legal.
+- **Dashboard** tab: the whole list at a glance. **Profile** tab: your prediction score, watchlists, chart style, indicators, rules, alerts, shared lists, account, legal.
+- **Predict** on any card: call where the coin will be in 30 minutes, 1 hour, 1 day or 1 year. Each call shows how close it was, and they add up to one prediction score from 300 to 900. A game: no money, private, not advice.
 
 Information only: facts and plain-language explanations, never buy, sell or hold, and never forecasts.
 
@@ -76,6 +77,7 @@ web/                 the app (static files, no build step)
   js/full.js         full-screen interactive chart (drag, pinch, 1D to full history)
   js/describe.js     plain-language meaning of each reading
   js/score.js        prediction game: internal trade scores and the public 300–900 profile score (see docs/prediction-score.md)
+  js/predict.js      prediction game: locking start prices and settling predictions from Kraken candles (shared with the data job)
 pipeline/            data job run by GitHub Actions (no npm packages)
 firestore.rules      database security rules
 ```

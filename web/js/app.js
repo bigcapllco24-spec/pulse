@@ -1,7 +1,8 @@
 // Pulse: the chart feed. Scroll up or down for the next symbol; swipe for its news (finger moves right)
 // or its details (finger moves left). The feed loops through the watchlist with a "caught up" card between rounds.
 import { CONFIG } from "../config.js";
-import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists } from "./store.js";
+import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists, settleDemoPredictions } from "./store.js";
+import { krakenRows } from "./predict.js";
 import { loadSymbols, TYLABEL, findSymbol } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { describe } from "./describe.js";
@@ -13,7 +14,7 @@ import { openFull, krakenBars } from "./full.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, openIndicatorsSheet, demoRules } from "./pages.js";
+import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, openIndicatorsSheet, demoRules, openPredictSheet } from "./pages.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
 const LOWER_KEY = { RSI: "rsi14", MACD: "macdHist", VOL: "volRatio" };
@@ -245,7 +246,7 @@ function renderMain(c, it) {
       <div class="hr"><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${v.interval === "1W" ? "weekly" : "daily"} candles"><b>${esc(v.range)}</b><span>${v.interval === "1W" ? "Weekly" : "Daily"}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
       <div class="hr2"><button class="lvbtn fxchip" data-ind aria-label="Indicators: ${pk.over.length + pk.lower.length} on"><i>ƒx</i>${pk.over.length + pk.lower.length || "Add"}</button><button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div></div>
       <div class="chartbox"><button class="fxbtn" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: pk.over, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
-      ${shown.length ? `<div class="lowers${shown.length > 2 ? " g2" : ""}">${shown.map((k) => lowerChart(v.win, ov, k)).join("")}</div>` : ""}${dots}`;
+      ${shown.length ? `<div class="lowers${shown.length > 2 ? " g2" : ""}">${shown.map((k) => lowerChart(v.win, ov, k)).join("")}</div>` : ""}<div class="cfoot"><i></i>${dots}${predChip(s)}</div>`;
   } else {
     c._v = null;
     main.innerHTML = `<div class="head"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div>
@@ -566,6 +567,12 @@ function wire(c, it) {
   c.querySelector(".chartbox:not(.nodata)")?.addEventListener("click", () => { if (!justScrubbed()) chartTapHint(); });
   c.querySelector("[data-full]")?.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) { coachEvent("full"); openFull(it.sym); } });
   c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); coachEvent("tf"); openChartSheet(it.sym, () => { renderMain(c, it); wire(c, it); }); });
+  c.querySelector("[data-pred]")?.addEventListener("click", (e) => { e.stopPropagation(); openPredictSheet(it.sym, () => { renderMain(c, it); wire(c, it); }); });
+}
+// Prediction game: the Predict chip on a card, with how many predictions are open on that coin.
+function predChip(s) {
+  const n = store.preds.filter((p) => p.coin === s.key).length;
+  return `<button class="lvbtn pdbtn" data-pred aria-label="Predict ${esc(s.t)}'s price${n ? `, ${n} open` : ""}"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/></svg>Predict${n ? `<b>${n}</b>` : ""}</button>`;
 }
 
 // ---------- tabs and refresh
@@ -599,7 +606,7 @@ export async function doRefresh(manual) {
   await refresh(allSyms(), () => { if (APP.built && !manual) refill(); });
   lastRefresh = Date.now();
   setStatus();
-  if (store.mode === "demo") demoRules();
+  if (store.mode === "demo") { demoRules(); settleDemoPredictions(krakenRows).catch(() => {}); } // the data job does both for live accounts
   const keep = APP.seq[APP.active]?.sym?.key;
   if (manual || !APP.built) buildFeed({ keepKey: keep }); else refill();
   if (manual) toast("Up to date.");
@@ -656,6 +663,11 @@ export function applyTheme() {
   store.on((what) => {
     $("alertDot").hidden = !store.alerts.some((a) => !a.read);
     if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") renderDash(); }
+    if (what === "preds") APP.needsRebuild = true; // the Predict chips show open counts
+    // the profile's score card and predictions page follow new and scored predictions
+    if ((what === "preds" || what === "account") && APP.tab === "profile" && (!APP.profileSub || APP.profileSub === "predictions")) {
+      const pg = $("profile").parentElement, y = pg.scrollTop; renderProfile(APP.profileSub); pg.scrollTop = y;
+    }
   });
   $("alertDot").hidden = !store.alerts.some((a) => !a.read);
   buildFeed();

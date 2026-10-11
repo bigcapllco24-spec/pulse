@@ -2,6 +2,7 @@
 // 1. Reads which symbols anyone follows (Firestore "follows", no account data).
 // 2. Writes data/candles.json (coins, from Kraken) and data/news.json (GDELT, outlet policy, story matching).
 // 3. Checks every account's rules on the latest bar, stores alerts and sends push notifications.
+// 4. Prediction game: locks start prices, scores predictions that are due and updates profile scores.
 // Usage: node pipeline/run.mjs web/data
 // Env: FIREBASE_SERVICE_ACCOUNT (JSON; without it only starter symbols are refreshed and no alerts are sent),
 //      COINGECKO_DEMO_KEY (optional), SITE_URL (for alert links), MAX_NEWS_SYMBOLS (default 150)
@@ -10,6 +11,7 @@ import path from "node:path";
 import { serviceAccount, firestore, sendPush } from "./lib/google.mjs";
 import { fetchCrypto } from "./lib/crypto.mjs";
 import { fetchNews } from "./lib/news.mjs";
+import { settlePredictions } from "./lib/predictions.mjs";
 import { compute, ruleMet, METRICS, OPS, fmt } from "../web/js/indicators.js";
 
 const outDir = process.argv[2] || "web/data";
@@ -38,7 +40,10 @@ async function main() {
   fs.writeFileSync(path.join(outDir, "news.json"), JSON.stringify({ generatedAt: now, stories: stories.slice(0, 800) }));
   log(`wrote ${Object.keys(series).length} coins, ${stories.length} stories`);
 
-  if (db) await checkRules(sa, db, series);
+  if (db) {
+    const accounts = await checkRules(sa, db, series);
+    await settlePredictions(db, accounts, { log });
+  }
 }
 
 async function checkRules(sa, db, series) {
@@ -82,6 +87,7 @@ async function checkRules(sa, db, series) {
     if (dead.length) await db.set(`accounts/${a.id}`, { fcm: tokens.filter((t) => !dead.includes(t)) });
   }
   log(`rules: ${fired} alerts across ${accounts.length} accounts`);
+  return accounts;
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
