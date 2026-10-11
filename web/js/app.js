@@ -11,7 +11,7 @@ import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER
 import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, renderOnboarding, demoRules } from "./pages.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
-const chartSettings = () => ({ window: 50, interval: "1D", type: "candles", mas: [], lower: "none", order: "watchlist", ...(store.data?.settings?.chart || {}) });
+const chartSettings = () => ({ window: 50, interval: "1D", type: "candles", mas: [], lower: "RSI,MACD", order: "watchlist", ...(store.data?.settings?.chart || {}) });
 const LOWER_KEY = { RSI: "rsi14", MACD: "macdHist", VOL: "volRatio" };
 
 // ---------- which symbols, in which order
@@ -61,15 +61,19 @@ export function wheelGesture(onStep, threshold) {
 let fTarget = 0, anim = null;
 const feedH = () => feed.clientHeight;
 const maxIndex = () => feed.querySelectorAll(".card").length - 1;
-export function goCard(i, ms = 300) {
+// Smooth paging: after a finger swipe the card keeps the finger's speed and eases to a stop; wheel, trackpad
+// and keys use a calm fixed glide. Never faster than 340 ms, so it doesn't feel like a jump.
+export function goCard(i, { v = 0 } = {}) {
   fTarget = Math.max(0, Math.min(maxIndex(), i));
-  const from = feed.scrollTop, to = fTarget * feedH(), t0 = performance.now();
+  const from = feed.scrollTop, to = fTarget * feedH(), dist = Math.abs(to - from), t0 = performance.now();
   cancelAnimationFrame(anim?.raf || 0);
-  if (Math.abs(to - from) < 1) { feed.scrollTop = to; anim = null; return; }
+  if (dist < 1) { feed.scrollTop = to; anim = null; return; }
+  const ms = v ? Math.max(340, Math.min(620, (3 * dist) / Math.abs(v))) : 540;
+  const ease = v ? (k) => 1 - Math.pow(1 - k, 3) : (k) => 1 - Math.pow(1 - k, 4);
   anim = { raf: 0 };
   const tick = (now) => {
-    const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
-    feed.scrollTop = from + (to - from) * e;
+    const k = Math.min(1, (now - t0) / ms);
+    feed.scrollTop = from + (to - from) * ease(k);
     if (k < 1) anim.raf = requestAnimationFrame(tick); else anim = null;
   };
   anim.raf = requestAnimationFrame(tick);
@@ -102,13 +106,13 @@ const vEnd = (e) => {
   if (d.mode !== "v") return;
   const my = e.clientY - d.y, [t1, y1] = d.pts[0], vel = (e.clientY - y1) / Math.max(1, performance.now() - t1); // px per ms
   const h = feedH(), dir = my < -0.15 * h || vel < -0.3 ? 1 : my > 0.15 * h || vel > 0.3 ? -1 : 0;
-  goCard(d.base + dir, 260);
+  goCard(d.base + dir, { v: dir ? Math.max(Math.abs(vel), 0.5) : 0.5 });
   APP.dragging = false; setTimeout(flushIdle, 300);
   swallowFeedClick = true; setTimeout(() => (swallowFeedClick = false), 60);
 };
 let swallowFeedClick = false;
 feed.addEventListener("pointerup", vEnd);
-feed.addEventListener("pointercancel", (e) => { if (vd && e.pointerId === vd.id) { const d = vd; vd = null; if (d.mode === "v") { goCard(d.base, 200); APP.dragging = false; } } });
+feed.addEventListener("pointercancel", (e) => { if (vd && e.pointerId === vd.id) { const d = vd; vd = null; if (d.mode === "v") { goCard(d.base, { v: 0.6 }); APP.dragging = false; } } });
 feed.addEventListener("click", (e) => { if (swallowFeedClick) { e.preventDefault(); e.stopPropagation(); } }, true);
 addEventListener("resize", () => { if (APP.active >= 0) feed.scrollTop = APP.active * feedH(); });
 const feedWheel = wheelGesture(stepFeed, 20);
@@ -227,7 +231,7 @@ function renderMain(c, it) {
     main.innerHTML = `<div class="head"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span>
       <span class="chg ${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span></div></div>
       <div class="chartbox">${mainChart(v.win, v.ov, { type: cs.type, closeOnly: v.closeOnly, maKeys: cs.mas, interval: cs.interval })}</div>
-      ${cs.lower && cs.lower !== "none" ? lowerChart(v.win, v.ov, cs.lower) : ""}${dots}`;
+      ${String(cs.lower || "none").split(",").filter((k) => k !== "none").map((k) => lowerChart(v.win, v.ov, k)).join("")}${dots}`;
   } else {
     main.innerHTML = `<div class="head"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div>
       <div class="chartbox nodata"><p>${D.status === "refreshing" ? `Loading ${esc(s.t)} prices…` : `${esc(s.t)} prices couldn't load. Pull to refresh or tap “Updated” at the top.`}</p></div>${dots}`;
@@ -544,7 +548,9 @@ export function applyTheme() {
     const wl = watchlists().map((w) => ((w.syms || []).every((x) => OLD.has(x.key)) && w.id === "w1" ? { ...w, syms: STARTER.slice() } : { ...w, syms: (w.syms || []).filter((x) => x.m === "CRYPTO") }));
     save({ watchlists: wl, settings: { ...store.data.settings, coinsOnly: 1 } }).catch(() => {});
   }
-  if (ch && !ch.v2) save({ settings: { ...store.data.settings, chart: { ...ch, type: "candles", mas: [], lower: "none", v2: 1 } } }).catch(() => {});
+  // v4: RSI and MACD panels under every chart by default.
+  if (ch && ch.v2 && !ch.v4) save({ settings: { ...store.data.settings, chart: { ...ch, lower: "RSI,MACD", v4: 1 } } }).catch(() => {});
+  if (ch && !ch.v2) save({ settings: { ...store.data.settings, chart: { ...ch, type: "candles", mas: [], lower: "RSI,MACD", v2: 1, v4: 1 } } }).catch(() => {});
   applyTheme();
   initPages();
   store.on((what) => {

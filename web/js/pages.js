@@ -28,7 +28,8 @@ export function initPages() {
 export function openAddSheet(prefill = "") {
   const curList = store.data?.settings?.list;
   openSheet("Add coins", "", (body) => mountSearch(body, prefill),
-    () => { buildFeed({ keepKey: APP.lastAdded || APP.seq[APP.active]?.sym?.key }); APP.lastAdded = null; });
+    () => { const added = APP.lastAdded; buildFeed({ keepKey: added || APP.seq[APP.active]?.sym?.key }); APP.lastAdded = null;
+      if (added && !D.series[added]) doRefresh(false).then(() => { if (APP.tab === "dash") renderDash(); }); }); // fetch prices for a newly added coin
 
   function mountSearch(body, initial = "") {
     body.innerHTML = `<input class="input" id="addQ" type="search" placeholder="Company, ticker, ETF or coin" autocomplete="off" spellcheck="false" value="${esc(initial)}" aria-label="Search">
@@ -136,37 +137,54 @@ export function openSwitcher() {
     body.querySelectorAll("[data-l]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, list: b.dataset.l } }); closeSheet(); }));
     body.querySelectorAll("[data-o]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, chart: { ...chartSettings(), order: b.dataset.o } } }); closeSheet(); }));
     body.querySelector("#nwl").onclick = async () => { const n = prompt("Name the watchlist", "Semiconductors"); if (n) { const id = await newWatchlist(n); await save({ settings: { ...store.data.settings, list: id } }); closeSheet(); openAddSheet(); } };
-    body.querySelector("#mwl").onclick = () => { closeSheet(); showTab("profile", "watchlists"); };
+    body.querySelector("#mwl").onclick = () => { closeSheet(); showTab("dash"); };
   }, () => buildFeed());
 }
 
-// ---------- dashboard
+// ---------- dashboard: your watchlists live here. Picking one also sets what the feed shows.
 export function renderDash() {
-  const el = $("dash"), cs = chartSettings(), syms = currentSyms();
+  const el = $("dash"), cs = chartSettings(), syms = currentSyms(), wl = watchlists();
+  const cur = store.data?.settings?.list || "all", w = wl.find((x) => x.id === cur), editing = APP.dashEdit && w;
   const withData = syms.map((s) => ({ s, v: view(s.key, cs) })).filter((x) => x.v);
   const noData = syms.filter((s) => !view(s.key, cs));
   const sort = APP.dashSort || "move";
-  withData.sort((a, b) => sort === "az" ? a.s.t.localeCompare(b.s.t) : sort === "rsi" ? (a.v.now.rsi14 ?? 999) - (b.v.now.rsi14 ?? 999) : Math.abs(b.v.daily.now.changePct) - Math.abs(a.v.daily.now.changePct));
+  if (!editing) withData.sort((a, b) => sort === "az" ? a.s.t.localeCompare(b.s.t) : sort === "rsi" ? (a.v.now.rsi14 ?? 999) - (b.v.now.rsi14 ?? 999) : Math.abs(b.v.daily.now.changePct) - Math.abs(a.v.daily.now.changePct));
   const ups = withData.filter((x) => x.v.daily.now.changePct > 0).length;
   const today = new Date().toISOString().slice(0, 10), keys = new Set(syms.map((s) => s.key));
   const newsToday = (D.news.stories || []).filter((st) => st.date === today && st.syms.some((k) => keys.has(k))).length;
   const rulesToday = store.alerts.filter((a) => (a.at || "").slice(0, 10) === today).length;
+  const chip = (id, name, n) => `<button class="wchip" data-l="${esc(id)}" aria-pressed="${id === cur}">${esc(name)} <span>${n}</span></button>`;
+  const row = ({ s, v }, i) => { const c = v.daily.now.changePct;
+    return editing ? `<div class="row"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">${esc(s.n)}</span></span>
+      <button class="btn ghost sm" data-up="${esc(s.key)}" ${i === 0 ? "disabled" : ""} aria-label="Move ${esc(s.t)} up">↑</button><button class="btn ghost sm" data-dn="${esc(s.key)}" ${i === withData.length - 1 ? "disabled" : ""} aria-label="Move ${esc(s.t)} down">↓</button><button class="btn ghost sm" data-rm="${esc(s.key)}" aria-label="Remove ${esc(s.t)}">✕</button></div>`
+    : `<button class="row" data-open="${esc(s.key)}"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">RSI ${fmt(v.now.rsi14, 1)} · ${storiesFor(s.key).length} stories</span></span>${sparkline(v.win.map((b) => b.c))}<span class="r"><b>${esc(money(v.lastBar.c, s.m))}</b><span class="${c >= 0 ? "up" : "down"}">${arrow(c)} ${pct(c)}</span></span></button>`; };
   el.innerHTML = `<h1>Dashboard</h1>
-    <button class="switcher" id="dSwitch" style="margin-bottom:14px"><span>${esc(listName())}</span><svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-    <div class="summary"><div><b>${ups}<span class="hint" style="font-size:14px">/${withData.length}</span></b><span>coins up today</span></div><div><b>${newsToday}</b><span>stories today</span></div><div><b>${rulesToday}</b><span>rules met today</span></div></div>
-    ${withData.length ? `<div class="opts" style="margin-bottom:10px">${[["move", "Biggest move"], ["rsi", "Lowest RSI"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-s="${k}" aria-pressed="${sort === k}">${l}</button>`).join("")}</div>
-    <div class="list">${withData.map(({ s, v }) => { const c = v.daily.now.changePct; return `<button class="row" data-open="${esc(s.key)}"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">RSI ${fmt(v.now.rsi14, 1)} · ${storiesFor(s.key).length} stories</span></span>${sparkline(v.win.map((b) => b.c))}<span class="r"><b>${esc(money(v.lastBar.c, s.m))}</b><span class="${c >= 0 ? "up" : "down"}">${arrow(c)} ${pct(c)}</span></span></button>`; }).join("")}</div>` : ""}
+    <div class="wchips" role="tablist" aria-label="Watchlists">${chip("all", "All", allSyms().length)}${wl.map((x) => chip(x.id, x.name, (x.syms || []).filter((s) => s.m === "CRYPTO").length)).join("")}<button class="wchip add" id="dNew">+ New</button></div>
+    <div class="wbar"><b>${esc(w ? w.name : "All my coins")}</b><span>${w ? `${editing ? `<button class="btn ghost sm" id="dRen">Rename</button><button class="btn ghost sm danger" id="dDel">Delete</button><button class="btn sm" id="dDone">Done</button>` : `<button class="btn ghost sm" id="dEdit">Edit</button>`}` : ""}<button class="btn sm" id="dAdd">+ Add coins</button></span></div>
+    ${editing ? "" : `<div class="summary"><div><b>${ups}<span class="hint" style="font-size:14px">/${withData.length}</span></b><span>coins up today</span></div><div><b>${newsToday}</b><span>stories today</span></div><div><b>${rulesToday}</b><span>rules met today</span></div></div>`}
+    ${withData.length ? `${editing ? `<p class="hint">Reorder or remove coins in “${esc(w.name)}”. The feed follows this order.</p>` : `<div class="opts" style="margin-bottom:10px">${[["move", "Biggest move"], ["rsi", "Lowest RSI"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-s="${k}" aria-pressed="${sort === k}">${l}</button>`).join("")}</div>`}
+    <div class="list">${withData.map(row).join("")}</div>` : ""}
     ${noData.length ? `<p class="hint">Waiting for prices: ${noData.map((s) => esc(s.t)).join(", ")}.</p>` : ""}
-    ${!syms.length ? `<div class="empty">Nothing in this watchlist yet.<br><br><button class="btn primary" id="dAdd">Add coins</button></div>` : ""}
+    ${!syms.length ? `<div class="empty">Nothing in this watchlist yet.</div>` : ""}
+    <p class="hint" style="margin-top:12px">Choosing a watchlist here also sets what your feed shows.</p>
     <p class="disclaimer">${esc(DISCLAIMER)}</p>`;
-  el.querySelector("#dSwitch").onclick = () => openSwitcher();
-  el.querySelector("#dAdd")?.addEventListener("click", () => openAddSheet());
+  const pick = async (id) => { APP.dashEdit = false; await save({ settings: { ...store.data.settings, list: id } }); APP.needsRebuild = true; renderDash(); };
+  el.querySelectorAll("[data-l]").forEach((b) => (b.onclick = () => pick(b.dataset.l)));
+  el.querySelector("#dNew").onclick = async () => { const n = prompt("Name the watchlist", "Layer 1 coins"); if (n) { const id = await newWatchlist(n); await pick(id); openAddSheet(); } };
+  el.querySelector("#dAdd").onclick = () => openAddSheet();
+  el.querySelector("#dEdit")?.addEventListener("click", () => { APP.dashEdit = true; renderDash(); });
+  el.querySelector("#dDone")?.addEventListener("click", () => { APP.dashEdit = false; APP.needsRebuild = true; renderDash(); });
+  el.querySelector("#dRen")?.addEventListener("click", async () => { const n = prompt("Rename", w.name); if (n) { await renameWatchlist(w.id, n); renderDash(); } });
+  el.querySelector("#dDel")?.addEventListener("click", async () => { if (confirm(`Delete “${w.name}”? Its coins stay in your other watchlists.`)) { await deleteWatchlist(w.id); await pick("all"); } });
+  el.querySelectorAll("[data-up]").forEach((b) => (b.onclick = async () => { await moveInWatchlist(w.id, b.dataset.up, -1); renderDash(); }));
+  el.querySelectorAll("[data-dn]").forEach((b) => (b.onclick = async () => { await moveInWatchlist(w.id, b.dataset.dn, 1); renderDash(); }));
+  el.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => { await save({ watchlists: watchlists().map((x) => (x.id === w.id ? { ...x, syms: x.syms.filter((s) => s.key !== b.dataset.rm) } : x)) }); APP.needsRebuild = true; renderDash(); }));
   el.querySelectorAll("[data-s]").forEach((b) => (b.onclick = () => { APP.dashSort = b.dataset.s; renderDash(); }));
   el.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { showTab("feed"); buildFeed({ keepKey: b.dataset.open }); }));
 }
 
 // ---------- profile
-const MENU = [["watchlists", "Watchlists", "Create, rename, reorder"], ["chart", "Chart style", "Window, candles, averages, lower panel"], ["indicators", "Indicators", "What the readings show"],
+const MENU = [["chart", "Chart style", "Window, candles, averages, RSI and MACD"], ["indicators", "Indicators", "What the readings show"],
   ["rules", "Rules", "Get alerted when your levels are hit"], ["alerts", "Alerts", ""], ["lists", "Shared lists", "Track a list with friends"],
   ["account", "Account", "Recovery code, devices, delete"], ["appearance", "Appearance", "Dark or light"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]];
 export function renderProfile(sub, arg) {
@@ -212,7 +230,7 @@ function pChart(el, back) {
     <h2>Candle size</h2>${opt("interval", [["1D", "Daily"], ["1W", "Weekly"]])}
     <h2>Chart type</h2>${opt("type", [["candles", "Candles"], ["line", "Line"], ["area", "Area"]])}
     <h2>Moving averages</h2><div class="opts">${[["sma20", "SMA 20"], ["sma50", "SMA 50"], ["sma200", "SMA 200"], ["ema20", "EMA 20"], ["ema50", "EMA 50"]].map(([v, l]) => `<button class="opt" data-ma="${v}" aria-pressed="${(c.mas || []).includes(v)}">${l}</button>`).join("")}</div><p class="hint">Up to 3.</p>
-    <h2>Panel under the chart</h2>${opt("lower", [["RSI", "RSI 14"], ["MACD", "MACD"], ["VOL", "Volume"], ["none", "None"]])}`;
+    <h2>Panels under the chart</h2>${opt("lower", [["RSI,MACD", "RSI + MACD"], ["RSI", "RSI 14"], ["MACD", "MACD"], ["VOL", "Volume"], ["none", "None"]])}`;
   const set = async (patch) => { await save({ settings: { ...store.data.settings, chart: { ...c, ...patch } } }); pChart(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
   el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => set({ [b.dataset.k]: /^\d+$/.test(b.dataset.v) ? +b.dataset.v : b.dataset.v })));
   el.querySelectorAll("[data-ma]").forEach((b) => (b.onclick = () => {

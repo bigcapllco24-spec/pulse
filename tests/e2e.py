@@ -67,6 +67,11 @@ def phone_tests(b):
     start = active(p)[2]
     swipe(200, 620, 200, 200, settle=120); swipe(200, 620, 200, 200, settle=120); swipe(200, 620, 200, 200, settle=1000)
     check("phone: three quick swipes in a row move three cards", active(p)[2] == start + 3, f"{start} -> {active(p)}")
+    # the card glides into place (at least ~0.3 s) instead of jumping
+    g0 = p.evaluate("document.getElementById('feed').scrollTop/document.getElementById('feed').clientHeight")
+    swipe(200, 620, 200, 200, settle=120); mid = p.evaluate("document.getElementById('feed').scrollTop/document.getElementById('feed').clientHeight"); p.wait_for_timeout(900)
+    end = p.evaluate("document.getElementById('feed').scrollTop/document.getElementById('feed').clientHeight")
+    check("phone: cards glide into place rather than jump", round(end) == round(g0) + 1 and abs(mid - end) > 0.03, f"start={g0:.2f} at120ms={mid:.2f} end={end:.2f}")
     # nothing on the page is rewritten while a swipe is moving it (that is what makes phones drop the next swipe)
     p.evaluate("""(()=>{const i=+document.querySelector('.card.active').dataset.i, c=document.querySelectorAll('.card')[i+3]; c.innerHTML=''; delete c.dataset.filled})()""")
     p.evaluate("""window.__mut=0; window.__mo=new MutationObserver(m=>{window.__mut+=m.length}); window.__mo.observe(document.getElementById('feed'),{childList:true,subtree:true})""")
@@ -103,13 +108,13 @@ def phone_tests(b):
         p.wait_for_timeout(1300)
         info = p.evaluate("""(()=>{const c=document.querySelector('.card.active'); const svg=c.querySelector('.chartbox svg.chart');
           return {svg: !!svg, rects: svg? svg.querySelectorAll('rect').length:0, last: c.querySelector('.axlast')?.textContent||'', price: c.querySelector('.price')?.textContent||'',
-          lower: !!c.querySelector('.lower svg'), frames: document.querySelectorAll('iframe').length}})()""")
+          lower: c.querySelectorAll('.lower svg').length, lowerText: [...c.querySelectorAll('.lower-label')].map(x=>x.textContent).join(' | '), frames: document.querySelectorAll('iframe').length}})()""")
         if name in COINS:
-            ok = info["svg"] and info["rects"] >= 40 and info["last"] and info["price"] and not info["lower"]
+            ok = info["svg"] and info["rects"] >= 40 and info["last"] and info["price"] and info["lower"] == 2 and "RSI" in info["lowerText"] and "MACD" in info["lowerText"]
             chart_ok &= bool(ok)
             if not ok: chart_detail.append(f"{name}:{info}")
         stock_ok &= info["frames"] == 0
-    check("phone: coin cards draw candlesticks, price and last-price label, no lower panel by default", chart_ok, "; ".join(chart_detail))
+    check("phone: coin cards draw candlesticks, price, last-price label, and RSI and MACD panels", chart_ok, "; ".join(chart_detail))
     check("phone: all 10 coins draw our own candles, nothing loads from TradingView", chart_ok and stock_ok, "; ".join(chart_detail))
 
     # the card shows only the name, the price and today's move above the chart
@@ -117,7 +122,7 @@ def phone_tests(b):
     card = p.evaluate("""(()=>{const c=document.querySelector('.card.active [data-pane=main]');
       return {extra: ['.edges','[data-go]','.tags','.chips','.save','.next','.nm','.badge','.winlabel','.pinh'].filter(q=>c.querySelector(q)),
         head: c.querySelector('.head').innerText.replace(/\\s+/g,' '), chartH: c.querySelector('.chartbox').getBoundingClientRect().height}})()""")
-    check("phone: card is just name, price, today's move and the chart", not card["extra"] and "BTC" in card["head"] and "%" in card["head"] and card["chartH"] > 400, str(card))
+    check("phone: card is just name, price, today's move and the chart", not card["extra"] and "BTC" in card["head"] and "%" in card["head"] and card["chartH"] > 250, str(card))
     left(); dv = active(p)[1]; right(); right(); nv = active(p)[1]; left()
     check("phone: details and news open by swiping alone", dv == "details" and nv == "news", f"{dv} {nv}")
 
@@ -160,10 +165,26 @@ def phone_tests(b):
     p.locator("#dash [data-open='CRYPTO:XRP']").click(); p.wait_for_timeout(1300)
     check("phone: tapping a dashboard row opens that card in the feed", active(p)[0] == "XRP", str(active(p)))
 
+    # watchlists live on the dashboard: chips switch lists (and the feed), Edit removes a coin
+    p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(500)
+    chips = p.locator("#dash .wchip[data-l]").all_inner_texts()
+    check("phone: dashboard shows watchlist chips (All, My watchlist, Altcoins)", len(chips) >= 3 and any("Altcoins" in c for c in chips), " | ".join(chips))
+    p.locator("#dash .wchip", has_text="Altcoins").click(); p.wait_for_timeout(500)
+    n_alt = p.locator("#dash .list [data-open]").count()
+    p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(1200)
+    check("phone: picking a watchlist on the dashboard filters it and the feed", n_alt == 1 and p.inner_text("#switchName") == "Altcoins", f"rows={n_alt} feed={p.inner_text('#switchName')}")
+    p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(500)
+    p.locator("#dash .wchip", has_text="My watchlist").click(); p.wait_for_timeout(400)
+    before = p.locator("#dash .list [data-open]").count()
+    p.click("#dEdit"); p.wait_for_timeout(300); p.locator("#dash [data-rm]").first.click(); p.wait_for_timeout(300); p.click("#dDone"); p.wait_for_timeout(400)
+    after = p.locator("#dash .list [data-open]").count()
+    check("phone: Edit on the dashboard removes a coin from the watchlist", after == before - 1, f"{before} -> {after}")
+    p.locator("#dash .wchip", has_text="All").first.click(); p.wait_for_timeout(400)
+
     # profile pages
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
     pages_ok, bad = True, []
-    for sub in ["watchlists", "chart", "indicators", "rules", "alerts", "lists", "account", "appearance", "legal"]:
+    for sub in ["chart", "indicators", "rules", "alerts", "lists", "account", "appearance", "legal"]:
         p.click(f"[data-p={sub}]"); p.wait_for_timeout(350)
         h = p.inner_text("#profile h1")
         if not h: pages_ok = False; bad.append(sub)
