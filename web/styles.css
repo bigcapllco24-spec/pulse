@@ -410,3 +410,12 @@ body.fullopen .tabbar, body.fullopen .topbar { visibility: hidden; }
 .pev.up { border-color: var(--up); } .pev.down { border-color: var(--down); }
 .pev .pd { font-size: 11.5px; color: var(--muted); } .pev p { margin: 2px 0 0; font-size: 13.5px; line-height: 1.4; }
 .mnews { margin: 4px 0 8px; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; } .mnews a { color: var(--text); }
+/* full-screen panels: taller, gridded, labelled */
+.full .lower.lfull .lplot { height: 76px; }
+.chart .band { fill: var(--accent-soft); opacity: .55; }
+.chart .grid.mid { stroke-dasharray: 2 3; }
+.lower-label i { font-style: normal; font-weight: 500; margin-left: 6px; color: var(--muted); }
+.lower-label em { display: inline-block; width: 10px; height: 2px; vertical-align: middle; margin: 0 4px 0 6px; }
+.lower-label .kmacd { background: var(--accent); } .lower-label .ksig { background: var(--ma1); }
+.chartbox .ax.gl { opacity: .7; font-weight: 500; }
+@media (orientation: landscape) and (max-height: 500px) { .full .lower.lfull .lplot { height: 44px; } }

@@ -14,14 +14,14 @@ const HOLD_MS = 280, SLOP = 8;
 
 let hold = null, scrub = null, chip = null;
 
-export function initInteract(feed) {
+export function initInteract(feed, { holdMs = HOLD_MS } = {}) {
   feed.addEventListener("contextmenu", (e) => { if (e.target.closest(".pane.main")) e.preventDefault(); });
   feed.addEventListener("pointerdown", (e) => {
     clearChip(e.target);
     const box = e.target.closest(".pane.main .chartbox:not(.nodata), .pane.main .lower");
     if (!box || e.target.closest(".alertchip") || (e.pointerType === "mouse" && e.button !== 0)) return;
     const c = box.closest(".card");
-    hold = { id: e.pointerId, x: e.clientX, y: e.clientY, c, timer: setTimeout(() => start(feed, e.pointerId), HOLD_MS) };
+    hold = { id: e.pointerId, x: e.clientX, y: e.clientY, c, timer: setTimeout(() => start(feed, e.pointerId), holdMs) };
   });
   feed.addEventListener("pointermove", (e) => {
     if (scrub && e.pointerId === scrub.id) { move(e.clientX, e.clientY); return; }
@@ -48,7 +48,7 @@ function start(feed, id) {
   const head = { tk: q(".tk"), price: q(".price"), chg: q(".chg") };
   if (!head.price || !head.chg) return;
   scrub = { id, c, v, main, box, svg, head, saved: { price: head.price.textContent, chg: head.chg.outerHTML },
-    lo: +svg.dataset.lo, hi: +svg.dataset.hi, level: null };
+    lo: +svg.dataset.lo, hi: +svg.dataset.hi, step: +svg.dataset.step || 0, shift: +svg.dataset.shift || 0, level: null };
   APP.scrub = true;
   // Readout card floats inside the chart, so the name, price and chart never move or resize while holding.
   box.insertAdjacentHTML("beforeend", `<div class="xh"></div><div class="yh"><span></span></div><div class="scrubcard" aria-live="polite"></div>`);
@@ -61,9 +61,10 @@ function start(feed, id) {
 
 function move(cx, cy) {
   const s = scrub, r = s.box.getBoundingClientRect(), n = s.v.win.length;
-  const x = ((cx - r.left) / r.width) * W, step = (W - PR) / n;
-  const i = Math.max(0, Math.min(n - 1, Math.floor(x / step)));
-  const xPct = (((i + 0.5) * step) / W) * 100;
+  // the full-screen chart can start part-way through a candle (smooth dragging), so use its own step and offset
+  const x = ((cx - r.left) / r.width) * W, step = s.step || (W - PR) / n, sh = s.shift || 0;
+  const i = Math.max(0, Math.min(n - 1, Math.floor(x / step + sh)));
+  const xPct = (((i - sh + 0.5) * step) / W) * 100;
   s.main.querySelectorAll(".xh").forEach((el) => (el.style.left = xPct + "%"));
   // the horizontal line follows the finger and reads out a price level (used for the alert)
   const y = Math.max(PT, Math.min(H - PB, ((cy - r.top) / r.height) * H));

@@ -38,12 +38,21 @@ def kraken_route(route):
         rows.append([t0 + k * step, f"{o:.6f}", f"{h:.6f}", f"{l:.6f}", f"{c:.6f}", f"{c:.6f}", f"{rnd.uniform(1e3, 1e6):.2f}", 100]); price = c
     route.fulfill(status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"}, body=_json.dumps({"error": [], "result": {pair: rows, "last": rows[-1][0]}}))
 
+def binance_route(route):
+    u = route.request.url; start = int(_re.search(r"startTime=(\d+)", u).group(1)); end_ms = 1791504000000 - 729 * 86400000
+    rnd = _random.Random(u); price = 30.0; rows = []
+    t = start
+    while t < end_ms and len(rows) < 1000:
+        o = price; c = o * (1 + rnd.gauss(0, 0.03)); h = max(o, c) * 1.01; l = min(o, c) * 0.99
+        rows.append([t, f"{o:.6f}", f"{h:.6f}", f"{l:.6f}", f"{c:.6f}", f"{rnd.uniform(1e3, 1e6):.2f}", t + 86399999]); price = c; t += 86400000
+    route.fulfill(status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"}, body=_json.dumps(rows))
+
 def active(p):
     return p.evaluate("(()=>{const c=document.querySelector('.card.active');return c?[c.getAttribute('aria-label'),c.dataset.view||'main',+c.dataset.i]:[null,null,-1]})()")
 
 def phone_tests(b):
     ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
-    ctx.route("https://api.kraken.com/**", kraken_route); demo_mode(ctx)
+    ctx.route("https://api.kraken.com/**", kraken_route); ctx.route("https://data-api.binance.vision/**", binance_route); demo_mode(ctx)
     ctx.add_init_script(NOCOACH)  # the guided tour has its own test
     p = ctx.new_page(); errs = []
     p.on("pageerror", lambda e: errs.append(str(e)))
@@ -290,12 +299,19 @@ def phone_tests(b):
     p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
     p.click(".card.active [data-full]"); p.wait_for_timeout(800)
     fs = p.evaluate("(()=>{const f=document.getElementById('full'); return {open: !!f && !f.hidden, range: f?.querySelector('[data-fr][aria-pressed=true]')?.textContent, rects: f?.querySelectorAll('.chartbox svg rect').length||0, tk: f?.querySelector('.tk')?.textContent}})()")
-    p.click("#full [data-fr='5Y']"); p.wait_for_timeout(1500)
+    p.click("#full [data-fr='Max']"); p.wait_for_timeout(1500)
     f5 = p.evaluate("(()=>{const f=document.getElementById('full'); return {range: f.querySelector('[data-fr][aria-pressed=true]').textContent, note: f.querySelector('.fnote')?.textContent||'', rects: f.querySelectorAll('.chartbox svg rect').length}})()")
-    check("phone: expand opens a full-screen chart of that coin over a longer range (3M feed → 1Y), and 5Y loads weekly history",
-          fs["open"] and fs["tk"] == "BTC" and fs["range"] == "1Y" and fs["rects"] > 20 and f5["range"] == "5Y" and "Weekly" in f5["note"] and f5["rects"] > 100, f"{fs} {f5}")
+    check("phone: expand opens a full-screen chart of that coin over a longer range (3M feed → 6M), and Max loads weekly history",
+          fs["open"] and fs["tk"] == "BTC" and fs["range"] == "6M" and fs["rects"] > 20 and f5["range"] == "Max" and "Weekly" in f5["note"] and f5["rects"] > 100, f"{fs} {f5}")
+    # 4Y: daily candles reach back about 4 years (older ones joined on from Binance), and RSI/MACD panels get a grid
+    p.click("#full [data-fr='4Y']"); p.wait_for_timeout(1800)
+    f4 = p.evaluate("(()=>{const f=document.getElementById('full'); return {note: f.querySelector('.fnote').textContent, grid: f.querySelectorAll('.flowers .lfull .grid').length, axes: f.querySelectorAll('.flowers .lfull .ax').length}})()")
+    yr = _re.search(r"(20\d\d)", f4["note"])
+    check("phone: full-screen 4Y shows about 4 years of daily candles, with gridded, labelled RSI/MACD panels",
+          "Daily" in f4["note"] and yr and int(yr.group(1)) <= 2023 and f4["grid"] >= 6 and f4["axes"] >= 3, str(f4))
+    p.click("#full [data-fr='6M']"); p.wait_for_timeout(600)
     fb = p.evaluate("(()=>{const r=document.querySelector('#full .chartbox').getBoundingClientRect();return [r.left+r.width/2, r.top+r.height/2]})()")
-    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": fb[0], "y": fb[1]}]}); p.wait_for_timeout(450)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": fb[0], "y": fb[1]}]}); p.wait_for_timeout(650)
     cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": fb[0] - 50, "y": fb[1]}]}); p.wait_for_timeout(150)
     fcard = p.evaluate("document.querySelector('#full .scrubcard')?.innerText||''")
     cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(300)
@@ -304,13 +320,24 @@ def phone_tests(b):
     FIRST = "document.querySelector('#full .fnote').textContent.split('·')[1]"
     n0 = p.evaluate(COUNT); first0 = p.evaluate(FIRST)
     p.mouse.move(fb[0], fb[1]); p.mouse.wheel(0, 300); p.wait_for_timeout(300); n1 = p.evaluate(COUNT)
-    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": fb[0], "y": fb[1]}]})
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": fb[0], "y": fb[1]}]}); p.wait_for_timeout(300)
     for k in range(1, 9): cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": fb[0] + 20 * k, "y": fb[1]}]}); time.sleep(0.02)
     cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(300); first1 = p.evaluate(FIRST)
     for _ in range(2):
         cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": fb[0], "y": fb[1]}]}); cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(120)
     p.wait_for_timeout(300); n2 = p.evaluate(COUNT)
-    check("phone: full-screen chart zooms (wheel), pans (drag) and resets (double-tap)", n1 > n0 and first1 != first0 and n2 == n0, f"candles {n0}->{n1}->{n2} first {first0}->{first1}")
+    check("phone: full-screen chart zooms (wheel), pans (a slow drag too) and resets (double-tap)", n1 > n0 and first1 != first0 and n2 == n0, f"candles {n0}->{n1}->{n2} first {first0}->{first1}")
+    # zoomed in, dragging right moves back in time
+    p.mouse.move(fb[0], fb[1]); p.mouse.wheel(0, -600); p.wait_for_timeout(300)
+    FD = "document.querySelector('#full .fnote').textContent.split('·')[1].split('–')[0]"
+    d0 = p.evaluate(FD)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": fb[0] - 100, "y": fb[1]}]})
+    for k in range(1, 11): cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": fb[0] - 100 + 20 * k, "y": fb[1]}]}); time.sleep(0.016)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(900)
+    d1 = p.evaluate(FD)
+    import datetime as _dt
+    pd = lambda t: _dt.datetime.strptime(t.strip(), "%d %b %Y")
+    check("phone: zoomed in, dragging right goes back in time", pd(d1) < pd(d0), f"{d0} -> {d1}")
     p.click("#full [data-fr='1D']"); p.wait_for_timeout(1200); d1 = p.evaluate("document.querySelector('#full .fnote').textContent")
     p.click("#full [data-fr='1W']"); p.wait_for_timeout(1200); w1 = p.evaluate("document.querySelector('#full .fnote').textContent")
     ax1 = p.locator("#full .xaxis span").all_inner_texts()
@@ -416,7 +443,7 @@ NOCOACH = "localStorage.getItem('pl.coach')||localStorage.setItem('pl.coach', JS
 def tour_test(b):
     # A brand-new user: the feed teaches itself step by step, each step finishing when the gesture is done.
     ctx = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
-    ctx.route("https://api.kraken.com/**", kraken_route); demo_mode(ctx)
+    ctx.route("https://api.kraken.com/**", kraken_route); ctx.route("https://data-api.binance.vision/**", binance_route); demo_mode(ctx)
     p = ctx.new_page(); p.goto(BASE); p.wait_for_timeout(2500); cdp = ctx.new_cdp_session(p)
     def swipe(x0, y0, x1, y1, settle=1100):
         cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x0, "y": y0}]})
@@ -453,7 +480,7 @@ def ios_homescreen_test(b):
     ctx = b.new_context(viewport={"width": 390, "height": 788}, is_mobile=True, has_touch=True,
                         user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148")
     ctx.add_init_script("Object.defineProperty(navigator,'standalone',{get:()=>true}); Object.defineProperty(screen,'height',{get:()=>844}); Object.defineProperty(screen,'width',{get:()=>390});")
-    ctx.route("https://api.kraken.com/**", kraken_route); demo_mode(ctx)
+    ctx.route("https://api.kraken.com/**", kraken_route); ctx.route("https://data-api.binance.vision/**", binance_route); demo_mode(ctx)
     p = ctx.new_page(); p.goto(BASE); p.wait_for_timeout(1500)
     r = p.evaluate("(()=>{const t=document.querySelector('.tabbar').getBoundingClientRect(), f=document.getElementById('feed'); return [t.bottom, f.clientHeight, getComputedStyle(document.documentElement).getPropertyValue('--gapb').trim()]})()")
     check("iOS Home Screen: tab bar and feed reach the real bottom of the screen (no empty strip)", abs(r[0] - 844) < 1 and r[1] == 844, str(r))
