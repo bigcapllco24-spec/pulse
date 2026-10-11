@@ -2,7 +2,7 @@
 import { CONFIG } from "../config.js";
 import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
   markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList,
-  getShared, callAI, enablePush, signOutDevice, deleteAccount } from "./store.js";
+  enablePush, signOutDevice, deleteAccount } from "./store.js";
 import { loadSymbols, searchSymbols, searchIndicators, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
@@ -41,20 +41,9 @@ export function openAddSheet(prefill = "") {
       body.querySelector("#addRes").innerHTML = !text ? `<p class="hint">Search coins by name or symbol, like “bitcoin”, “eth” or “sol”.</p>${starterHtml()}` :
         (rows.map((r, i) => `<button class="result ${inAny.has(r.key) ? "in" : ""}" data-i="${i}"><span class="t">${esc(r.t)}</span><span class="n">${esc(r.n)}</span><span class="x">${inAny.has(r.key) ? "Added" : esc(MKLABEL[r.m] + " · " + TYLABEL[r.ty])}</span></button>`).join("") ||
           `<p class="hint">No listing matches “${esc(text)}”.</p>`) + extra +
-        (text.length >= 3 && !extra ? `<button class="btn ghost sm" id="askAI" style="margin-top:8px">Not it? Ask AI what “${esc(text)}” means</button>` : "");
+        "";
       body.querySelectorAll("[data-i]").forEach((b) => (b.onclick = () => chooseLists(rows[+b.dataset.i], () => mountSearch(body))));
-      body.querySelector("#askAI")?.addEventListener("click", () => askAI(q.value.trim()));
       body.querySelectorAll("[data-starter]").forEach((b) => (b.onclick = () => addStarter(b.dataset.starter)));
-    };
-    const askAI = async (text) => {
-      draw(`<p class="hint">Asking AI what “${esc(text)}” refers to…</p>`);
-      try {
-        const out = await callAI("/resolve", { q: text });
-        const idx = symbolIndex() || [];
-        rows = (out.matches || []).map((m) => { const t = String(m.ticker || "").toUpperCase(), mk = String(m.market || "").toUpperCase();
-          return idx.find((x) => x.t === t && (mk === "US" ? ["NASDAQ", "NYSE", "ARCA"].includes(x.m) : mk === "NSE" ? ["NSE", "INDEX"].includes(x.m) : x.m === "CRYPTO")); }).filter(Boolean);
-        draw(rows.length ? `<p class="hint">AI suggestions. Check the name before adding.</p>` : `<p class="hint">No listing found. Try the company's full name.</p>`);
-      } catch (e) { draw(`<p class="hint">${esc(e.message)}</p>`); }
     };
     let t;
     q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(async () => { await loadSymbols().catch(() => {}); rows = searchSymbols(q.value, 8); draw(); }, 60); });
@@ -338,7 +327,7 @@ function pIndicators(el, back) {
       <label class="switch"><input type="checkbox" data-act="${esc(i.id)}" ${active.has(i.id) ? "checked" : ""} aria-label="Show ${esc(i.name)}"><span></span></label></div>`).join("")}</div>
     <h2>Add an indicator</h2><input class="input" id="indQ" value="${esc(term)}" placeholder="e.g. stochastic, vwap, ichimoku" autocomplete="off">
     <div style="margin-top:8px">${term ? (found.length ? `<div class="list">${found.map((i) => `<div class="row"><span class="main"><span class="t">${esc(i.name)}</span><span class="s">${esc(i.category)}</span></span><button class="btn sm primary" data-add="${esc(i.id)}">Add</button></div>`).join("")}</div>` : "") +
-      `<div class="box" style="margin-top:8px;display:flex;gap:10px;align-items:center"><span style="flex:1">Not listed? AI researches “${esc(term)}” and adds an explainer for everyone, marked not yet reviewed.</span><button class="btn sm" id="indAI">Research it</button></div>` : ""}</div>`;
+      `<p class="hint" style="margin-top:8px">No indicator matches “${esc(term)}”. Try another name, like “rsi” or “bollinger”.</p>` : ""}</div>`;
   const re = () => { pIndicators(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
   const inp = el.querySelector("#indQ");
   inp.oninput = () => { APP.indQ = inp.value; const p = inp.selectionStart; re(); const n = el.querySelector("#indQ"); n.focus(); n.setSelectionRange(p, p); };
@@ -352,25 +341,13 @@ function pIndicators(el, back) {
     const on = new Set(ind.active); if (on.size < MAX_ACTIVE) on.add(b.dataset.add);
     APP.indQ = ""; await save({ indicators: { added: [...ind.added, b.dataset.add], active: [...on] } }); re(); openIndicator(b.dataset.add);
   }));
-  el.querySelector("#indAI")?.addEventListener("click", async (e) => {
-    e.target.disabled = true; e.target.textContent = "Researching…";
-    try {
-      const { doc } = await callAI("/indicator", { name: term });
-      const known = indById(doc.id);
-      const entry = known || { id: doc.id, name: doc.name, aliases: doc.aliases || [], category: doc.category || "Other", metrics: [], tv: null, computed: false, short: doc.short || "", custom: true };
-      store.indDocs.set(doc.id, doc); APP.indQ = "";
-      await save({ customIndicators: [...(store.data.customIndicators || []).filter((x) => x.id !== entry.id), ...(known ? [] : [entry])], indicators: { ...ind, added: [...new Set([...ind.added, entry.id])] } });
-      re(); openIndicator(entry.id);
-    } catch (err) { toast(err.message); e.target.disabled = false; e.target.textContent = "Research it"; }
-  });
 }
 export async function openIndicator(id) {
   const i = indById(id); if (!i) return;
-  let ex = i.explainer, reviewed = true;
-  if (!ex) { const d = await getShared("indicatorDocs", id); if (d) { ex = d; reviewed = !!d.reviewed; } }
+  const ex = i.explainer;
   const srcs = (ex?.sources || []).filter((s) => /^https?:\/\//.test(s.url || "")).map((s) => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label || s.url)}</a></li>`).join("");
   openSheet(esc(i.name), ex ? `${[["What it measures", ex.measures], ["How it's calculated", ex.calc], ["Usual settings", ex.settings], ["What it misses", ex.limits]].map(([k, v]) => `<div class="label" style="margin-top:12px">${k}</div><p>${esc(v)}</p>`).join("")}
-    ${srcs ? `<div class="label" style="margin-top:12px">Sources</div><ul>${srcs}</ul>` : ""}${reviewed ? "" : `<p class="ai">AI-researched · not yet reviewed · not investment advice</p>`}` : `<p>${esc(i.short || "No explainer yet.")}</p>`);
+    ${srcs ? `<div class="label" style="margin-top:12px">Sources</div><ul>${srcs}</ul>` : ""}` : `<p>${esc(i.short || "No explainer yet.")}</p>`);
 }
 
 const RULE_METRICS = ["price", "changePct", "rsi14", "distSma20Pct", "distSma50Pct", "macdHist", "pctB", "distHigh50Pct", "volRatio", "atrPct", "stochK", "willR", "cci20", "adx14", "roc12"];
@@ -472,7 +449,6 @@ function pAppearance(el, back) {
 function pLegal(el, back) {
   el.innerHTML = `${back}<h1>Legal and disclaimer</h1>
     <h2>Not investment advice</h2><p>${esc(DISCLAIMER)} Check facts and consult a registered adviser before investing.</p>
-    <h2>How AI is used</h2><p>Explanations of news, price moves and indicators are written by an AI model from linked sources, once per story or move, and are the same for every user. They describe what happened and what a number measures. They never say whether to buy, sell or hold and never predict prices. Each is labelled with its date and sources.</p>
     <h2>Fact tags and sorting</h2><p>Tags such as “Volume 2.1x usual” or “New 50-day high” state facts about the latest data. Sorting by move, news or RSI orders your own list by that fact. Neither is a signal or a ranking of investments.</p>
     <h2>Privacy</h2><p>We don't ask for or store your name, email, phone number, location or contacts, and use no tracking or advertising cookies. We keep a random account ID derived from your recovery code, the username you choose (if any), your watchlists, chart style, rules and indicator choices, list nicknames and, if you turn on alerts, a push token. You can delete everything from Account.</p>
     <h2>Data sources</h2><p>Coin prices from Kraken's public data, checked against CoinGecko. News found via the GDELT Project and linked to each publisher.</p>

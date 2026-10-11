@@ -4,16 +4,19 @@
 // Outlets kept, by domain. Left out on purpose: Bloomberg (founder ran for US president), WSJ / Barron's /
 // MarketWatch (News Corp, controlled by the Murdoch family, which also controls Fox News), Financial Times,
 // The Economist and New York Times (editorial boards endorse parties or candidates), Mint / HT (chairperson was a
-// nominated Rajya Sabha member), BBC (state-chartered broadcaster). CoinDesk is owned by the exchange Bullish.
+// nominated Rajya Sabha member), BBC (state-chartered broadcaster). Crypto desks kept for their reporting standards
+// (named sources, corrections policies): CoinDesk (owned by the exchange Bullish), The Block, Decrypt, Blockworks,
+// DL News. Left out: sites that run paid "sponsored" articles or price-prediction content alongside news.
 export const OUTLETS = {
   "reuters.com": "Reuters", "apnews.com": "AP", "cnbc.com": "CNBC", "asia.nikkei.com": "Nikkei Asia",
   "axios.com": "Axios", "business-standard.com": "Business Standard", "economictimes.indiatimes.com": "Economic Times",
   "thehindubusinessline.com": "BusinessLine", "ptinews.com": "PTI", "coindesk.com": "CoinDesk",
+  "theblock.co": "The Block", "decrypt.co": "Decrypt", "blockworks.co": "Blockworks", "dlnews.com": "DL News", "fortune.com": "Fortune",
   "prnewswire.com": "Company release", "businesswire.com": "Company release", "globenewswire.com": "Company release",
 };
 const BY_NAME = { reuters: "Reuters", "associated press": "AP", "ap news": "AP", cnbc: "CNBC", nikkei: "Nikkei Asia", axios: "Axios",
   "business standard": "Business Standard", "economic times": "Economic Times", businessline: "BusinessLine",
-  "press trust of india": "PTI", pti: "PTI", coindesk: "CoinDesk" };
+  "press trust of india": "PTI", pti: "PTI", coindesk: "CoinDesk", "the block": "The Block", decrypt: "Decrypt", blockworks: "Blockworks", "dl news": "DL News" };
 const RELEASES = ["prnewswire", "businesswire", "globenewswire", "company release"];
 
 export function outletFor(domainOrName) {
@@ -34,11 +37,13 @@ export const OPINION = new RegExp(
   "stocks? to (buy|watch|sell)|buy or sell|price target|target price|\\bwarns?\\b|\\bbets?\\b|" +
   "\\bvs\\.?\\b|upside|downside|rally (ahead|to come)|\\bcan .* (last|continue)\\b|^chart:|a look at|" +
   "trajectory|:\\s*[A-Z][\\w.'-]*(\\s[A-Z][\\w.'-]*){0,2}\\s*$", "i");
+// Crypto filler that isn't news: predictions, listicles, presales, "how to buy", sponsored posts.
+export const FILLER = /price (prediction|analysis)|\bpredicts?\b|\b(top|best) \d+\b|\d+x (gains|returns|potential)|\bpresale\b|how to (buy|stake|earn)|\bairdrop guide\b|\bsponsored\b|partner content|press release:|to the moon|next (bitcoin|100x|big)|\bwhales? (are|is) (buying|selling)|technical analysis|\bTA\b|meme ?coin to buy|\bgiveaway\b/i;
 export const SPAM = /investigat|class action|lawsuit|shareholder alert|investors? who|deadline|law firm|rosen|pomerantz|levi ?& ?korsinsky|bragar|hbss|faruqi|glancy|schall|bronstein|kessler topaz/i;
 
 export function keep(item) {
   if (!item.title || !item.url || !item.outlet) return false;
-  if (OPINION.test(item.title)) return false;
+  if (OPINION.test(item.title) || FILLER.test(item.title)) return false;
   if (item.outlet === "Company release" && SPAM.test(item.title)) return false;
   return true;
 }
@@ -131,17 +136,54 @@ export async function gdelt(query, { days = 3, max = 50 } = {}) {
   return [];
 }
 
+// A story is about a coin only if its headline names it: the full name, or the ticker in capitals
+// (so "link" or "hype" in ordinary words don't count).
+export function mentions(title, sym) {
+  const name = String(sym.name || "").replace(/\(.*?\)/g, "").trim();
+  if (name && new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(title)) return true;
+  return new RegExp(`(^|[^A-Za-z])\\$?${sym.ticker}([^A-Za-z]|$)`).test(title);
+}
+
+// ---- RSS from the crypto desks above, for coverage GDELT is slow to index. Headline, link and date only.
+export const FEEDS = [
+  ["https://www.coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"], ["https://www.theblock.co/rss.xml", "The Block"],
+  ["https://decrypt.co/feed", "Decrypt"], ["https://blockworks.co/feed", "Blockworks"], ["https://www.dlnews.com/arc/outboundfeeds/rss/", "DL News"],
+];
+const unxml = (x) => String(x || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
+export async function rss(url, outlet, { days = 3 } = {}) {
+  try {
+    const r = await fetch(url, { headers: { "user-agent": "market-feed-pipeline/1.0" } });
+    if (!r.ok) throw new Error(r.status);
+    const xml = await r.text(), cut = Date.now() - days * 864e5, out = [];
+    for (const m of xml.matchAll(/<item[\s>][\s\S]*?<\/item>/g)) {
+      const it = m[0], get = (tag) => unxml((it.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\/${tag}>`)) || [])[1]);
+      const when = Date.parse(get("pubDate") || get("dc:date") || "");
+      const link = get("link") || (it.match(/<guid[^>]*>(https?:[^<]+)</) || [])[1];
+      if (!link || !isFinite(when) || when < cut) continue;
+      const ts = new Date(when).toISOString().slice(0, 19) + "Z";
+      out.push({ title: get("title"), url: link.trim(), outlet, date: ts.slice(0, 10), ts });
+    }
+    return out;
+  } catch (e) { console.warn("rss failed:", url, e.message); return []; }
+}
+
 export async function fetchNews(symbols, { log = console.log } = {}) {
   const items = [];
   for (const g of GENERAL) {
     (await gdelt(g.q, { days: 2, max: 40 })).forEach((x) => items.push({ ...x, scope: g.scope }));
     await sleep(5500);
   }
+  const feeds = (await Promise.all(FEEDS.map(([u, o]) => rss(u, o)))).flat();
+  log(`rss: ${feeds.length} headlines from ${FEEDS.length} crypto desks`);
   for (const s of symbols) {
-    const got = await gdelt(queryFor(s), { days: 3, max: 25 });
-    got.forEach((x) => items.push({ ...x, sym: s.key }));
-    log(`news ${s.key}: ${got.length}`);
+    const sym = { ...s, ticker: s.t, name: s.n };
+    const got = (await gdelt(queryFor(sym), { days: 3, max: 25 })).filter((x) => mentions(x.title, sym));
+    const fromFeeds = feeds.filter((x) => mentions(x.title, sym));
+    [...got, ...fromFeeds].forEach((x) => items.push({ ...x, sym: s.key }));
+    log(`news ${s.key}: ${got.length} gdelt + ${fromFeeds.length} rss`);
     await sleep(5500);
   }
+  // crypto-wide headlines from the desks count as market news
+  feeds.filter((x) => /\b(bitcoin|crypto|ethereum|stablecoin|etf|sec|exchange)\b/i.test(x.title)).forEach((x) => items.push({ ...x, scope: "CRYPTO" }));
   return groupStories(items);
 }

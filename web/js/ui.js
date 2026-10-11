@@ -1,7 +1,7 @@
 // Small shared UI helpers: escaping, formatting, toast, bottom sheet.
 export const $ = (id) => document.getElementById(id);
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-export const DISCLAIMER = "Information and AI explanations are for general understanding only. They are not investment advice or a recommendation to buy, sell or hold any security. We are not registered with SEBI or any other regulator as an adviser or research analyst.";
+export const DISCLAIMER = "Information is for general understanding only. It is not investment advice or a recommendation to buy, sell or hold any security. We are not registered with SEBI or any other regulator as an adviser or research analyst.";
 
 export function money(x, m) {
   if (x == null || !isFinite(x)) return "–";

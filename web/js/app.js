@@ -1,7 +1,7 @@
 // Pulse: the chart feed. Scroll up or down for the next symbol; swipe for its news (finger moves right)
 // or its details (finger moves left). The feed loops through the watchlist with a "caught up" card between rounds.
 import { CONFIG } from "../config.js";
-import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists, callAI, getShared, getSharedMany } from "./store.js";
+import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists } from "./store.js";
 import { loadSymbols, TYLABEL, findSymbol } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { describe } from "./describe.js";
@@ -250,67 +250,34 @@ function renderMain(c, it) {
 }
 const addDays = (d, n) => new Date(new Date(d + "T00:00:00Z").getTime() + n * 864e5).toISOString().slice(0, 10);
 // ---------- news pane
-const whyRunning = new Set(), whyErr = new Map();
 function renderNews(c, it, scope) {
   const s = it.sym, pane = c.querySelector('[data-pane="news"]');
   scope = scope || pane.dataset.scope || "sym";
   pane.dataset.scope = scope;
   const keys = new Set(APP.syms.map((x) => x.key));
   let stories = scope === "sym" ? storiesFor(s.key) : scope === "mine" ? (D.news.stories || []).filter((st) => st.syms.some((k) => keys.has(k))) : (D.news.stories || []).filter((st) => st.scopes?.length);
+  // Triangulated first: by default only stories at least two independent outlets reported (plus the company's own
+  // announcements). Single-source stories are one tap away and clearly labelled.
+  const all = ls.get("pl.newsAll", false), single = stories.filter((st) => st.status === "single").length;
+  if (!all) stories = stories.filter((st) => st.status !== "single");
   stories = stories.slice(0, 40);
   const win = view(s.key, chartSettings(s.key))?.win;
   const winDates = new Set((win || []).map((b) => b.t));
   pane.innerHTML = `<div class="pane-wrap"><h2 class="side">News · ${esc(s.t)}</h2>
     <div class="seg" role="group" aria-label="Which news">${[["sym", s.t], ["mine", "All my news"], ["market", "Market"]].map(([k, l]) => `<button data-scope="${k}" aria-pressed="${k === scope}">${esc(l)}</button>`).join("")}</div>
-    ${stories.length ? stories.map((st) => storyHtml(st, winDates.has(st.date) && scope === "sym")).join("") : `<div class="empty">No news in the last few days${scope === "sym" ? ` for ${esc(s.t)}` : ""}. That's information too.</div>`}
-    <p class="disclaimer">News found via <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener">the GDELT Project</a> from outlets without political or ownership conflicts; headlines link to their publishers. ${esc(DISCLAIMER)}</p></div>`;
+    <div class="nfilter"><span>${all ? "All stories, newest first" : "Confirmed by 2+ independent outlets"}</span>${single || all ? `<button class="btn ghost sm" data-nall>${all ? "Confirmed only" : `+ ${single} single-source`}</button>` : ""}</div>
+    ${stories.length ? stories.map((st) => storyHtml(st, winDates.has(st.date) && scope === "sym")).join("") : `<div class="empty">No ${all ? "" : "confirmed "}news in the last few days${scope === "sym" ? ` for ${esc(s.t)}` : ""}.${!all && single ? ` ${single} single-source ${single === 1 ? "story" : "stories"} hidden.` : " That's information too."}</div>`}
+    <p class="disclaimer">Headlines from Reuters, AP, CNBC, CoinDesk, The Block, Decrypt, Blockworks, DL News and other outlets without political or ownership conflicts, found via <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener">the GDELT Project</a> and the outlets' own feeds, then matched across outlets. Opinion, predictions and promotional posts are left out. Headlines link to their publishers. ${esc(DISCLAIMER)}</p></div>`;
   pane.querySelectorAll("[data-scope]").forEach((b) => (b.onclick = () => renderNews(c, it, b.dataset.scope)));
-  getSharedMany("explain", stories.slice(0, 20).map((x) => x.key)).then(() => patchWhy(pane));
-  wireWhy(pane);
+  pane.querySelector("[data-nall]")?.addEventListener("click", () => { ls.set("pl.newsAll", !all); renderNews(c, it, scope); });
 }
 const STATUS = (st) => (st.status === "confirmed" ? `Confirmed by ${st.outlets.join(" + ")}` : st.status === "company" ? "From the company" : `Single source: ${st.outlets[0]}`);
 function storyHtml(st, pinned) {
   const more = st.links.slice(1).map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.source)} ↗</a>`).join(" ");
   return `<article class="story" id="st-${st.key}"><a class="h" href="${esc(st.links[0].url)}" target="_blank" rel="noopener">${esc(st.title)}</a>
     <div class="meta">${pinned ? `<span class="dotpin" title="Pinned on the chart"></span>` : ""}<span>${esc(fmtDay(st.date))}</span><span class="pill ${st.status}">${esc(STATUS(st))}</span>${more}</div>
-    <div data-whybox="${st.key}">${whyHtml(st)}</div></article>`;
+</article>`;
 }
-const hiddenWhy = () => new Set(ls.get("pl.hidden", []));
-function whyHtml(st) {
-  const ex = store.explain.get(st.key);
-  if (ex?.status === "done") {
-    if (hiddenWhy().has(st.key)) return `<button class="btn ghost sm" data-show="${st.key}">Show what this means</button>`;
-    const srcs = (ex.sources || []).filter((x) => /^https?:\/\//.test(x.url || "")).slice(0, 3).map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label || "Source")}</a>`).join(", ");
-    return `<div class="why"><div class="why-head"><span class="label">What this means for ${esc(ex.who || "the company")}</span><button class="btn ghost sm" data-hide="${st.key}">Hide</button></div><p>${esc(ex.text)}</p>
-      <div class="ai">AI-generated · ${esc(fmtDay((ex.at || "").slice(0, 10)))} · not investment advice${srcs ? ` · ${srcs}` : ""} · <button class="btn ghost sm" style="padding:0" data-report="${st.key}">Report</button></div></div>`;
-  }
-  const busy = whyRunning.has(st.key), err = whyErr.get(st.key) || (ex?.status === "failed" ? "Couldn't find enough on this story." : "");
-  const tks = st.syms.map((k) => k.split(":")[1]);
-  const who = !tks.length ? "the market" : tks.length <= 3 ? tks.join(", ") : "these companies";
-  return `<button class="btn sm" data-why="${st.key}" ${busy ? "disabled" : ""}>${busy ? "Researching…" : `What this means for ${esc(who)}`}</button>${err || busy ? `<div class="hint" style="margin-top:4px">${esc(busy ? "Takes about a minute." : err)}</div>` : ""}`;
-}
-function patchWhy(root) {
-  root.querySelectorAll("[data-whybox]").forEach((b) => { const st = (D.news.stories || []).find((x) => x.key === b.dataset.whybox); if (st) b.innerHTML = whyHtml(st); });
-  wireWhy(root);
-}
-function wireWhy(root) {
-  root.querySelectorAll("[data-why]").forEach((b) => (b.onclick = () => explain(b.dataset.why, root)));
-  root.querySelectorAll("[data-hide]").forEach((b) => (b.onclick = () => { const h = hiddenWhy(); h.add(b.dataset.hide); ls.set("pl.hidden", [...h].slice(-500)); patchWhy(root); }));
-  root.querySelectorAll("[data-show]").forEach((b) => (b.onclick = () => { const h = hiddenWhy(); h.delete(b.dataset.show); ls.set("pl.hidden", [...h]); patchWhy(root); }));
-  root.querySelectorAll("[data-report]").forEach((b) => (b.onclick = async () => { try { await callAI("/report", { kind: "explain", key: b.dataset.report }); toast("Thanks. Reported texts are hidden after 3 reports until reviewed."); } catch (e) { toast(e.message); } }));
-}
-async function explain(key, root) {
-  const st = (D.news.stories || []).find((x) => x.key === key);
-  if (!st || whyRunning.has(key)) return;
-  whyRunning.add(key); whyErr.delete(key); patchWhy(root);
-  try {
-    const companies = st.syms.map((k) => { const r = findSymbol(k); return { ticker: k.split(":")[1], name: r?.n || k.split(":")[1], market: k.split(":")[0] }; });
-    const out = await callAI("/explain", { key, title: st.title, date: st.date, urls: st.links.map((l) => l.url).slice(0, 3), outlets: st.outlets, companies, scopes: st.scopes });
-    if (out.doc) store.explain.set(key, out.doc);
-  } catch (e) { whyErr.set(key, e.message); }
-  finally { whyRunning.delete(key); patchWhy(root); }
-}
-
 // ---------- details pane
 // How to use each part of the details pane, shown behind a small ⓘ. Educational only: what the number
 // describes and how people read it, never what to do.
@@ -384,32 +351,15 @@ function renderDetails(c, it) {
   pane.querySelector("[data-addrule]")?.addEventListener("click", () => { location.hash = ""; showTab("profile", "rules", s.key); });
   pane.querySelectorAll("[data-save]").forEach((bt) => (bt.onclick = () => openListsFor(s)));
   const mb = pane.querySelector("[data-movebox]");
-  if (mb) { const id = moveId(s, v); getShared("moves", id).then(() => { mb.innerHTML = moveHtml(s, v); wireMove(mb, s, v); }); wireMove(mb, s, v); }
+  mb?.querySelectorAll("[data-gonews]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); c._go(PANE.news); }));
 }
-const moveId = (s, v) => (s.key + "_" + D.series[s.key].bars.at(-1).t).replace(/[^\w-]/g, "_");
-const moveBusy = new Set();
+// An unusually big day: the facts, and the headlines from around that day (no AI, no guessing at causes).
 function moveHtml(s, v) {
-  const id = moveId(s, v), m = store.moves.get(id), d = v.daily.now;
-  const head = `<div class="label">Why did it move?</div><p style="font-weight:700">${esc(s.t)} ${d.changePct >= 0 ? "rose" : "fell"} ${Math.abs(d.changePct).toFixed(1)}% on the latest bar, about ${(Math.abs(d.changePct) / d.atrPct).toFixed(1)}x its usual daily move.</p>`;
-  if (m?.status === "done") {
-    const srcs = (m.sources || []).filter((x) => /^https?:\/\//.test(x.url || "")).slice(0, 3).map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label || "Source")}</a>`).join(", ");
-    return head + `<p>${esc(m.text)}</p><div class="ai">AI-generated · ${esc(fmtDay((m.at || "").slice(0, 10)))} · past move only, not a forecast or advice${srcs ? ` · ${srcs}` : ""}</div>`;
-  }
-  return head + `<button class="btn sm" data-moveai ${moveBusy.has(id) ? "disabled" : ""}>${moveBusy.has(id) ? "Looking into it…" : "Explain this move"}</button>`;
-}
-function wireMove(box, s, v) {
-  const b = box.querySelector("[data-moveai]");
-  if (!b) return;
-  b.onclick = async () => {
-    const id = moveId(s, v); moveBusy.add(id); box.innerHTML = moveHtml(s, v);
-    try {
-      const bar = D.series[s.key].bars.at(-1), day = bar.t;
-      const stories = storiesFor(s.key).filter((st) => st.date >= addDays(day, -1)).slice(0, 5).map((st) => ({ title: st.title, url: st.links[0].url, outlets: st.outlets }));
-      const out = await callAI("/why", { id, key: s.key, ticker: s.t, name: s.n, market: s.m, date: day, changePct: v.daily.now.changePct, close: bar.c, atrPct: v.daily.now.atrPct, volRatio: v.daily.now.volRatio, stories });
-      if (out.doc) store.moves.set(id, out.doc);
-    } catch (e) { toast(e.message); }
-    moveBusy.delete(id); box.innerHTML = moveHtml(s, v); wireMove(box, s, v);
-  };
+  const d = v.daily.now, day = D.series[s.key].bars.at(-1).t;
+  const news = storiesFor(s.key).filter((st) => st.date >= addDays(day, -1)).slice(0, 3);
+  return `<div class="label">A big day</div><p style="font-weight:700">${esc(s.t)} ${d.changePct >= 0 ? "rose" : "fell"} ${Math.abs(d.changePct).toFixed(1)}%, about ${(Math.abs(d.changePct) / d.atrPct).toFixed(1)}x a typical day's move.</p>
+    ${news.length ? `<p class="hint">In the news around then:</p><ul class="mnews">${news.map((st) => `<li><a href="${esc(st.links[0].url)}" target="_blank" rel="noopener">${esc(st.title)}</a> <span class="hint">${esc(st.outlets[0] || "")}</span></li>`).join("")}</ul><a href="#" data-gonews class="hint">All ${esc(s.t)} news →</a>`
+      : `<p class="hint">No news found for that day. Big moves can also come from the wider market.</p>`}`;
 }
 
 // ---------- special cards

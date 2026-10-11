@@ -153,9 +153,6 @@ p { margin: 6px 0; }
 .pill { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 8px; }
 .pill.confirmed { background: var(--up-soft); color: var(--up); } .pill.single { background: var(--surface2); color: var(--muted); } .pill.company { background: var(--accent-soft); color: var(--accent); }
 .dotpin { width: 8px; height: 8px; border-radius: 50%; background: var(--pin); display: inline-block; }
-.why { padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--surface2); border-radius: 0 12px 12px 0; }
-.why p { margin: 4px 0 0; font-size: 14.5px; }
-.why-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .ai { font-size: 11px; color: var(--muted); margin-top: 6px; }
 .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
 .stat-grid div { background: var(--surface); padding: 10px; }
@@ -406,3 +403,5 @@ body.fullopen .tabbar, body.fullopen .topbar { visibility: hidden; }
 .srrow { margin-top: 14px; } .srrow em { font-style: normal; font-size: 12px; color: var(--muted); }
 .full .flowers { flex: none; display: flex; flex-direction: column; gap: 8px; }
 .fnote .hint { font-size: 11.5px; }
+.nfilter { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 2px 0 10px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.mnews { margin: 4px 0 8px; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; } .mnews a { color: var(--text); }

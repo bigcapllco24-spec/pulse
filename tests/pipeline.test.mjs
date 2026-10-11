@@ -7,8 +7,10 @@ const news = JSON.parse(fs.readFileSync(out + "/news.json")), c = JSON.parse(fs.
 const checks = [
   ["writes coin candles", Object.keys(c.series).length >= 1 && c.series["CRYPTO:BTC"].bars.length >= 100],
   ["candles are [date, o, h, l, c, v]", c.series["CRYPTO:BTC"].bars[0].length === 6],
-  ["merges one story across two outlets as Confirmed", news.stories[0]?.status === "confirmed" && news.stories[0].outlets.length === 2],
+  ["merges one story across two outlets as Confirmed", news.stories.some((s) => /Reliance/.test(s.title) && s.status === "confirmed" && s.outlets.length === 2)],
   ["drops opinion headlines", !news.stories.some((s) => /\?|could/i.test(s.title))],
+  ["a coin story reported by two outlets (GDELT + a crypto desk's feed) is Confirmed", news.stories.some((s) => s.syms.includes("CRYPTO:BTC") && s.status === "confirmed" && s.outlets.includes("Reuters") && s.outlets.includes("CoinDesk"))],
+  ["drops price predictions and doesn't match ordinary words to tickers (link, hype)", !news.stories.some((s) => /prediction/i.test(s.title)) && !news.stories.some((s) => /claim your/i.test(s.title) && (s.syms.includes("CRYPTO:LINK") || s.syms.includes("CRYPTO:HYPE")))],
 ];
 const fails = checks.filter(([, ok]) => !ok);
 fails.forEach(([n]) => console.log("FAIL pipeline: " + n));

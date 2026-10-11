@@ -8,7 +8,6 @@ Every change follows the same five steps. Nothing is reported as done until step
    ```
    syntax: all files parse
    pipeline: 4/4 checks passed
-   worker: 6/6 checks passed
    levels: 4/4 checks passed
    e2e: 78/78 checks passed
    ALL CHECKS PASSED
@@ -23,7 +22,6 @@ Every change follows the same five steps. Nothing is reported as done until step
 | --- | --- | --- |
 | syntax | `scripts/check.sh` | Every JavaScript file parses |
 | pipeline | `tests/pipeline.test.mjs` | Data job with simulated Kraken, CoinGecko and GDELT: candles written, stories merged across outlets, opinion headlines dropped |
-| worker | `tests/worker.test.mjs` | AI relay with simulated sign-in, Firestore and Claude: rejects bad sign-ins, caches results, blocks advice and forecast wording, resolves nicknames, hides reported texts |
 | levels | `tests/levels.test.mjs` | Support/resistance and pivot point maths on candles with known answers |
 | e2e | `tests/e2e.py` | The app in a phone browser with real touch swipes, and on desktop with mouse wheel, trackpad, drag and keyboard: every card in order, looping, both side panels on every symbol, charts, stock-chart fallback, pins, layout, add-stock sheet and new watchlists, switcher, bookmark, dashboard, every profile page, chart style, indicators, rules and alerts, theme, refresh, no JavaScript errors |
 

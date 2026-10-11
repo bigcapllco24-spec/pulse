@@ -9,11 +9,10 @@ status=0
 run() { "$@" || status=1; }
 
 if [[ $only == all || $only == syntax ]]; then
-  bad=0; for f in web/js/*.js web/*.js pipeline/*.mjs pipeline/lib/*.mjs worker/*.js; do node --check "$f" 2>/dev/null || { echo "FAIL syntax: $f"; bad=1; }; done
+  bad=0; for f in web/js/*.js web/*.js pipeline/*.mjs pipeline/lib/*.mjs; do node --check "$f" 2>/dev/null || { echo "FAIL syntax: $f"; bad=1; }; done
   [[ $bad == 0 ]] && echo "syntax: all files parse" || status=1
 fi
 [[ $only == all || $only == pipeline ]] && run node tests/pipeline.test.mjs
-[[ $only == all || $only == worker ]] && run node tests/worker.test.mjs
 [[ $only == all || $only == levels ]] && run node tests/levels.test.mjs
 if [[ $only == all || $only == e2e ]]; then
   port=$((8800 + RANDOM % 100))

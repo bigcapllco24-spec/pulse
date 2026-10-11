@@ -34,7 +34,7 @@ export const randomId = (n = 24) => [...crypto.getRandomValues(new Uint8Array(n)
 const listeners = new Set();
 export const store = {
   mode: CONFIG.firebase ? "live" : "demo",
-  id: null, code: null, data: null, alerts: [], lists: new Map(), explain: new Map(), indDocs: new Map(), moves: new Map(),
+  id: null, code: null, data: null, alerts: [], lists: new Map(),
   ready: false, error: null,
   on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   emit(what) { listeners.forEach((fn) => fn(what)); },
@@ -209,36 +209,6 @@ export async function leaveList(id) {
   await save({ lists: (store.data.lists || []).filter((l) => l.id !== id) });
 }
 
-// ---- shared AI results (written by the AI worker, readable by everyone)
-const cacheFor = (coll) => (coll === "explain" ? store.explain : coll === "moves" ? store.moves : store.indDocs);
-export async function getShared(coll, id) {
-  const cache = cacheFor(coll);
-  if (cache.has(id)) return cache.get(id);
-  if (store.mode === "demo" || !fb) return null;
-  try {
-    const s = await fb.f.getDoc(fb.f.doc(fb.db, coll, id));
-    const v = s.exists() ? s.data() : null;
-    if (v) cache.set(id, v);
-    return v;
-  } catch { return null; }
-}
-export async function getSharedMany(coll, ids) {
-  await Promise.all(ids.filter((id) => !cacheFor(coll).has(id)).map((id) => getShared(coll, id)));
-}
-
-export async function callAI(path, body) {
-  if (!CONFIG.workerUrl) throw new Error("AI features aren't set up yet (workerUrl in config.js).");
-  if (store.mode === "demo") throw new Error("AI features need the live app (Firebase set up).");
-  const token = await fb.auth.currentUser.getIdToken();
-  const r = await fetch(CONFIG.workerUrl.replace(/\/$/, "") + path, {
-    method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + token }, body: JSON.stringify(body),
-  });
-  const out = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(out.error || "The AI service didn't answer. Try again.");
-  return out;
-}
-
-// ---- push alerts (Firebase Cloud Messaging over web push)
 export async function enablePush() {
   if (store.mode === "demo") throw new Error("Push alerts need the live app.");
   if (!("Notification" in window) || !("serviceWorker" in navigator)) throw new Error("This browser can't receive push alerts. On iPhone, add the app to your home screen first.");
