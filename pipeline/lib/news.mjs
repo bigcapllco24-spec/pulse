@@ -120,7 +120,7 @@ export async function gdelt(query, { days = 3, max = 50, domains = true } = {}) 
     `&maxrecords=${max}&timespan=${days}d&query=` + encodeURIComponent(domains ? `${query} ${DOMAIN_FILTER}` : query);
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const r = await fetch(url, { headers: { "user-agent": "market-feed-pipeline/1.0" } });
+      const r = await fetch(url, { headers: { "user-agent": "market-feed-pipeline/1.0" }, signal: AbortSignal.timeout(25000) });
       const text = await r.text();
       if (!r.ok || !text.trim().startsWith("{")) throw new Error(`${r.status} ${text.slice(0, 120)}`);
       const arts = JSON.parse(text).articles || [];
@@ -130,7 +130,8 @@ export async function gdelt(query, { days = 3, max = 50, domains = true } = {}) 
         return { title: (a.title || "").trim(), url: a.url, outlet: outletFor(a.domain || a.url), date: ts.slice(0, 10), ts };
       });
     } catch (e) {
-      if (attempt === 3 || /too short|too long/i.test(e.message)) { console.warn("gdelt failed:", query.slice(0, 80), e.message.slice(0, 80)); return []; }
+      // a refused connection or timeout twice in a row means GDELT is down: the outlet feeds carry on without it
+      if (attempt === 3 || /too short|too long/i.test(e.message) || (attempt >= 1 && /fetch failed|timeout|abort/i.test(e.message))) { console.warn("gdelt failed:", query.slice(0, 80), e.message.slice(0, 80)); return []; }
       await sleep(8000 * 2 ** attempt);
     }
   }
