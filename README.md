@@ -75,6 +75,7 @@ web/                 the app (static files, no build step)
   js/coach.js        first-time guided tours
   js/full.js         full-screen interactive chart (drag, pinch, 1D to full history)
   js/describe.js     plain-language meaning of each reading
+  js/score.js        prediction game: prediction score and 300–900 profile score (see docs/prediction-score.md)
 pipeline/            data job run by GitHub Actions (no npm packages)
 firestore.rules      database security rules
 ```

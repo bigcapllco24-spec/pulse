@@ -14,6 +14,7 @@ if [[ $only == all || $only == syntax ]]; then
 fi
 [[ $only == all || $only == pipeline ]] && run node tests/pipeline.test.mjs
 [[ $only == all || $only == levels ]] && run node tests/levels.test.mjs
+[[ $only == all || $only == score ]] && run node tests/score.test.mjs $verbose
 if [[ $only == all || $only == e2e ]]; then
   port=$((8800 + RANDOM % 100))
   (cd web && exec python3 -m http.server "$port" >/dev/null 2>&1) & srv=$!
