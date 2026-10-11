@@ -362,7 +362,7 @@ def phone_tests(b):
         lefts.append(p.inner_text("#profile .phead b") + " | " + (p.inner_text("#profile .pleft") if p.locator("#profile .pleft").count() else ""))
     p.click("#pName"); p.wait_for_timeout(500)
     blocked = (p.inner_text("#toast") if p.is_visible("#toast") else "") and not p.is_visible("#sheet")
-    check("phone: profile is grouped (Charts, Alerts, Sharing, Account, Help) and doesn't push a username", len(groups) == 5 and no_nag, " | ".join(groups))
+    check("phone: profile is grouped (Prediction game, Charts, Alerts, Sharing, Account, Help) and doesn't push a username", len(groups) == 6 and groups[0].lower() == "prediction game" and no_nag, " | ".join(groups))
     check("phone: username rejects bad names (too short, phone-like numbers)", "3 to 20" in bad1 and "phone" in bad2, f"{bad1} / {bad2}")
     check("phone: username can be set, then changed twice, then no more", lefts[0].startswith("@chart_fan |") and "2 username changes left" in lefts[0] and "1 username change left" in lefts[1] and "No username changes left" in lefts[2] and bool(blocked), " ; ".join(lefts))
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(600)
@@ -386,7 +386,7 @@ def phone_tests(b):
     # profile pages
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
     pages_ok, bad = True, []
-    for sub in ["chart", "rules", "alerts", "lists", "account", "appearance", "legal"]:
+    for sub in ["predictions", "how", "chart", "rules", "alerts", "lists", "account", "appearance", "legal"]:
         p.click(f"[data-p={sub}]"); p.wait_for_timeout(350)
         h = p.inner_text("#profile h1")
         if not h: pages_ok = False; bad.append(sub)
@@ -462,6 +462,69 @@ def phone_tests(b):
     ctx.close()
 
 NOCOACH = "localStorage.getItem('pl.coach')||localStorage.setItem('pl.coach', JSON.stringify({feed:1,dash:1,profile:1,add:1}))"
+
+# Prediction game. Its own Kraken stand-in: one smooth made-up price per coin, so 1-minute and daily candles agree
+# (the start price is locked from 1-minute candles, the volatility from daily ones).
+import math as _math
+def steady_kraken_route(route):
+    u = route.request.url; pair = _re.search(r"pair=([A-Z]+)", u).group(1); iv = int(_re.search(r"interval=(\d+)", u).group(1)) if "interval=" in u else 1440
+    base = 50 + (sum(map(ord, pair)) % 50) * 20
+    px = lambda t: base * _math.exp(0.03 * _math.sin(t / 86400 * 2.1) + 0.004 * _math.sin(t / 3600))
+    step = iv * 60; end = int(time.time()) // step * step; rows = []
+    for k in range(719, -1, -1):
+        s0 = end - k * step; o = px(s0); c = px(min(s0 + step - 60, time.time()))
+        rows.append([s0, f"{o:.6f}", f"{max(o, c):.6f}", f"{min(o, c):.6f}", f"{c:.6f}", f"{c:.6f}", "1000", 10])
+    route.fulfill(status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"}, body=_json.dumps({"error": [], "result": {pair: rows, "last": rows[-1][0]}}))
+
+def prediction_test(b):
+    ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
+    ctx.route("https://api.kraken.com/**", steady_kraken_route); demo_mode(ctx); ctx.add_init_script(NOCOACH)
+    p = ctx.new_page(); errs = []
+    p.on("pageerror", lambda e: errs.append(str(e)))
+    p.goto(BASE); p.wait_for_timeout(2500)
+    p.keyboard.press("ArrowDown"); p.wait_for_timeout(1200)
+    chip = p.locator(".card.active [data-pred]")
+    check("predict: every coin card has a Predict chip", chip.count() == 1 and "Predict" in chip.inner_text(), str(active(p)))
+    chip.click(); p.wait_for_timeout(500)
+    periods = p.locator(".pseg [data-h]").all_inner_texts(); default = p.get_attribute(".pseg [aria-pressed=true]", "data-h")
+    check("predict: the sheet offers 30 min, 1 hour, 1 day and 1 year, starting on 1 day", [x.split("\n")[0] for x in periods] == ["30 min", "1 hour", "1 day", "1 year"] and default == "1d", f"{periods} {default}")
+    now = p.evaluate("parseFloat(document.querySelector('.pnow b').textContent.replace(/[^0-9.]/g,''))")
+    p.fill("#pIn", f"{now * 1.0003:.4f}"); p.wait_for_timeout(150)
+    close_msg, close_off = p.inner_text("#pMsg"), p.is_disabled("#pGo")
+    p.fill("#pIn", f"{now * 1.05:.4f}"); p.wait_for_timeout(150)
+    ok_msg, ok_on = p.inner_text("#pMsg"), not p.is_disabled("#pGo")
+    check("predict: a call too close to today's price is refused; a real call up is accepted", close_off and "too close" in close_msg and ok_on and "a call up" in ok_msg, f"{close_msg} / {ok_msg}")
+    p.click("#pGo"); p.wait_for_timeout(800)
+    toast_txt = p.inner_text("#toast") if p.is_visible("#toast") else ""
+    badge = p.inner_text(".card.active [data-pred]")
+    p.click(".card.active [data-pred]"); p.wait_for_timeout(400)
+    one_open = p.is_disabled(".pseg [data-h='1d']") and "open" in p.inner_text(".pseg [data-h='1d']") and p.get_attribute(".pseg [aria-pressed=true]", "data-h") != "1d"
+    p.click("[data-close]"); p.wait_for_timeout(400)
+    check("predict: locking in confirms it, the chip counts it, and 1 day can't be predicted again while it's open", "Locked in" in toast_txt and "1" in badge and one_open, f"{toast_txt} / {badge!r}")
+    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
+    card0 = p.inner_text("#profile .pscard"); row0 = p.inner_text("[data-p=predictions] .s")
+    check("predict: before anything is scored the profile has no score yet and counts the open prediction", "waiting to be scored" in card0 and "1 open" in row0, f"{card0!r} / {row0!r}")
+    # an hour-long call made 3 hours ago (settled on the phone from 1-minute candles) and 11 earlier scored results
+    p.evaluate("""(async()=>{const d=JSON.parse(localStorage.getItem('pl.demoPreds')), made=Date.now()-3*3600e3;
+      const j=await (await fetch('https://api.kraken.com/0/public/OHLC?pair=ETHUSD&interval=1')).json(), r=j.result.ETHUSD.filter(x=>x[0]*1000<=made).pop();
+      d.open.push({id:'ETH_1h',coin:'CRYPTO:ETH',t:'ETH',horizon:'1h',target:+r[1]*1.01,createdAt:new Date(made).toISOString(),clientP0:+r[1],clientSigma:.03});
+      [.15,.3,.6,.2,1.3,.4,.1,.8,.35,2.2,.5].forEach((m,i)=>{const h=['30m','1h','1d'][i%3], at=Date.now()-(20-i)*864e5, s=.03*Math.sqrt({'30m':1/48,'1h':1/24,'1d':1}[h]), t=100*Math.exp(s), a=t*Math.exp(-m*s);
+        d.results.push({id:'X'+i,coin:'CRYPTO:SOL',t:'SOL',horizon:h,target:t,p0:100,sigmaD:.03,actual:a,createdAt:new Date(at).toISOString(),resolvedAt:new Date(at+3600e3).toISOString(),status:'scored',pctOff:(t/a-1)*100,label:'Close'});});
+      localStorage.setItem('pl.demoPreds', JSON.stringify(d));})()""")
+    p.reload(); p.wait_for_timeout(3500)
+    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
+    card = p.inner_text("#profile .pscard"); score = int(p.inner_text("#profile .pscard .psn b"))
+    check("predict: with 12 scored predictions the profile shows one score between 300 and 900, with its band", 300 <= score <= 900 and any(bnd in card for bnd in ["Exceptional", "Very good", "Good", "Fair", "Building"]) and "Provisional" not in card and "12 scored" in card, card.replace("\n", " "))
+    p.click("#profile .pscard"); p.wait_for_timeout(500)
+    first = p.inner_text("#profile .list:last-of-type .row >> nth=0") if p.locator("#profile .list").count() > 1 else ""
+    page = p.inner_text("#profile")
+    check("predict: the hour-long call settled on the phone from 1-minute candles and shows how close it was", first.startswith("ETH · 1 hour") and "it was $" in first and _re.search(r"\d+\.\d% (above|below)", first) and any(l in first for l in ["Spot on", "Very close", "Close", "Off", "Far off"]), first.replace("\n", " "))
+    check("predict: each prediction shows only how close it was, never a per-prediction score", "points" not in page.lower() and "trade" not in page.lower(), "")
+    p.click("#pBack"); p.wait_for_timeout(300); p.click("[data-p=how]"); p.wait_for_timeout(300)
+    how = p.inner_text("#profile")
+    check("predict: How the score works explains the parts, longer calls and the 550 start", all(x in how for x in ["Closeness", "Consistency", "Direction", "Longer calls count more", "550"]), "")
+    check("predict: no JavaScript errors", not errs, " | ".join(errs[:3]))
+    ctx.close()
 
 def tour_test(b):
     # A brand-new user: the feed teaches itself step by step, each step finishing when the gesture is done.
@@ -573,6 +636,8 @@ with sync_playwright() as pw:
     except Exception as e: check("phone: suite ran to the end", False, repr(e)[:300])
     try: desktop_tests(b)
     except Exception as e: check("desktop: suite ran to the end", False, repr(e)[:300])
+    try: prediction_test(b)
+    except Exception as e: check("predict: suite ran to the end", False, repr(e)[:300])
     b.close()
 
 fails = [r for r in results if not r[1]]

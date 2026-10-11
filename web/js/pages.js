@@ -2,7 +2,8 @@
 import { CONFIG } from "../config.js";
 import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
   markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList,
-  enablePush, signOutDevice, deleteAccount } from "./store.js";
+  enablePush, signOutDevice, deleteAccount, makePrediction, myScore } from "./store.js";
+import { HORIZONS, BANDS, CHANCE, SCORE_MIN, SCORE_MAX, PROVISIONAL_UNDER, checkPrediction, canPredict, allowedRange, dailyVol, targetTime, closenessText } from "./score.js";
 import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
@@ -179,8 +180,10 @@ const ICON = {
   alerts: '<path d="M4 4h16v12H5l-1 4z"/>', lists: '<circle cx="8" cy="9" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M2 20c1-4 4-5 6-5s5 1 6 5M14 20c.5-2.5 2-3.5 3.5-3.5S21 17.5 22 20"/>',
   account: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>', appearance: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z"/>',
   tour: '<path d="M5 3l14 9-14 9z"/>', legal: '<path d="M7 3h8l4 4v14H7zM15 3v4h4M10 12h6M10 16h6"/>',
+  predictions: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.6"/>', how: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-1 .7-1.5 1.2-1.5 2.5M12 17h.01"/>',
 };
 const GROUPS = [
+  ["Prediction game", [["predictions", "Your predictions", ""], ["how", "How the score works", "Closeness, consistency and longer calls"]]],
   ["Charts & learning", [["chart", "Chart style", "Time range, candles and lines"]]],
   ["Alerts", [["rules", "Alert rules", "Get told when your levels are hit"], ["alerts", "Alerts", "Everything that has fired"]]],
   ["Sharing", [["lists", "Shared lists", "Follow a list with friends"]]],
@@ -190,6 +193,7 @@ const GROUPS = [
 const icon = (k) => `<svg class="pic" viewBox="0 0 24 24" aria-hidden="true">${ICON[k] || ""}</svg>`;
 export function renderProfile(sub, arg) {
   const el = $("profile");
+  APP.profileSub = sub || null;
   const back = `<button class="btn ghost sm" id="pBack" style="padding-left:0">‹ Profile</button>`;
   if (!sub) {
     const unread = store.alerts.filter((a) => !a.read).length;
@@ -200,8 +204,9 @@ export function renderProfile(sub, arg) {
         ${u ? `<button class="btn sm" id="pName">Change</button>` : ""}
       </div>
       ${u ? `<p class="hint pleft">${left > 0 ? `${left} username change${left === 1 ? "" : "s"} left` : "No username changes left"}</p>` : ""}
+      ${scoreCard(true)}
 
-      ${GROUPS.map(([g, rows]) => `<h2 class="pg">${g}</h2><div class="list pgl">${rows.map(([k, l, d]) => `<button class="row" data-p="${k}">${icon(k)}<span class="main"><span class="t">${l}${k === "alerts" && unread ? ` <span class="pill confirmed">${unread} new</span>` : ""}</span><span class="s">${d}</span></span><span class="chev">›</span></button>`).join("")}</div>`).join("")}
+      ${GROUPS.map(([g, rows]) => `<h2 class="pg">${g}</h2><div class="list pgl">${rows.map(([k, l, d]) => `<button class="row" data-p="${k}">${icon(k)}<span class="main"><span class="t">${l}${k === "alerts" && unread ? ` <span class="pill confirmed">${unread} new</span>` : ""}</span><span class="s">${k === "predictions" ? esc(predCounts()) : d}</span></span><span class="chev">›</span></button>`).join("")}</div>`).join("")}
       <p class="disclaimer">${esc(DISCLAIMER)}</p>`;
     el.querySelector("#pName")?.addEventListener("click", () => openUsernameSheet());
     el.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => {
@@ -210,7 +215,7 @@ export function renderProfile(sub, arg) {
     }));
     return;
   }
-  const fn = { watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal }[sub];
+  const fn = { watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal, predictions: pPredictions, how: pHow }[sub];
   fn(el, back, arg);
   el.querySelector("#pBack").onclick = () => renderProfile();
   el.parentElement.scrollTop = 0;
@@ -415,12 +420,127 @@ function pAppearance(el, back) {
 function pLegal(el, back) {
   el.innerHTML = `${back}<h1>Legal and disclaimer</h1>
     <h2>Not investment advice</h2><p>${esc(DISCLAIMER)} Check facts and consult a registered adviser before investing.</p>
+    <h2>Prediction game</h2><p>Predicting a coin's price is a game for learning how markets move. There is no money, no prizes and nothing to buy. Your predictions are private: nobody else sees them, and the app never publishes price calls. A prediction or a score is not advice and says nothing about where prices will go.</p>
     <h2>Fact tags and sorting</h2><p>Tags such as “Volume 2.1x usual” or “New 50-day high” state facts about the latest data. Sorting by move, news or RSI orders your own list by that fact. Neither is a signal or a ranking of investments.</p>
     <h2>Privacy</h2><p>We don't ask for or store your name, email, phone number, location or contacts, and use no tracking or advertising cookies. We keep a random account ID for this app on this phone, the username you choose (if any), your watchlists, chart style, rules and indicator choices, list nicknames and, if you turn on alerts, a push token. You can delete everything from Account.</p>
     <h2>Data sources</h2><p>Coin prices from Kraken's public data, checked against CoinGecko. News found via the GDELT Project and linked to each publisher.</p>
     <h2>Age</h2><p>For people aged 18 and over.</p>
     <h2>Grievance contact</h2><p>${esc(CONFIG.companyName)} · <a href="mailto:${esc(CONFIG.grievanceEmail)}">${esc(CONFIG.grievanceEmail)}</a>. Complaints acknowledged within 24 hours, resolved within 15 days.</p>
     <p class="hint">Summary only. Full terms and privacy notice to be reviewed by a lawyer before public launch.</p>`;
+}
+
+// ---------- prediction game
+// One public number, the prediction score (300 to 900). Each prediction shows only how close it was; the per-prediction
+// trade score behind the profile score is never shown. See docs/prediction-score.md.
+const PERIODS = Object.keys(HORIZONS);
+const SHORT = { "30m": "30 min", "1h": "1 hour", "1d": "1 day", "1y": "1 year" };
+const when = (isoStr, h) => new Date(isoStr).toLocaleString("en-IN", h === "1y" ? { day: "numeric", month: "short", year: "numeric" } : { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+const untilText = (isoStr) => { const m = Math.round((Date.parse(isoStr) - Date.now()) / 60000); return m <= 0 ? "scoring soon" : m < 60 ? `in ${m} min` : m < 2880 ? `in ${Math.round(m / 60)} h` : `in ${Math.round(m / 1440)} days`; };
+const scoredN = () => store.results.filter((r) => r.status === "scored").length;
+function predCounts() {
+  const o = store.preds.length, n = scoredN();
+  return !o && !n ? "Predict a coin's price from its chart" : `${o} open · ${n} scored`;
+}
+const LABEL_CLASS = { "Spot on": "cl-a", "Very close": "cl-a", Close: "cl-b", Off: "cl-c", "Far off": "cl-d" };
+// The score card: the one public number, where it sits on 300–900, and how much it is built on.
+function scoreCard(tappable) {
+  const s = myScore(), n = s?.n ?? scoredN(), o = store.preds.length;
+  const pos = (x) => (((x - SCORE_MIN) / (SCORE_MAX - SCORE_MIN)) * 100).toFixed(1);
+  const ticks = BANDS.filter(([min]) => min > SCORE_MIN).map(([min]) => `<i style="left:${pos(min)}%"></i>`).join("");
+  const body = s?.score != null
+    ? `<div class="pst"><span class="label">Prediction score</span>${s.provisional ? `<span class="pill single">Provisional</span>` : ""}</div>
+      <div class="psn"><b>${s.score}</b><span>${esc(s.band)}</span></div>
+      <div class="psbar" aria-hidden="true">${ticks}<em style="left:${pos(s.score)}%"></em></div>
+      <div class="psx"><span>${SCORE_MIN}</span><span>${CHANCE} chance</span><span>${SCORE_MAX}</span></div>
+      <p class="hint">${s.provisional ? `${n} of ${PROVISIONAL_UNDER} predictions scored before it settles` : `Built on ${n} scored prediction${n === 1 ? "" : "s"}`}${o ? ` · ${o} open` : ""}</p>`
+    : `<div class="pst"><span class="label">Prediction score</span></div>
+      <div class="psn"><b class="muted">–</b><span>${o ? `${o} prediction${o === 1 ? "" : "s"} waiting to be scored` : "No score yet"}</span></div>
+      <p class="hint">${o ? `Your score appears once a prediction has been scored.` : `Tap <b>Predict</b> on any coin's chart.`} Everyone starts at ${CHANCE}, about what guessing would score.</p>`;
+  return tappable ? `<button class="pscard" data-p="predictions">${body}</button>` : `<div class="pscard">${body}</div>`;
+}
+
+// The prediction sheet, from the Predict chip on a card.
+export function openPredictSheet(sym, onDone) {
+  const bars = D.series[sym.key]?.bars || [];
+  const p0 = bars.at(-1)?.c, sigmaD = dailyVol(bars.slice(0, -1).map((b) => b.c)); // full days only, as the lock uses
+  if (!p0 || sigmaD == null) { toast(`${sym.t} prices haven't loaded yet.`); return; }
+  const free = PERIODS.filter((h) => canPredict(store.preds, sym.key, h));
+  let horizon = free.includes("1d") ? "1d" : free[0];
+  openSheet(`Predict · ${esc(sym.t)}`, "", (body) => {
+    const draw = (keep = "") => {
+      if (!horizon) {
+        body.innerHTML = `<p>You have an open prediction on every period for ${esc(sym.t)}. Each one can be made again once it has been scored.</p>
+          <button class="btn block" id="pSee">See your predictions</button>`;
+        body.querySelector("#pSee").onclick = () => { closeSheet(); showTab("profile", "predictions"); };
+        return;
+      }
+      const r = allowedRange({ horizon, p0, sigmaD }), due = targetTime(new Date().toISOString(), horizon);
+      body.innerHTML = `<div class="pnow"><span>${esc(sym.t)} now</span><b>${esc(money(p0, sym.m))}</b></div>
+        <div class="label" style="margin:14px 0 6px">Time period</div>
+        <div class="seg pseg" role="group" aria-label="Time period">${PERIODS.map((h) => { const open = !canPredict(store.preds, sym.key, h); return `<button data-h="${h}" aria-pressed="${h === horizon}" ${open ? "disabled" : ""}>${SHORT[h]}${open ? "<small>open</small>" : ""}</button>`; }).join("")}</div>
+        <label class="field" style="margin-top:12px"><span>Where will ${esc(sym.t)} be in ${esc(HORIZONS[horizon].label)}?</span>
+          <div class="uname"><span>$</span><input id="pIn" inputmode="decimal" autocomplete="off" placeholder="${esc(money(r.upFrom, sym.m).replace("$", ""))}" value="${esc(keep)}"></div></label>
+        <p class="hint" id="pMsg">Call a move: ${esc(money(r.downFrom, sym.m))} or lower, or ${esc(money(r.upFrom, sym.m))} or higher.</p>
+        <p class="hint">Scored against the price at <b>${esc(when(due, horizon))}</b>.</p>
+        <div class="notice">Once locked in it can't be changed or cancelled. One open prediction per coin per period. It's a game: no money, and not advice.</div>
+        <button class="btn primary block" id="pGo" disabled>Lock in prediction</button>`;
+      const inp = body.querySelector("#pIn"), msg = body.querySelector("#pMsg"), go = body.querySelector("#pGo");
+      const val = () => parseFloat(inp.value.replace(/[^0-9.]/g, ""));
+      const check = () => {
+        const target = val();
+        if (!inp.value.trim()) { msg.className = "hint"; msg.textContent = `Call a move: ${money(r.downFrom, sym.m)} or lower, or ${money(r.upFrom, sym.m)} or higher.`; go.disabled = true; return; }
+        const c = checkPrediction({ horizon, p0, target, sigmaD });
+        msg.className = "hint " + (c.ok ? "good" : "bad");
+        msg.textContent = c.ok ? `${pct(((target - p0) / p0) * 100, 1)} from now · a call ${target > p0 ? "up" : "down"}` : c.error;
+        go.disabled = !c.ok;
+      };
+      inp.oninput = check; check();
+      body.querySelectorAll("[data-h]").forEach((b) => (b.onclick = () => { horizon = b.dataset.h; draw(inp.value); }));
+      go.onclick = async () => {
+        go.disabled = true; go.textContent = "Locking in…";
+        try {
+          await makePrediction({ sym, horizon, target: val(), p0, sigmaD });
+          closeSheet(); toast(`Locked in: ${sym.t} at ${money(val(), sym.m)} in ${HORIZONS[horizon].label}. Scored ${untilText(due)}.`, { ms: 4500 });
+          onDone?.();
+        } catch (e) { msg.className = "hint bad"; msg.textContent = e.message || "Couldn't save. Try again."; go.disabled = false; go.textContent = "Lock in prediction"; }
+      };
+      setTimeout(() => inp.focus(), 250);
+    };
+    draw();
+  });
+}
+
+function pPredictions(el, back) {
+  const open = [...store.preds].sort((a, b) => Date.parse(targetTime(a.createdAt, a.horizon)) - Date.parse(targetTime(b.createdAt, b.horizon)));
+  const done = [...store.results].sort((a, b) => Date.parse(b.resolvedAt || 0) - Date.parse(a.resolvedAt || 0));
+  const m = (x) => money(x, "CRYPTO");
+  el.innerHTML = `${back}<h1>Your predictions</h1>${scoreCard(false)}
+    <h2>Open${open.length ? ` · ${open.length}` : ""}</h2>
+    ${open.length ? `<div class="list">${open.map((p) => { const due = targetTime(p.createdAt, p.horizon); return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · from ${p.p0 != null ? esc(m(p.p0)) : `about ${esc(m(p.clientP0))}`}</span></span><span class="r"><b>${esc(untilText(due))}</b><span class="hint">${esc(when(due, p.horizon))}</span></span></div>`; }).join("")}</div>`
+      : `<div class="empty">Nothing open. Tap <b>Predict</b> on any coin's chart.</div>`}
+    ${store.mode === "live" && open.length ? `<p class="hint">Predictions are scored within about 2 hours of their time, against the price at that exact minute.</p>` : ""}
+    <h2>Scored${done.length ? ` · ${done.length}` : ""}</h2>
+    ${done.length ? `<div class="list">${done.map((p) => p.status === "scored"
+      ? `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · it was ${esc(m(p.actual))}</span></span><span class="r"><span class="pill ${LABEL_CLASS[p.label] || ""}">${esc(p.label)}</span><span class="hint">${esc(closenessText(p).split(" · ")[0])}</span></span></div>`
+      : `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s" style="white-space:normal">${esc(p.voidReason || "Not counted.")}</span></span><span class="r"><span class="pill single">Not counted</span></span></div>`).join("")}</div>`
+      : `<div class="empty">Scored predictions show here, with how close each one was.</div>`}
+    <p class="disclaimer">A game for learning how prices move. Predictions are private and are not advice.</p>`;
+}
+
+function pHow(el, back) {
+  el.innerHTML = `${back}<h1>How the score works</h1>
+    <p>Your prediction score runs from ${SCORE_MIN} to ${SCORE_MAX}, and it's worked out the same way for everyone, so scores can be compared.</p>
+    <h2>Each prediction</h2>
+    <p>You see how close you were: how far off in percent, and a label from <b>Spot on</b> to <b>Far off</b>. The label compares your miss with how much that coin usually moves in that time, so 3% off is far off for 30 minutes but spot on for a year.</p>
+    <h2>Your score</h2>
+    <p>Every scored prediction counts towards it:</p>
+    <ul class="glance"><li><b>Closeness</b> (45%): how close your calls land.</li><li><b>Consistency</b> (25%): landing close reliably, without big misses.</li><li><b>Direction</b> (15%): whether the price went the way you said.</li><li><b>Beating “no change”</b> (10%): doing better than just guessing today's price.</li><li><b>Range</b> (5%): different coins, periods and months.</li></ul>
+    <p><b>Longer calls count more.</b> Once you have them, 1-year predictions carry the most weight, then 1 day, 1 hour and 30 minutes.</p>
+    <p><b>Recent results count more.</b> Older results slowly count for less, starting from when they were scored.</p>
+    <h2>Starting out</h2>
+    <p>Everyone starts at ${CHANCE}, about what random guessing scores. Below ${CHANCE} is worse than guessing. Your score shows as provisional until ${PROVISIONAL_UNDER} predictions have been scored, and early on it moves slowly.</p>
+    <div class="opts">${BANDS.map(([min, name], i) => `<span class="pill">${esc(name)} ${min}${i ? `–${BANDS[i - 1][0] - 1}` : `–${SCORE_MAX}`}</span>`).join("")}</div>
+    <p class="disclaimer">A game for learning how prices move. No money, no prizes, and not advice.</p>`;
 }
 
 // ---------- onboarding (live mode, no account on this phone)

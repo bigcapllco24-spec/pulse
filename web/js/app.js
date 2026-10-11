@@ -1,7 +1,8 @@
 // Pulse: the chart feed. Scroll up or down for the next symbol; swipe for its news (finger moves right)
 // or its details (finger moves left). The feed loops through the watchlist with a "caught up" card between rounds.
 import { CONFIG } from "../config.js";
-import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists } from "./store.js";
+import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists, settleDemoPredictions } from "./store.js";
+import { krakenRows } from "./predict.js";
 import { loadSymbols, TYLABEL, findSymbol } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { describe } from "./describe.js";
@@ -13,10 +14,9 @@ import { openFull } from "./full.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, krakenBars, INTRA, intraState, IV_LABEL, resolveInterval, dailyOf } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules } from "./pages.js";
+import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, openPredictSheet } from "./pages.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
-const LOWER_KEY = { RSI: "rsi14", MACD: "macdHist", VOL: "volRatio" };
 
 // ---------- which symbols, in which order
 export function currentSyms() {
@@ -237,7 +237,7 @@ function renderMain(c, it) {
     // The chip at the top right says what the chart covers and opens the chart settings for this coin.
     const own = !!store.data?.settings?.chartBy?.[s.key];
     const lvMode = cs.levels || "off";
-    // indicators are one shared choice (picked on the full-screen chart); the feed shows the first two panels
+    // indicators are one shared choice (the ƒx button); cards show as many panels as the screen fits
     const pk = picks(store.data?.settings?.chart), shown = pk.lower.slice(0, maxPanels()), ov = studyWindow(v.bars, v.ov, v.bars.length - v.win.length, v.bars.length, [...pk.over, ...shown]);
     c._v = { ...v, ov, picks: { over: pk.over, lower: shown } }; // what hold-to-read and the panel guides read from
     main.innerHTML = `<div class="head"><div class="hl"><div class="tkrow"><span class="tk">${esc(s.t)}</span><span class="chg ${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span></div>
@@ -245,7 +245,7 @@ function renderMain(c, it) {
       <div class="hr"><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${esc(v.ivLabel.toLowerCase())} candles"><b>${esc(v.range)}</b><span>${esc(v.ivLabel)}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
       <div class="hr2"><button class="lvbtn fxchip" data-fx aria-label="Indicators: ${pk.over.length + pk.lower.length} on"><i>ƒx</i>${pk.over.length + pk.lower.length || "Add"}</button><button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div></div>
       <div class="chartbox"><button class="fxbtn" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: pk.over, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
-      ${shown.length ? `<div class="lowers${shown.length > 2 ? " g2" : ""}">${shown.map((k) => lowerChart(v.win, ov, k)).join("")}</div>` : ""}${dots}`;
+      ${shown.length ? `<div class="lowers${shown.length > 2 ? " g2" : ""}">${shown.map((k) => lowerChart(v.win, ov, k)).join("")}</div>` : ""}<div class="cfoot"><i></i>${dots}${predChip(s)}</div>`;
   } else {
     c._v = null;
     main.innerHTML = `<div class="head"><div class="hl"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div><div class="hr"><button class="tfbtn" data-tf aria-label="Chart settings for ${esc(s.t)}"><b>${esc(cs.range)}</b><span>${esc(IV_LABEL[resolveInterval(cs)] || "")}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button></div></div>
@@ -331,7 +331,7 @@ const HOW = {
   perf: "Price change over each period up to the latest candle. Comparing short and long periods shows whether a move is recent or part of a longer run. Past performance doesn't tell you future returns.",
   trend: "A moving average is the average closing price over the last 20, 50 or 200 days, which smooths out daily noise. Price above an average means it is higher than its recent typical level. Many people watch the 50- and 200-day lines, so they're useful context, not signals.",
   vol: "The typical daily move is the 14-day Average True Range: how far the price usually travels in a day. Bigger numbers mean bigger swings, so the same news can move the price more. Comparing today's move with it shows whether today was unusual.",
-  readings: "One reading for each indicator on your chart, with what today's number means in plain words. Add or remove indicators from the full-screen chart (⤢, then Indicators). Tap a reading for its full guide.",
+  readings: "One reading for each indicator on your chart, with what today's number means in plain words. Add or remove indicators with the ƒx button on any card. Tap a reading for its guide.",
   ranges: "Where today's price sits between the lowest and highest prices of the period. The nearest support and resistance are prices where the chart turned more than once before. They describe the past, not where the price will go.",
   alerts: "Get told when a price or reading crosses a level you choose. Quickest way: hold the chart, slide to a price and tap the alert button.",
 };
@@ -378,7 +378,7 @@ function renderDetails(c, it) {
     // readings for the indicators on your chart, in plain words
     const pkr = picks(store.data?.settings?.chart), seenM = new Set();
     const rows = [...pkr.over.map((k) => OVERLAYS[k]), ...pkr.lower.map((k) => PANELS[k])].filter((x) => x?.metric && !seenM.has(x.metric) && seenM.add(x.metric)).map((x) => ({ i: { id: Object.keys(OVERLAYS).find((k) => OVERLAYS[k] === x) || Object.keys(PANELS).find((k) => PANELS[k] === x) }, m: x.metric }));
-    html += sec("Readings", "readings", rows.length ? `<div class="readings">${rows.map(({ i, m }) => { const meta = METRICS[m] || { label: m, digits: 2 }; return `<button class="reading" data-ind="${esc(i.id)}"><span class="k">${esc(meta.label)}</span><span class="v">${fmt(d[m], meta.digits)}${meta.unit && d[m] != null ? esc(meta.unit) : ""}</span><span class="d">${esc(describe(m, d, v.daily.prev))}</span></button>`; }).join("")}</div>` : `<p class="hint">No indicators on your chart. Open any chart full screen (⤢) and tap Indicators to add some.</p>`);
+    html += sec("Readings", "readings", rows.length ? `<div class="readings">${rows.map(({ i, m }) => { const meta = METRICS[m] || { label: m, digits: 2 }; return `<button class="reading" data-ind="${esc(i.id)}"><span class="k">${esc(meta.label)}</span><span class="v">${fmt(d[m], meta.digits)}${meta.unit && d[m] != null ? esc(meta.unit) : ""}</span><span class="d">${esc(describe(m, d, v.daily.prev))}</span></button>`; }).join("")}</div>` : `<p class="hint">No indicators on your chart. Tap ƒx on any card to add some.</p>`);
     // 7. ranges and the nearest past turning points
     const lv = swingLevels({ bars: all, win: all.slice(-Math.min(182, all.length)), interval: "1D" }, { perSide: 1 });
     const r1 = lv.find((l) => l.kind === "R"), s1 = lv.find((l) => l.kind === "S");
@@ -555,6 +555,12 @@ function wire(c, it) {
   c.querySelector(".chartbox:not(.nodata)")?.addEventListener("click", () => { if (!justScrubbed()) chartTapHint(); });
   c.querySelector("[data-full]")?.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) { coachEvent("full"); openFull(it.sym); } });
   c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); coachEvent("tf"); openChartSheet(it.sym, () => redrawCards()); });
+  c.querySelector("[data-pred]")?.addEventListener("click", (e) => { e.stopPropagation(); openPredictSheet(it.sym, () => redrawCards(it.sym.key)); });
+}
+// Prediction game: the Predict chip on a card, with how many predictions are open on that coin.
+function predChip(s) {
+  const n = store.preds.filter((p) => p.coin === s.key).length;
+  return `<button class="lvbtn pdbtn" data-pred aria-label="Predict ${esc(s.t)}'s price${n ? `, ${n} open` : ""}"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/></svg>Predict${n ? `<b>${n}</b>` : ""}</button>`;
 }
 
 // Redraw every filled coin card in place (after a chart setting changes or intraday candles arrive), so no card
@@ -604,7 +610,7 @@ export async function doRefresh(manual) {
   await refresh(allSyms(), () => { if (APP.built && !manual) refill(); });
   lastRefresh = Date.now();
   setStatus();
-  if (store.mode === "demo") demoRules();
+  if (store.mode === "demo") { demoRules(); settleDemoPredictions(krakenRows).catch(() => {}); } // the data job does both for live accounts
   const keep = APP.seq[APP.active]?.sym?.key;
   if (manual || !APP.built) buildFeed({ keepKey: keep }); else refill();
   if (manual) toast("Up to date.");
@@ -661,6 +667,11 @@ export function applyTheme() {
   store.on((what) => {
     $("alertDot").hidden = !store.alerts.some((a) => !a.read);
     if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") renderDash(); }
+    if (what === "preds") APP.needsRebuild = true; // the Predict chips show open counts
+    // the profile's score card and predictions page follow new and scored predictions
+    if ((what === "preds" || what === "account") && APP.tab === "profile" && (!APP.profileSub || APP.profileSub === "predictions")) {
+      const pg = $("profile").parentElement, y = pg.scrollTop; renderProfile(APP.profileSub); pg.scrollTop = y;
+    }
   });
   $("alertDot").hidden = !store.alerts.some((a) => !a.read);
   buildFeed();

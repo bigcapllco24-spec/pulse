@@ -23,7 +23,9 @@ Every change follows the same five steps. Nothing is reported as done until step
 | syntax | `scripts/check.sh` | Every JavaScript file parses |
 | pipeline | `tests/pipeline.test.mjs` | Data job with simulated Kraken, CoinGecko and GDELT: candles written, stories merged across outlets, opinion headlines dropped |
 | levels | `tests/levels.test.mjs` | Support/resistance and pivot point maths on candles with known answers |
-| e2e | `tests/e2e.py` | The app in a phone browser with real touch swipes, and on desktop with mouse wheel, trackpad, drag and keyboard: every card in order, looping, both side panels on every symbol, charts, stock-chart fallback, pins, layout, add-stock sheet and new watchlists, switcher, bookmark, dashboard, every profile page, chart style, indicators, rules and alerts, theme, refresh, no JavaScript errors |
+| score | `tests/score.test.mjs` | Prediction game scoring: worked examples, consistency, fading, period shares, and the 300–900 calibration against simulated players |
+| predict | `tests/predict.test.mjs` | Prediction game settling with simulated Kraken candles: start-price lock, exact-time end price, voids, and the data job's Firestore step against an in-memory database |
+| e2e | `tests/e2e.py` | The app in a phone browser with real touch swipes, and on desktop with mouse wheel, trackpad, drag and keyboard: every card in order, looping, both side panels on every symbol, charts, stock-chart fallback, pins, layout, add-stock sheet and new watchlists, switcher, bookmark, dashboard, every profile page, chart style, indicators, rules and alerts, theme, refresh, the prediction game (sheet, one open call per period, settling on the phone, score card, closeness only), no JavaScript errors |
 
 ## When adding a feature
 
@@ -31,4 +33,4 @@ Add at least one e2e check for it in `tests/e2e.py`, in the phone or desktop sec
 
 ## Not covered by automated tests
 
-TradingView embeds (blocked in the test browser, so the fallback message is what gets tested), Firebase sign-in and sync, push notifications, the live Kraken fetch, and real phones. Check these by hand after deploying.
+TradingView embeds (blocked in the test browser, so the fallback message is what gets tested), Firebase sign-in and sync, the prediction rules in firestore.rules and the data job writing real predictions, push notifications, the live Kraken fetch, and real phones. Check these by hand after deploying.

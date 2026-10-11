@@ -32,7 +32,7 @@ export const TOURS = {
     { target: "#dash .list [data-open]", text: "Tap any coin to jump straight to its chart.", ring: true, hand: "tap" },
     { target: "#dEdit, #dAdd", text: "Pick a watchlist, then Edit to reorder or remove coins. + Add coins any time.", ring: true },
   ],
-  profile: [{ target: "#profile .list", text: "Your settings: chart style, indicators, alerts and your account. Nothing personal about you is stored.", ring: true }],
+  profile: [{ target: "#profile .list", text: "Your settings: chart style, alerts, predictions and your account. Nothing personal about you is stored.", ring: true }],
   add: [{ target: "#addQ", text: "Type a coin's name or symbol, like “sol”. Tap the result, then pick its watchlists.", ring: true }],
 };
 
@@ -79,5 +79,4 @@ function next() {
   if (tour.k < tour.steps.length - 1) { tour.k++; show(); } else finish(false);
 }
 function finish() { if (!tour) return; markDone(tour.id); tour.el.remove(); tour = null; }
-export const tourActive = () => tour?.id || null;
 export const resetTours = () => ls.set(KEY, {});
