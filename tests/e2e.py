@@ -22,6 +22,12 @@ COINS = set(ORDER)
 
 # Kraken stand-in: the test browser has no internet, so every coin gets 2 years of made-up daily candles.
 import json as _json, random as _random, re as _re
+# The test browser can't reach Firebase, so the app is served with Firebase switched off (demo mode).
+import pathlib as _pl
+_CFG = _re.sub(r"firebase: \{[\s\S]*?\n  \},", "firebase: null,", (_pl.Path(__file__).parent.parent / "web/config.js").read_text())
+def demo_mode(ctx):
+    ctx.route("**/config.js", lambda r: r.fulfill(status=200, content_type="text/javascript", body=_CFG))
+
 def kraken_route(route):
     pair = _re.search(r"pair=([A-Z]+)", route.request.url).group(1)
     rnd = _random.Random(pair); price = rnd.uniform(0.2, 900); rows = []; t0 = 1791504000 - 729 * 86400
@@ -35,7 +41,7 @@ def active(p):
 
 def phone_tests(b):
     ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
-    ctx.route("https://api.kraken.com/**", kraken_route)
+    ctx.route("https://api.kraken.com/**", kraken_route); demo_mode(ctx)
     ctx.add_init_script(NOCOACH)  # the guided tour has its own test
     p = ctx.new_page(); errs = []
     p.on("pageerror", lambda e: errs.append(str(e)))
@@ -338,7 +344,7 @@ NOCOACH = "localStorage.getItem('pl.coach')||localStorage.setItem('pl.coach', JS
 def tour_test(b):
     # A brand-new user: the feed teaches itself step by step, each step finishing when the gesture is done.
     ctx = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
-    ctx.route("https://api.kraken.com/**", kraken_route)
+    ctx.route("https://api.kraken.com/**", kraken_route); demo_mode(ctx)
     p = ctx.new_page(); p.goto(BASE); p.wait_for_timeout(2500); cdp = ctx.new_cdp_session(p)
     def swipe(x0, y0, x1, y1, settle=1100):
         cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x0, "y": y0}]})
@@ -375,7 +381,7 @@ def ios_homescreen_test(b):
     ctx = b.new_context(viewport={"width": 390, "height": 788}, is_mobile=True, has_touch=True,
                         user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148")
     ctx.add_init_script("Object.defineProperty(navigator,'standalone',{get:()=>true}); Object.defineProperty(screen,'height',{get:()=>844}); Object.defineProperty(screen,'width',{get:()=>390});")
-    ctx.route("https://api.kraken.com/**", kraken_route)
+    ctx.route("https://api.kraken.com/**", kraken_route); demo_mode(ctx)
     p = ctx.new_page(); p.goto(BASE); p.wait_for_timeout(1500)
     r = p.evaluate("(()=>{const t=document.querySelector('.tabbar').getBoundingClientRect(), f=document.getElementById('feed'); return [t.bottom, f.clientHeight, getComputedStyle(document.documentElement).getPropertyValue('--gapb').trim()]})()")
     check("iOS Home Screen: tab bar and feed reach the real bottom of the screen (no empty strip)", abs(r[0] - 844) < 1 and r[1] == 844, str(r))
@@ -383,7 +389,7 @@ def ios_homescreen_test(b):
 
 def desktop_tests(b):
     p = b.new_page(viewport={"width": 1280, "height": 800}); errs = []
-    p.route("https://api.kraken.com/**", kraken_route); p.add_init_script(NOCOACH)
+    p.route("https://api.kraken.com/**", kraken_route); p.add_init_script(NOCOACH); demo_mode(p)
     p.on("pageerror", lambda e: errs.append(str(e)))
     p.goto(BASE); p.wait_for_timeout(2500)
     p.mouse.move(640, 450)
