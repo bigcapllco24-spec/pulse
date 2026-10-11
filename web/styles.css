@@ -419,3 +419,31 @@ body.fullopen .tabbar, body.fullopen .topbar { visibility: hidden; }
 .lower-label .kmacd { background: var(--accent); } .lower-label .ksig { background: var(--ma1); }
 .chartbox .ax.gl { opacity: .7; font-weight: 500; }
 @media (orientation: landscape) and (max-height: 500px) { .full .lower.lfull .lplot { height: 44px; } }
+/* indicators on charts */
+body.fullopen .backdrop { z-index: 80; } body.fullopen .sheet { z-index: 81; } body.fullopen .toast { z-index: 90; }
+.chart .oline { fill: none; stroke-width: 1.3; vector-effect: non-scaling-stroke; opacity: .95; }
+.chart .oline.dash { stroke-dasharray: 4 3; opacity: .8; }
+.chart .oline.trend { stroke-width: 1.6; } .chart .oline.trend.u { stroke: var(--up); } .chart .oline.trend.d { stroke: var(--down); }
+.chart .ofill { opacity: .07; stroke: none; }
+.chart .ocloud { stroke: none; opacity: .14; } .chart .ocloud.u { fill: var(--up); } .chart .ocloud.d { fill: var(--down); }
+.chart .odot.u { fill: var(--up); } .chart .odot.d { fill: var(--down); }
+.chart .pl { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.olegend { position: absolute; left: 4px; top: 2px; display: flex; flex-wrap: wrap; gap: 4px 10px; max-width: 80%; pointer-events: none; }
+.oli { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; color: var(--muted); pointer-events: auto; cursor: pointer; background: color-mix(in srgb, var(--bg) 70%, transparent); border-radius: 6px; padding: 1px 4px; }
+.oli i { width: 8px; height: 2px; border-radius: 1px; } .oli b { color: var(--text); font-weight: 600; }
+.orm { border: 0; background: none; color: var(--muted); font-size: 11px; padding: 0 2px; cursor: pointer; line-height: 1; }
+.lower { position: relative; } .lower .lrm { position: absolute; top: 0; right: 0; padding: 2px 6px; font-size: 13px; }
+.lnone { margin: 0; font-size: 12px; color: var(--muted); padding: 12px 0; }
+.findbtn { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 8px 12px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.findbtn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.findbtn b { background: var(--accent); color: var(--accent-ink); border-radius: 999px; font-size: 11px; padding: 0 6px; }
+.shd { display: flex; justify-content: space-between; font-size: 14px; margin: 16px 0 4px; } .shd span { color: var(--muted); font-weight: 600; font-size: 12px; }
+.sgroup { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 0 4px; }
+.srow { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.sinfo { flex: 1; min-width: 0; text-align: left; background: none; border: 0; color: var(--text); padding: 0; cursor: pointer; font: inherit; }
+.sinfo .t { display: block; font-weight: 700; font-size: 14px; } .sinfo .s { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+.stog { flex: none; min-width: 58px; border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid var(--line); background: none; color: var(--text); }
+.stog[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.fxbtn + .plot .olegend { left: 44px; top: 8px; }
+.full .fhead { flex-direction: column; align-items: flex-start; gap: 0; min-width: 0; }
+.full .fhead .row1 { display: flex; align-items: center; gap: 8px; } .full .fhead .price { font-size: 17px; }

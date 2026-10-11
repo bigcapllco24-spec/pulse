@@ -56,21 +56,3 @@ export function searchSymbols(text, limit = 8) {
   return best.map((b) => b.r);
 }
 
-// Indicator catalogue search: name, id and aliases.
-export function searchIndicators(catalogue, text) {
-  const q = norm(text), qc = compact(text);
-  if (!q) return catalogue.slice();
-  const out = [];
-  for (const it of catalogue) {
-    const names = [it.name, it.id, ...(it.aliases || [])].map(norm);
-    let s = 0;
-    for (const n of names) {
-      if (n === q) s = Math.max(s, 100);
-      else if (n.startsWith(q)) s = Math.max(s, 80);
-      else if (compact(n).includes(qc)) s = Math.max(s, 50);
-      else if (q.split(" ").every((w) => n.split(" ").some((x) => x.startsWith(w)))) s = Math.max(s, 40);
-    }
-    if (s) out.push({ it, s });
-  }
-  return out.sort((a, b) => b.s - a.s).map((x) => x.it);
-}

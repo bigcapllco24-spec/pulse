@@ -7,6 +7,7 @@ import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { describe } from "./describe.js";
 import { mainChart, lowerChart } from "./chart.js";
 import { levelsFor, swingLevels } from "./levels.js";
+import { picks, studyWindow, FEED_PANELS, OVERLAYS, PANELS } from "./studies.js";
 import { startTour, coachEvent } from "./coach.js";
 import { openFull, krakenBars } from "./full.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
@@ -237,12 +238,14 @@ function renderMain(c, it) {
     // The chip at the top right says what the chart covers and opens the chart settings for this coin.
     const own = !!store.data?.settings?.chartBy?.[s.key];
     const lvMode = cs.levels || "off";
+    // indicators are one shared choice (picked on the full-screen chart); the feed shows the first two panels
+    const pk = picks(store.data?.settings?.chart), ov = studyWindow(v.bars, v.ov, v.bars.length - v.win.length, v.bars.length, [...pk.over, ...pk.lower.slice(0, FEED_PANELS)]);
     main.innerHTML = `<div class="head"><div class="hl"><div class="tkrow"><span class="tk">${esc(s.t)}</span><span class="chg ${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span></div>
       <div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span></div></div>
       <div class="hr"><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${v.interval === "1W" ? "weekly" : "daily"} candles"><b>${esc(v.range)}</b><span>${v.interval === "1W" ? "Weekly" : "Daily"}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
       <button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div>
-      <div class="chartbox"><button class="fxbtn" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>${mainChart(v.win, v.ov, { type: cs.type, closeOnly: v.closeOnly, maKeys: cs.mas, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
-      ${String(cs.lower || "none").split(",").filter((k) => k !== "none").map((k) => lowerChart(v.win, v.ov, k)).join("")}${dots}`;
+      <div class="chartbox"><button class="fxbtn" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: pk.over, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
+      ${pk.lower.slice(0, FEED_PANELS).map((k) => lowerChart(v.win, ov, k)).join("")}${dots}`;
   } else {
     main.innerHTML = `<div class="head"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div>
       <div class="chartbox nodata"><p>${D.status === "refreshing" ? `Loading ${esc(s.t)} prices…` : `${esc(s.t)} prices couldn't load. Pull to refresh or tap “Updated” at the top.`}</p></div>${dots}`;
@@ -327,7 +330,7 @@ const HOW = {
   perf: "Price change over each period up to the latest candle. Comparing short and long periods shows whether a move is recent or part of a longer run. Past performance doesn't tell you future returns.",
   trend: "A moving average is the average closing price over the last 20, 50 or 200 days, which smooths out daily noise. Price above an average means it is higher than its recent typical level. Many people watch the 50- and 200-day lines, so they're useful context, not signals.",
   vol: "The typical daily move is the 14-day Average True Range: how far the price usually travels in a day. Bigger numbers mean bigger swings, so the same news can move the price more. Comparing today's move with it shows whether today was unusual.",
-  readings: "Each reading is an indicator you switched on in Profile → Indicators, with what today's number means in plain words. Tap a reading for its full guide.",
+  readings: "One reading for each indicator on your chart, with what today's number means in plain words. Add or remove indicators from the full-screen chart (⤢, then Indicators). Tap a reading for its full guide.",
   ranges: "Where today's price sits between the lowest and highest prices of the period. The nearest support and resistance are prices where the chart turned more than once before. They describe the past, not where the price will go.",
   alerts: "Get told when a price or reading crosses a level you choose. Quickest way: hold the chart, slide to a price and tap the alert button.",
 };
@@ -371,9 +374,10 @@ function renderDetails(c, it) {
     // 5. volatility
     if (typical != null) html += sec("Volatility", "vol", `<div class="vol"><div><span>Typical daily move</span><b>±${typical.toFixed(1)}%</b></div><div><span>Today's move</span><b>${moveX != null ? `${moveX.toFixed(1)}x typical` : "–"}</b></div></div>`);
     // 6. readings in plain words
-    const act = (store.data?.indicators?.active || []).map((id) => APP.catalogue.find((x) => x.id === id)).filter(Boolean);
-    const rows = act.flatMap((i) => (i.metrics || []).map((m) => ({ i, m })));
-    html += sec("Readings", "readings", rows.length ? `<div class="readings">${rows.map(({ i, m }) => { const meta = METRICS[m] || { label: m, digits: 2 }; return `<button class="reading" data-ind="${esc(i.id)}"><span class="k">${esc(meta.label)}</span><span class="v">${fmt(d[m], meta.digits)}${meta.unit && d[m] != null ? esc(meta.unit) : ""}</span><span class="d">${esc(describe(m, d, v.daily.prev))}</span></button>`; }).join("")}</div>` : `<p class="hint">No indicators switched on. Choose them in Profile → Indicators.</p>`);
+    // readings for the indicators on your chart, in plain words
+    const pkr = picks(store.data?.settings?.chart), seenM = new Set();
+    const rows = [...pkr.over.map((k) => OVERLAYS[k]), ...pkr.lower.map((k) => PANELS[k])].filter((x) => x?.metric && !seenM.has(x.metric) && seenM.add(x.metric)).map((x) => ({ i: { id: x.guide }, m: x.metric }));
+    html += sec("Readings", "readings", rows.length ? `<div class="readings">${rows.map(({ i, m }) => { const meta = METRICS[m] || { label: m, digits: 2 }; return `<button class="reading" data-ind="${esc(i.id)}"><span class="k">${esc(meta.label)}</span><span class="v">${fmt(d[m], meta.digits)}${meta.unit && d[m] != null ? esc(meta.unit) : ""}</span><span class="d">${esc(describe(m, d, v.daily.prev))}</span></button>`; }).join("")}</div>` : `<p class="hint">No indicators on your chart. Open any chart full screen (⤢) and tap Indicators to add some.</p>`);
     // 7. ranges and the nearest past turning points
     const lv = swingLevels({ bars: all, win: all.slice(-Math.min(182, all.length)), interval: "1D" }, { perSide: 1 });
     const r1 = lv.find((l) => l.kind === "R"), s1 = lv.find((l) => l.kind === "S");

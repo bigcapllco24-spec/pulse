@@ -6,6 +6,7 @@ const LH = 64;
 const f = (x) => (Math.abs(x) >= 1000 ? x.toFixed(0) : Math.abs(x) >= 100 ? x.toFixed(1) : Math.abs(x) >= 1 ? x.toFixed(2) : x.toPrecision(3));
 const path = (pts) => pts.reduce((s, p, i) => (p == null ? s : s + (s && pts[i - 1] != null ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)), "");
 
+import { OVERLAYS, PANELS, keysOf } from "./studies.js";
 export const MA_COLORS = ["var(--ma1)", "var(--ma2)", "var(--ma3)"];
 
 // win: bars in the window [{t,o,h,l,c,v}], ov: {key: values[] aligned to win}, opts: {type, closeOnly, maKeys:[...]}
@@ -17,6 +18,8 @@ export function mainChart(win, ov, opts) {
   const vals = [];
   win.forEach((b) => vals.push(opts.closeOnly ? b.c : b.h, opts.closeOnly ? b.c : b.l));
   (opts.maKeys || []).forEach((k) => (ov[k] || []).forEach((x) => x != null && vals.push(x)));
+  const overs = (opts.over || []).map((c) => [c, OVERLAYS[c]]).filter(([, o]) => o);
+  for (const [, o] of overs) for (const k of keysOf(o)) (ov[k] || []).forEach((x) => x != null && isFinite(x) && vals.push(x));
   let lo = Math.min(...vals), hi = Math.max(...vals);
   // support/resistance or pivot lines: keep those near the visible prices and widen the scale to fit them
   const span0 = hi - lo || hi * 0.02, lv = (opts.levels || []).filter((l) => l.price >= lo - span0 * 0.25 && l.price <= hi + span0 * 0.25);
@@ -29,6 +32,23 @@ export function mainChart(win, ov, opts) {
   // grid: three quiet lines (the full-screen chart gets more, each with its price)
   const gl = opts.full ? [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875] : [0.25, 0.5, 0.75];
   for (const g of gl) body += `<line x1="0" x2="${pw}" y1="${(PT + g * (H - PT - PB)).toFixed(1)}" y2="${(PT + g * (H - PT - PB)).toFixed(1)}" class="grid"/>`;
+  // indicator fills and clouds sit behind the candles
+  const line = (arr) => path((arr || []).map((v, i) => (v == null ? null : [X(i), Y(v)])));
+  // filled area between two lines, one closed shape per unbroken run (so gaps never draw stray diagonals)
+  const area = (a, b) => {
+    let d = "", top = [], bot = [];
+    const flush = () => { if (top.length > 1) d += "M" + [...top, ...bot.reverse()].map((p) => p[0].toFixed(1) + " " + p[1].toFixed(1)).join("L") + "Z"; top = []; bot = []; };
+    (a || []).forEach((v, i) => { if (v != null && b?.[i] != null) { top.push([X(i), Y(v)]); bot.push([X(i), Y(b[i])]); } else flush(); });
+    flush(); return d;
+  };
+  for (const [, o] of overs) {
+    if (o.fill) body += `<path d="${area(ov[o.fill[0]], ov[o.fill[1]])}" class="ofill" style="fill:${o.lines[0][1]}"/>`;
+    if (o.cloud) { // green where span A is above span B, red where below
+      const a = ov[o.cloud[0]] || [], b = ov[o.cloud[1]] || [];
+      body += `<path d="${area(a.map((x, i) => (x != null && b[i] != null && x >= b[i] ? x : null)), b.map((x, i) => (x != null && a[i] != null && a[i] >= x ? x : null)))}" class="ocloud u"/>`;
+      body += `<path d="${area(b.map((x, i) => (x != null && a[i] != null && x > a[i] ? x : null)), a.map((x, i) => (x != null && b[i] != null && b[i] > x ? x : null)))}" class="ocloud d"/>`;
+    }
+  }
   const type = opts.closeOnly && opts.type === "candles" ? "area" : opts.type;
   if (type === "candles") {
     win.forEach((b, i) => {
@@ -46,6 +66,17 @@ export function mainChart(win, ov, opts) {
     const d = path((ov[k] || []).map((v, i) => (v == null ? null : [X(i), Y(v)])));
     if (d) body += `<path d="${d}" class="ma draw" style="stroke:${MA_COLORS[j % 3]}" pathLength="1"/>`;
   });
+  // indicator lines and dots on top of the price
+  const legend = [];
+  for (const [code, o] of overs) {
+    for (const [k, col, dash] of o.lines || []) { const d = line(ov[k]); if (d) body += `<path d="${d}" class="oline${dash ? " dash" : ""}" style="stroke:${col}"/>`; }
+    if (o.dots) (ov[o.dots] || []).forEach((v, i) => { if (v != null) body += `<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="${Math.max(0.8, Math.min(1.8, step * 0.3)).toFixed(1)}" class="odot ${v < win[i].c ? "u" : "d"}"/>`; });
+    if (o.trend) { const t = ov[o.trend] || []; for (const up of [true, false]) body += `<path d="${path(t.map((v, i) => (v == null || (v < win[i].c) !== up ? null : [X(i), Y(v)])))}" class="oline trend ${up ? "u" : "d"}"/>`; }
+    const k0 = o.lines?.[1]?.[0] && o.fill ? o.lines[1][0] : o.lines?.[0]?.[0] || o.dots || o.trend, arr = ov[k0] || [];
+    let lv = null; for (let i = arr.length - 1; i >= 0 && lv == null; i--) lv = arr[i];
+    legend.push(`<span class="oli" data-learn-ov="${code}"><i style="background:${o.lines?.[0]?.[1] || (o.trend ? "var(--up)" : "var(--muted)")}"></i>${o.tag}${lv != null ? ` <b>${f(lv)}</b>` : ""}${opts.full ? `<button class="orm" data-rmstudy="${code}" aria-label="Remove ${o.name}">✕</button>` : ""}</span>`);
+  }
+  const legendHtml = legend.length ? `<div class="olegend">${legend.join("")}</div>` : "";
   // price labels as HTML so they keep their shape while the drawing stretches to fit the screen
   const ly = Y(last), top = (y) => ((y / H) * 100).toFixed(2) + "%";
   body += `<line x1="0" x2="${pw}" y1="${ly.toFixed(1)}" y2="${ly.toFixed(1)}" class="lastline"/>`;
@@ -64,7 +95,7 @@ export function mainChart(win, ov, opts) {
     `<span class="axlast ${up ? "pu" : "pd"}" style="top:${top(ly)}">${f(last)}</span>`;
   const gridLabels = opts.full ? gl.filter((g) => Math.abs(PT + g * (H - PT - PB) - ly) > 9).map((g) => `<span class="ax gl" style="top:${top(PT + g * (H - PT - PB))}">${f(hi - g * (hi - lo))}</span>`).join("") : "";
   if (sh || opts.count) body = `<clipPath id="pclip"><rect x="0" y="0" width="${pw}" height="${H}"/></clipPath><g clip-path="url(#pclip)">${body}</g>`;
-  return `<div class="plot"><svg class="chart" data-lo="${lo}" data-hi="${hi}" data-step="${step}" data-shift="${sh}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${n} ${opts.interval === "1W" ? "weeks" : "days"}, ${up ? "up" : "down"} ${Math.abs(((last - first) / first) * 100).toFixed(1)}%, last ${f(last)}, from ${win[0].t} to ${win[n - 1].t}">${body}</svg>${labels}${gridLabels}${lvHtml}</div>${xaxis}`;
+  return `<div class="plot"><svg class="chart" data-lo="${lo}" data-hi="${hi}" data-step="${step}" data-shift="${sh}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${n} ${opts.interval === "1W" ? "weeks" : "days"}, ${up ? "up" : "down"} ${Math.abs(((last - first) / first) * 100).toFixed(1)}%, last ${f(last)}, from ${win[0].t} to ${win[n - 1].t}">${body}</svg>${labels}${gridLabels}${lvHtml}${legendHtml}</div>${xaxis}`;
 }
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -100,41 +131,52 @@ export function timeTicks(win, days) {
 
 // Lower panel: RSI with 30/70 lines, MACD histogram + lines, or volume bars.
 export function lowerChart(win, s, kind, opts = {}) {
-  const n = win.length, pw = W - PR, step = pw / (opts.count || n), sh = opts.shift || 0, X = (i) => (i - sh) * step + step / 2;
-  if (!n || kind === "none") return "";
+  const P = PANELS[kind], n = win.length;
+  if (!n || !P) return "";
+  const pw = W - PR, step = pw / (opts.count || n), sh = opts.shift || 0, X = (i) => (i - sh) * step + step / 2;
   const full = !!opts.full, LHf = full ? 96 : LH;
   const at = (y) => ((y / LHf) * 100).toFixed(1) + "%", hline = (y, cls = "ref") => `<line x1="0" x2="${pw}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" class="${cls}"/>`;
-  let body = "", label = "", axes = "";
-  // the full-screen chart lines its panels up with the price chart's dates
+  let body = "", axes = "";
   if (full) for (const t of timeTicks(win, opts.days || 91)) body += `<line x1="${X(t.i).toFixed(1)}" x2="${X(t.i).toFixed(1)}" y1="0" y2="${LHf}" class="grid vgrid"/>`;
-  if (kind === "RSI") {
-    const Y = (v) => 4 + (1 - v / 100) * (LHf - 8);
-    if (full) { body += `<rect x="0" width="${pw}" y="${Y(70).toFixed(1)}" height="${(Y(30) - Y(70)).toFixed(1)}" class="band"/>`; for (const g of [10, 20, 40, 60, 80, 90]) body += hline(Y(g), "grid"); body += hline(Y(50), "grid mid"); }
-    body += hline(Y(70)) + hline(Y(30));
-    body += `<path d="${path(s.rsi14.map((v, i) => (v == null ? null : [X(i), Y(v)])))}" class="rsi${full ? "" : " draw"}" pathLength="1"/>`;
-    const lv = s.rsi14[n - 1];
-    label = `RSI 14 <b>${lv == null ? "–" : lv.toFixed(1)}</b>${full ? ` <i>${lv == null ? "" : lv >= 70 ? "above 70" : lv <= 30 ? "below 30" : "between 30 and 70"}</i>` : ""}`;
-    axes = (full ? [70, 50, 30] : [70, 30]).map((g) => `<span class="ax" style="top:${at(Y(g))}">${g}</span>`).join("");
-  } else if (kind === "MACD") {
-    const all = [...s.macdHist, ...s.macd, ...s.macdSignal].filter((x) => x != null);
-    const m = Math.max(...all.map(Math.abs)) || 1, Y = (v) => LHf / 2 - (v / m) * (LHf / 2 - 4);
-    if (full) { body += hline(Y(0), "grid mid"); for (const g of [0.5, -0.5]) body += hline(Y(g * m), "grid"); }
-    s.macdHist.forEach((v, i) => { if (v != null) body += `<rect x="${(X(i) - step * 0.3).toFixed(1)}" y="${Math.min(Y(v), Y(0)).toFixed(1)}" width="${(step * 0.6).toFixed(1)}" height="${Math.abs(Y(v) - Y(0)).toFixed(1)}" class="${v >= 0 ? "cu" : "cd"} soft"/>`; });
-    body += `<path d="${path(s.macd.map((v, i) => (v == null ? null : [X(i), Y(v)])))}" class="macd"/><path d="${path(s.macdSignal.map((v, i) => (v == null ? null : [X(i), Y(v)])))}" class="sig"/>`;
-    const h = s.macdHist[n - 1];
-    label = `MACD hist <b>${h == null ? "–" : f(h)}</b>${full ? ` <i><em class="kmacd"></em>MACD <em class="ksig"></em>signal</i>` : ""}`;
-    if (full) axes = [[m * 0.5, f(m * 0.5)], [0, "0"], [-m * 0.5, f(-m * 0.5)]].map(([v, t]) => `<span class="ax" style="top:${at(Y(v))}">${t}</span>`).join("");
-  } else if (kind === "VOL") {
+  let label = P.label, now = null;
+  if (P.vol) {
     const m = Math.max(...win.map((b) => b.v || 0)) || 1;
     if (full) for (const g of [0.25, 0.5, 0.75]) body += hline(LHf - g * (LHf - 6), "grid");
     win.forEach((b, i) => (body += `<rect x="${(X(i) - step * 0.3).toFixed(1)}" y="${(LHf - ((b.v || 0) / m) * (LHf - 6)).toFixed(1)}" width="${(step * 0.6).toFixed(1)}" height="${(((b.v || 0) / m) * (LHf - 6)).toFixed(1)}" class="${b.c >= b.o ? "cu" : "cd"} soft"/>`));
-    const r = s.volRatio[n - 1];
+    const r = s.volRatio?.[n - 1];
     label = `Volume <b>${r == null ? "–" : r.toFixed(1) + "x"}</b> usual`;
     if (full) axes = `<span class="ax" style="top:${at(6)}">${f(m)}</span><span class="ax" style="top:${at(LHf / 2 + 3)}">${f(m / 2)}</span>`;
+  } else {
+    // scale: a fixed range (RSI 0–100), or fitted to what's on screen, centred on zero for oscillators
+    const keys = [...(P.lines || []).map((l) => l[0]), P.hist].filter(Boolean), vals = [];
+    for (const k of keys) (s[k] || []).forEach((x) => x != null && isFinite(x) && vals.push(x));
+    if (!vals.length) return `<div class="lower${full ? " lfull" : ""}" data-learn="${kind}" role="button"><span class="lower-label">${esc(P.label)} <b>–</b></span><div class="lplot"><p class="lnone">Not enough history in this view.</p></div>${full ? rm(kind) : ""}</div>`;
+    let lo = P.range?.[0] ?? Math.min(...vals), hi = P.range?.[1] ?? Math.max(...vals);
+    if (P.sym) { const m = Math.max(Math.abs(lo), Math.abs(hi)) || 1; lo = -m; hi = m; }
+    for (const r of P.refs || []) if (P.range?.[1] == null) { hi = Math.max(hi, r); lo = Math.min(lo, r); }
+    if (P.zero && !P.sym) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+    if (hi === lo) { hi += 1; lo -= 1; }
+    const Y = (v) => 4 + (1 - (v - lo) / (hi - lo)) * (LHf - 8);
+    if (full && P.band) body += `<rect x="0" width="${pw}" y="${Y(P.band[1]).toFixed(1)}" height="${(Y(P.band[0]) - Y(P.band[1])).toFixed(1)}" class="band"/>`;
+    if (full) for (let g = 1; g < 4; g++) body += hline(4 + (g / 4) * (LHf - 8), "grid");
+    if (P.zero && lo < 0 && hi > 0) body += hline(Y(0), "grid mid");
+    for (const r of P.refs || []) body += hline(Y(r));
+    if (P.hist) (s[P.hist] || []).forEach((v, i) => { if (v != null) body += `<rect x="${(X(i) - step * 0.3).toFixed(1)}" y="${Math.min(Y(v), Y(0)).toFixed(1)}" width="${(step * 0.6).toFixed(1)}" height="${Math.abs(Y(v) - Y(0)).toFixed(1)}" class="${v >= 0 ? "cu" : "cd"} soft"/>`; });
+    for (const [k, col] of P.lines || []) body += `<path d="${path((s[k] || []).map((v, i) => (v == null ? null : [X(i), Y(v)])))}" class="pl${full ? "" : " draw"}" style="stroke:${col}" pathLength="1"/>`;
+    const k0 = P.hist || P.lines[0][0], arr = s[k0] || [];
+    for (let i = arr.length - 1; i >= 0 && now == null; i--) now = arr[i];
+    label = `${esc(P.label)} <b>${now == null ? "–" : nf(now)}</b>`;
+    if (full && (P.lines || []).length > 1) label += ` <i>${P.lines.map(([k, col]) => `<em style="background:${col}"></em>${esc(LEG[k] || k)}`).join(" ")}</i>`;
+    const ticks = full ? [...new Set([...(P.refs || []), ...(P.zero && lo < 0 && hi > 0 ? [0] : []), ...(P.range?.[1] != null && P.band ? [(P.range[0] + P.range[1]) / 2] : []), ...(P.refs?.length ? [] : [hi, lo].map((x) => +f(x)))])] : (P.refs || []);
+    axes = ticks.map((g) => `<span class="ax" style="top:${at(Y(g))}">${Number.isInteger(g) ? g : nf(g)}</span>`).join("");
   }
   if (sh || opts.count) body = `<clipPath id="lclip"><rect x="0" y="0" width="${pw}" height="${LHf}"/></clipPath><g clip-path="url(#lclip)">${body}</g>`;
-  return `<div class="lower${full ? " lfull" : ""}" data-learn="${kind}" role="button" aria-label="What ${kind === "VOL" ? "volume" : kind} shows"><span class="lower-label">${label}</span><div class="lplot">${axes}<svg class="chart" viewBox="0 0 ${W} ${LHf}" preserveAspectRatio="none" aria-hidden="true">${body}</svg></div></div>`;
+  return `<div class="lower${full ? " lfull" : ""}" data-learn="${kind}" role="button" aria-label="What ${esc(P.name)} shows"><span class="lower-label">${label}</span><div class="lplot">${axes}<svg class="chart" viewBox="0 0 ${W} ${LHf}" preserveAspectRatio="none" aria-hidden="true">${body}</svg></div>${full ? rm(kind) : ""}</div>`;
 }
+const nf = (x) => (Math.abs(x) >= 1000 ? f(x) : Math.abs(x) >= 10 ? x.toFixed(1) : Math.abs(x) >= 0.1 ? x.toFixed(2) : x.toPrecision(2));
+const LEG = { macd: "MACD", macdSignal: "signal", stochK: "%K", stochD: "%D", adx14: "ADX", plusDI: "+DI", minusDI: "−DI", aroonUp: "up", aroonDown: "down" };
+const rm = (k) => `<button class="orm lrm" data-rmstudy="${k}" aria-label="Remove ${esc(PANELS[k]?.name || k)}">✕</button>`;
+const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 export function sparkline(vals, w = 80, h = 28) {
   if (!vals?.length) return "";

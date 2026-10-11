@@ -3,7 +3,7 @@ import { CONFIG } from "../config.js";
 import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
   markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList,
   enablePush, signOutDevice, deleteAccount } from "./store.js";
-import { loadSymbols, searchSymbols, searchIndicators, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
+import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
 import { D, view, storiesFor, RANGE_LABEL, resolveInterval } from "./data.js";
@@ -11,7 +11,6 @@ import { $, esc, money, pct, arrow, fmtDay, ago, toast, openSheet, setSheetBody,
 import { startTour, resetTours } from "./coach.js";
 import { APP, buildFeed, showTab, currentSyms, listName, applyTheme, doRefresh } from "./app.js";
 
-const MAX_ACTIVE = 6;
 const symDoc = (r) => ({ key: r.key, t: r.t, n: r.n, m: r.m, ty: r.ty });
 const indById = (id) => [...APP.catalogue, ...(store.data?.customIndicators || [])].find((x) => x.id === id);
 
@@ -181,7 +180,7 @@ const ICON = {
   tour: '<path d="M5 3l14 9-14 9z"/>', legal: '<path d="M7 3h8l4 4v14H7zM15 3v4h4M10 12h6M10 16h6"/>',
 };
 const GROUPS = [
-  ["Charts & learning", [["chart", "Chart style", "Time range, candles, panels, lines"], ["indicators", "Indicators", "What the readings show"]]],
+  ["Charts & learning", [["chart", "Chart style", "Time range, candles and lines"]]],
   ["Alerts", [["rules", "Alert rules", "Get told when your levels are hit"], ["alerts", "Alerts", "Everything that has fired"]]],
   ["Sharing", [["lists", "Shared lists", "Follow a list with friends"]]],
   ["Account & privacy", [["account", "Account", "Recovery code, devices, delete"], ["appearance", "Appearance", "Dark, light or match phone"]]],
@@ -210,7 +209,7 @@ export function renderProfile(sub, arg) {
     }));
     return;
   }
-  const fn = { watchlists: pWatchlists, chart: pChart, indicators: pIndicators, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal }[sub];
+  const fn = { watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal }[sub];
   fn(el, back, arg);
   el.querySelector("#pBack").onclick = () => renderProfile();
   el.parentElement.scrollTop = 0;
@@ -260,30 +259,23 @@ const RANGE_OPTS = [["1M", "1M"], ["3M", "3M"], ["6M", "6M"], ["1Y", "1Y"], ["2Y
 const CANDLE_OPTS = [["auto", "Auto"], ["1D", "Daily"], ["1W", "Weekly"]];
 const TYPE_OPTS = [["candles", "Candles"], ["line", "Line"], ["area", "Area"]];
 const LEVEL_OPTS = [["off", "Off"], ["sr", "Support & resistance"], ["pivots", "Pivot points"]];
-const LOWER_OPTS = [["RSI,MACD", "RSI + MACD"], ["RSI", "RSI"], ["MACD", "MACD"], ["VOL", "Volume"], ["none", "None"]];
 function chartOptsHtml(c) {
   const opt = (key, vals) => `<div class="opts">${vals.map(([v, l]) => `<button class="opt" data-k="${key}" data-v="${v}" aria-pressed="${String(c[key]) === String(v)}">${l}</button>`).join("")}</div>`;
   const iv = resolveInterval(c);
   return `<h2>Time range</h2>${opt("range", RANGE_OPTS)}<p class="hint">${esc(RANGE_LABEL[c.range] || "")} of ${iv === "1W" ? "weekly" : "daily"} candles. Each ${iv === "1W" ? "candle is one week" : "candle is one day"}.</p>
     <h2>Candle size</h2>${opt("interval", CANDLE_OPTS)}<p class="hint">Auto uses daily candles up to 6 months and weekly candles for 1 and 2 years, so the chart never gets crowded.</p>
     <h2>Chart type</h2>${opt("type", TYPE_OPTS)}
-    <h2>Panels under the chart</h2>${opt("lower", LOWER_OPTS)}
+    <p class="hint" style="margin-top:14px">Indicators (RSI, MACD, Bollinger Bands and more) are added from the full-screen chart: tap ⤢ on any chart, then Indicators.</p>
     <h2>Lines on the chart</h2>${opt("levels", LEVEL_OPTS)}<p class="hint">Support & resistance: prices where the chart turned at least twice. Pivot points: levels worked out from the previous month (or year). Both describe the past, not the future.</p>`;
 }
 function pChart(el, back) {
   const c = chartSettings(), custom = Object.keys(store.data.settings?.chartBy || {});
   el.innerHTML = `${back}<h1>Chart style</h1><p class="hint">Your default for every coin. To change one coin, tap the time chip on its card in the feed.</p>
     ${chartOptsHtml(c)}
-    <h2>Moving averages</h2><div class="opts">${[["sma20", "SMA 20"], ["sma50", "SMA 50"], ["sma200", "SMA 200"], ["ema20", "EMA 20"], ["ema50", "EMA 50"]].map(([v, l]) => `<button class="opt" data-ma="${v}" aria-pressed="${(c.mas || []).includes(v)}">${l}</button>`).join("")}</div><p class="hint">Up to 3.</p>
     ${custom.length ? `<h2>Coins with their own chart</h2><p>${custom.map((k) => `<span class="pill">${esc(k.split(":")[1])}</span>`).join(" ")} <button class="btn ghost sm" id="cReset">Reset all to default</button></p>` : ""}`;
   const re = () => { pChart(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
   const set = async ({ _pick, ...patch }) => { await save({ settings: { ...store.data.settings, ...(_pick ? { levelsPick: patch.levels } : {}), chart: { ...store.data.settings.chart, ...patch } } }); APP.needsRebuild = true; re(); };
   el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => set(b.dataset.k === "levels" && b.dataset.v !== "off" ? { levels: b.dataset.v, _pick: 1 } : { [b.dataset.k]: b.dataset.v })));
-  el.querySelectorAll("[data-ma]").forEach((b) => (b.onclick = () => {
-    const m = new Set(c.mas || []);
-    if (m.has(b.dataset.ma)) m.delete(b.dataset.ma); else { if (m.size >= 3) return toast("Up to 3 averages keep charts readable."); m.add(b.dataset.ma); }
-    set({ mas: [...m] });
-  }));
   el.querySelector("#cReset")?.addEventListener("click", async () => { await save({ settings: { ...store.data.settings, chartBy: {} } }); APP.needsRebuild = true; re(); });
 }
 
@@ -317,31 +309,6 @@ async function applyChart(sym, scope, w, patch) {
   await save({ settings: { ...st, chartBy: by } });
 }
 
-function pIndicators(el, back) {
-  const ind = store.data.indicators || { added: [], active: [] }, active = new Set(ind.active);
-  const added = ind.added.map(indById).filter(Boolean), term = APP.indQ || "";
-  const pool = [...APP.catalogue, ...(store.data.customIndicators || [])].filter((c) => !ind.added.includes(c.id));
-  const found = term ? searchIndicators(pool, term).slice(0, 8) : [];
-  el.innerHTML = `${back}<h1>Indicators</h1><p class="hint">Switch on up to ${MAX_ACTIVE}; they appear as readings in every card's details. Tap a name to learn what it measures.</p>
-    <div class="list">${added.map((i) => `<div class="row"><button class="main" data-info="${esc(i.id)}" style="background:none;border:0;text-align:left;color:var(--text);cursor:pointer"><span class="t">${esc(i.name)}${i.custom ? ` <span class="pill single">Not yet reviewed</span>` : ""}</span><span class="s" style="white-space:normal">${esc(i.short || "")}</span></button>
-      ${i.note ? "" : `<label class="switch"><input type="checkbox" data-act="${esc(i.id)}" ${active.has(i.id) ? "checked" : ""} aria-label="Show ${esc(i.name)}"><span></span></label>`}</div>`).join("")}</div>
-    <h2>Add an indicator</h2><input class="input" id="indQ" value="${esc(term)}" placeholder="e.g. stochastic, vwap, ichimoku" autocomplete="off">
-    <div style="margin-top:8px">${term ? (found.length ? `<div class="list">${found.map((i) => `<div class="row"><span class="main"><span class="t">${esc(i.name)}</span><span class="s" style="white-space:normal">${esc(i.note || i.category)}</span></span>${i.note ? `<button class="btn sm ghost" data-info="${esc(i.id)}">Learn</button>` : `<button class="btn sm primary" data-add="${esc(i.id)}">Add</button>`}</div>`).join("")}</div>` : `<p class="hint" style="margin-top:8px">No indicator matches “${esc(term)}”. Try another name, like “rsi” or “bollinger”.</p>`) : ""}</div>`;
-  const re = () => { pIndicators(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
-  const inp = el.querySelector("#indQ");
-  inp.oninput = () => { APP.indQ = inp.value; const p = inp.selectionStart; re(); const n = el.querySelector("#indQ"); n.focus(); n.setSelectionRange(p, p); };
-  el.querySelectorAll("[data-act]").forEach((c) => (c.onchange = async () => {
-    const on = new Set(store.data.indicators.active);
-    if (c.checked) { if (on.size >= MAX_ACTIVE) { c.checked = false; return toast(`Up to ${MAX_ACTIVE} at a time.`); } on.add(c.dataset.act); } else on.delete(c.dataset.act);
-    await save({ indicators: { ...store.data.indicators, active: [...on] } }); APP.needsRebuild = true;
-  }));
-  el.querySelectorAll("[data-info]").forEach((b) => (b.onclick = () => openIndicator(b.dataset.info)));
-  el.querySelectorAll("[data-add]").forEach((b) => (b.onclick = async () => {
-    const on = new Set(ind.active), fits = on.size < MAX_ACTIVE; if (fits) on.add(b.dataset.add);
-    APP.indQ = ""; await save({ indicators: { added: [...ind.added, b.dataset.add], active: [...on] } }); APP.needsRebuild = true; re();
-    toast(fits ? "Added. Its reading is in every coin's details: swipe left on a card." : `Added, but switched off: up to ${MAX_ACTIVE} can be on at once.`);
-  }));
-}
 export async function openIndicator(id) {
   const i = indById(id); if (!i) return;
   const ex = i.explainer;

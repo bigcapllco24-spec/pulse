@@ -158,7 +158,7 @@ function extraSeries(bars, c, v) {
   const R = {};
   // volume flow
   const obv = [0]; for (let i = 1; i < n; i++) obv.push(obv[i - 1] + (c[i] > c[i - 1] ? v[i] : c[i] < c[i - 1] ? -v[i] : 0));
-  R.obvFlow20 = flowShare(obv, v, 20);
+  R.obv = obv; R.obvFlow20 = flowShare(obv, v, 20);
   const mfm = bars.map((b) => (b.h === b.l ? 0 : ((b.c - b.l) - (b.h - b.c)) / (b.h - b.l))), mfv = mfm.map((m, i) => m * v[i]);
   const ad = []; mfv.forEach((x, i) => ad.push((ad[i - 1] || 0) + x));
   R.adFlow20 = flowShare(ad, v, 20);
@@ -180,17 +180,24 @@ function extraSeries(bars, c, v) {
   const rc = (k) => c.map((x, i) => (i < k ? null : ((x - c[i - k]) / c[i - k]) * 100)), sm = (a, k) => a.map((_, i) => { if (i < k - 1 || a.slice(i - k + 1, i + 1).some((x) => x == null)) return null; return a.slice(i - k + 1, i + 1).reduce((s, x) => s + x, 0) / k; });
   const k1 = sm(rc(10), 10), k2 = sm(rc(15), 10), k3 = sm(rc(20), 10), k4 = sm(rc(30), 15);
   R.kst = c.map((_, i) => (k4[i] == null ? null : k1[i] + 2 * k2[i] + 3 * k3[i] + 4 * k4[i]));
+  const sk = stochK(bars, 14); R.stochD = sk.map((_, i) => (i < 15 || sk.slice(i - 2, i + 1).some((x) => x == null) ? null : (sk[i] + sk[i - 1] + sk[i - 2]) / 3));
+  const a14 = atr(bars, 14); R.atrPctS = a14.map((x, i) => (x == null ? null : (x / c[i]) * 100));
+  { const pl = [null], mi = [null]; for (let i = 1; i < n; i++) { const up = h[i] - h[i - 1], dn = l[i - 1] - l[i]; pl.push(up > dn && up > 0 ? up : 0); mi.push(dn > up && dn > 0 ? dn : 0); }
+    const tr0 = trueRange(bars); tr0[0] = null; const str = wilder(tr0, 14), sp = wilder(pl, 14), sm2 = wilder(mi, 14);
+    R.plusDI = str.map((t, i) => (t ? (100 * sp[i]) / t : null)); R.minusDI = str.map((t, i) => (t ? (100 * sm2[i]) / t : null)); }
   // trend
   const e20 = ema(c, 20), d20 = emaL(e20, 20), t20 = emaL(d20, 20);
   R.demaDist = distPct(c, e20.map((x, i) => (d20[i] == null ? null : 2 * x - d20[i])));
   R.temaDist = distPct(c, e20.map((x, i) => (t20[i] == null ? null : 3 * x - 3 * d20[i] + t20[i])));
   const w10 = wma(c, 10), w20 = wma(c, 20);
   R.hmaDist = distPct(c, wma(c.map((_, i) => (w20[i] == null ? null : 2 * w10[i] - w20[i])), 4));
-  R.sarDist = distPct(c, psar(bars));
-  R.stDist = distPct(c, supertrend(bars));
+  R.psar = psar(bars); R.sarDist = distPct(c, R.psar);
+  R.stLine = supertrend(bars); R.stDist = distPct(c, R.stLine);
   const hh25 = rollingExtreme(h, 26, Math.max), ll25 = rollingExtreme(l, 26, Math.min);
   const since = (arr, i, x) => { for (let j = i; j >= i - 25; j--) if (arr[j] === x) return i - j; return 25; };
-  R.aroonOsc = c.map((_, i) => (hh25[i] == null ? null : (100 * (25 - since(h, i, hh25[i]))) / 25 - (100 * (25 - since(l, i, ll25[i]))) / 25));
+  R.aroonUp = c.map((_, i) => (hh25[i] == null ? null : (100 * (25 - since(h, i, hh25[i]))) / 25));
+  R.aroonDown = c.map((_, i) => (ll25[i] == null ? null : (100 * (25 - since(l, i, ll25[i]))) / 25));
+  R.aroonOsc = c.map((_, i) => (R.aroonUp[i] == null ? null : R.aroonUp[i] - R.aroonDown[i]));
   const trv = trueRange(bars);
   R.vortex = c.map((_, i) => { if (i < 14) return null; let vp = 0, vm = 0, t = 0; for (let j = i - 13; j <= i; j++) { vp += Math.abs(h[j] - l[j - 1]); vm += Math.abs(l[j] - h[j - 1]); t += trv[j]; } return t ? (vp - vm) / t : null; });
   const e13 = ema(c, 13);
@@ -199,6 +206,9 @@ function extraSeries(bars, c, v) {
   // Ichimoku: today's cloud was drawn 26 days ago from the 9/26 and 52-day midpoints
   const mid = (k) => { const hi = rollingExtreme(h, k, Math.max), lo = rollingExtreme(l, k, Math.min); return hi.map((x, i) => (x == null ? null : (x + lo[i]) / 2)); };
   const ten = mid(9), kij = mid(26), sb = mid(52);
+  R.tenkan = ten; R.kijun = kij;
+  R.spanA = c.map((_, i) => { const j = i - 26; return j < 0 || ten[j] == null || kij[j] == null ? null : (ten[j] + kij[j]) / 2; });
+  R.spanB = c.map((_, i) => (i - 26 < 0 ? null : sb[i - 26]));
   R.ichiCloud = c.map((x, i) => {
     const j = i - 26; if (j < 0 || kij[j] == null || sb[j] == null) return null;
     const a = (ten[j] + kij[j]) / 2, top = Math.max(a, sb[j]), bot = Math.min(a, sb[j]);
@@ -206,12 +216,22 @@ function extraSeries(bars, c, v) {
   });
   // channels and volatility
   const a10 = atr(bars, 10), k20 = ema(c, 20);
+  R.kcMid = k20; R.kcUp = k20.map((m, i) => (m == null || a10[i] == null ? null : m + 2 * a10[i])); R.kcLow = k20.map((m, i) => (m == null || a10[i] == null ? null : m - 2 * a10[i]));
   R.keltPos = c.map((x, i) => (a10[i] == null || k20[i] == null ? null : ((x - (k20[i] - 2 * a10[i])) / (4 * a10[i])) * 100));
   const dh = rollingExtreme(h, 20, Math.max), dl = rollingExtreme(l, 20, Math.min);
+  R.dcUp = dh; R.dcLow = dl; R.dcMid = dh.map((x, i) => (x == null ? null : (x + dl[i]) / 2));
   R.donPos = c.map((x, i) => (dh[i] == null ? null : dh[i] === dl[i] ? 50 : ((x - dl[i]) / (dh[i] - dl[i])) * 100));
   const lr = c.map((x, i) => (i === 0 ? null : Math.log(x / c[i - 1])));
   R.hv20 = c.map((_, i) => { if (i < 20) return null; const w = lr.slice(i - 19, i + 1), m = w.reduce((s, x) => s + x, 0) / 20; return Math.sqrt(w.reduce((s, x) => s + (x - m) ** 2, 0) / 19) * Math.sqrt(365) * 100; });
   return R;
+}
+
+// Every extra per-candle line, for drawing indicators on charts. Cached per bars array.
+const extCache = new WeakMap();
+export function extendedSeries(bars) {
+  let r = extCache.get(bars);
+  if (!r) extCache.set(bars, (r = extraSeries(bars, bars.map((b) => b.c), bars.map((b) => b.v || 0))));
+  return r;
 }
 
 // Every reading the app can show or alert on. key → {label, unit, digits}.

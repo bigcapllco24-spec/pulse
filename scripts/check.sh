@@ -9,7 +9,7 @@ status=0
 run() { "$@" || status=1; }
 
 if [[ $only == all || $only == syntax ]]; then
-  bad=0; for f in web/js/*.js web/*.js pipeline/*.mjs pipeline/lib/*.mjs; do node --check "$f" 2>/dev/null || { echo "FAIL syntax: $f"; bad=1; }; done
+  bad=0; tmpd=$(mktemp -d); for f in web/js/*.js web/*.js pipeline/*.mjs pipeline/lib/*.mjs; do cp "$f" "$tmpd/x.mjs"; node --check "$tmpd/x.mjs" 2>/dev/null || { echo "FAIL syntax: $f"; bad=1; }; done
   [[ $bad == 0 ]] && echo "syntax: all files parse" || status=1
 fi
 [[ $only == all || $only == pipeline ]] && run node tests/pipeline.test.mjs

@@ -224,19 +224,20 @@ def phone_tests(b):
     check("phone: tapping the RSI panel explains it with today's reading", "RSI" in sheet and "right now" in sheet.lower() and "how to read" in sheet.lower(), sheet[:120].replace("\n", " "))
     p.click("#sheet [data-close]"); p.wait_for_timeout(500)
     # every panel that can be under the chart: tap it, then "Open the full guide" — the guide must stay open
-    p.evaluate("(()=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.settings.chart={...a.settings.chart, lower:'RSI,MACD,VOL'}; localStorage.setItem('pl.demoAccount', JSON.stringify(a))})()")
-    p.reload(); p.wait_for_timeout(2500)
-    p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
     guide_ok, guide_detail = True, []
-    for kind in ["RSI", "MACD", "VOL"]:
-        p.click(f".card.active .lower[data-learn={kind}]"); p.wait_for_timeout(500)
-        first = p.inner_text("#sheet .sh-head") if p.is_visible("#sheet") else ""
-        p.click("#sheet [data-guide]"); p.wait_for_timeout(1000)
-        after = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
-        ok = bool(first) and len(after) > 40
-        guide_ok &= ok; guide_detail.append(f"{kind}: {'stays open' if ok else 'CLOSED'}")
-        p.click("#sheet [data-close]"); p.wait_for_timeout(500)
-    check("phone: RSI, MACD and volume panels open their guide and it stays on screen", guide_ok, "; ".join(guide_detail))
+    for combo in ["RSI,MACD", "VOL,ADX"]:  # the feed shows two panels at a time
+        p.evaluate("(c)=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.settings.chart={...a.settings.chart, lower:c}; localStorage.setItem('pl.demoAccount', JSON.stringify(a))}", combo)
+        p.reload(); p.wait_for_timeout(2500)
+        p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
+        for kind in combo.split(","):
+            p.click(f".card.active .lower[data-learn={kind}]"); p.wait_for_timeout(500)
+            first = p.inner_text("#sheet .sh-head") if p.is_visible("#sheet") else ""
+            p.click("#sheet [data-guide]"); p.wait_for_timeout(1000)
+            after = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+            ok = bool(first) and len(after) > 40
+            guide_ok &= ok; guide_detail.append(f"{kind}: {'stays open' if ok else 'CLOSED'}")
+            p.click("#sheet [data-close]"); p.wait_for_timeout(500)
+    check("phone: RSI, MACD, volume and ADX panels open their guide and it stays on screen", guide_ok, "; ".join(guide_detail))
     p.evaluate("(()=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.settings.chart={...a.settings.chart, lower:'RSI,MACD'}; localStorage.setItem('pl.demoAccount', JSON.stringify(a))})()")
     p.reload(); p.wait_for_timeout(2500)
     # quiz on the caught-up card
@@ -384,7 +385,7 @@ def phone_tests(b):
     # profile pages
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
     pages_ok, bad = True, []
-    for sub in ["chart", "indicators", "rules", "alerts", "lists", "account", "appearance", "legal"]:
+    for sub in ["chart", "rules", "alerts", "lists", "account", "appearance", "legal"]:
         p.click(f"[data-p={sub}]"); p.wait_for_timeout(350)
         h = p.inner_text("#profile h1")
         if not h: pages_ok = False; bad.append(sub)
@@ -393,24 +394,27 @@ def phone_tests(b):
 
     # chart style changes reach the feed
     p.click("[data-p=chart]"); p.wait_for_timeout(300)
-    p.click("[data-k=range][data-v='1M']"); p.click("[data-k=type][data-v=line]"); p.click("[data-k=lower][data-v=MACD]"); p.wait_for_timeout(300)
+    p.click("[data-k=range][data-v='1M']"); p.click("[data-k=type][data-v=line]"); p.wait_for_timeout(300)
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(1200)
     p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
     line = p.locator(".card.active .chartbox .pline").count(); low = p.inner_text(".card.active .lower-label")
     tf = p.inner_text(".card.active [data-tf]").replace("\n", " ")
-    check("phone: chart style (1 month, line, MACD) applies to cards", line == 1 and "MACD" in low and tf.startswith("1M"), f"line={line} / {low} / {tf}")
+    check("phone: chart style (1 month, line) applies to cards", line == 1 and "RSI" in low and tf.startswith("1M"), f"line={line} / {low} / {tf}")
 
-    # indicator switch reaches details
-    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(300); p.click("#pBack") if p.locator("#pBack").count() else None
-    p.click("[data-p=indicators]"); p.wait_for_timeout(300)
-    p.locator("[data-act=bb]").check(); p.wait_for_timeout(300)
-    p.fill("#indQ", "money flow"); p.wait_for_timeout(300); p.click("[data-add=mfi]"); p.wait_for_timeout(400)
-    p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(1200)
-    p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
+    # indicators are added and removed on the full-screen chart, and reach the feed and the details
+    p.click(".card.active [data-full]"); p.wait_for_timeout(1200)
+    p.click("#full [data-find]"); p.wait_for_timeout(400)
+    p.click("#sheet [data-stog=BB]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=MACD]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=STOCH]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=MFI]"); p.wait_for_timeout(200)
+    p.click("#sheet [data-close]"); p.wait_for_timeout(600)
+    fi = p.evaluate("""(()=>{const f=document.getElementById('full'); return {leg: f.querySelector('.olegend')?.innerText||'', fill: f.querySelectorAll('.chartbox .ofill').length, panels: [...f.querySelectorAll('.flowers .lower')].map(l=>l.dataset.learn).join(','), btn: f.querySelector('[data-find]').innerText}})()""")
+    check("phone: full-screen Indicators adds Bollinger Bands to the price chart and swaps MACD for Stochastic and MFI", "BB" in fi["leg"] and fi["fill"] == 1 and fi["panels"] == "RSI,STOCH,MFI" and "4" in fi["btn"], str(fi))
+    p.click("#full .flowers [data-rmstudy=MFI]"); p.wait_for_timeout(300)
+    fp = p.evaluate("[...document.querySelectorAll('#full .flowers .lower')].map(l=>l.dataset.learn).join(',')")
+    check("phone: ✕ on a panel removes that indicator", fp == "RSI,STOCH", fp)
+    p.click("#full [data-fclose]"); p.wait_for_timeout(900)
+    fd = p.evaluate("""(()=>{const c=document.querySelector('.card.active'); return {leg: c.querySelector('.olegend')?.innerText||'', panels: [...c.querySelectorAll('.lower')].map(l=>l.dataset.learn).join(',')}})()""")
     left(); txt = p.inner_text(".card.active [data-pane=details]")
-    check("phone: switching on Bollinger %B adds it to details", "Bollinger" in txt)
-    mfi = p.evaluate("""[...document.querySelectorAll('.card.active .reading')].map(r => r.innerText).find(t => t.includes('Money Flow')) || ''""")
-    check("phone: a newly added indicator (Money Flow Index) shows a reading in details", "Money Flow" in mfi and "weighted" in mfi, mfi)
+    check("phone: the feed card shows the same indicators, and details read them in plain words", "BB" in fd["leg"] and fd["panels"] == "RSI,STOCH" and "Bollinger" in txt and "Stochastic" in txt, f"{fd} / {'Bollinger' in txt} {'Stochastic' in txt}")
     right()
 
     # rules make alerts (demo mode checks rules on the phone)

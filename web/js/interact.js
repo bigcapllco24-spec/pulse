@@ -2,7 +2,8 @@
 // learn what it shows, and a short quiz on the caught-up card. Facts and explanations only, never advice.
 import { store, save, ls } from "./store.js";
 import { describe } from "./describe.js";
-import { fmt } from "./indicators.js";
+import { fmt, METRICS } from "./indicators.js";
+import { PANELS, OVERLAYS } from "./studies.js";
 import { esc, money, pct, arrow, fmtDay, toast, openSheet, closeSheet, haptic, DISCLAIMER } from "./ui.js";
 import { APP } from "./app.js";
 import { openIndicator } from "./pages.js";
@@ -128,17 +129,20 @@ const LEARN = {
   PIV: { name: "Pivot points", how: "Worked out from the previous month's high, low and close (the previous year's on weekly charts): P = (high + low + close) ÷ 3, R1 = 2P − low, S1 = 2P − high, R2 = P + (high − low), S2 = P − (high − low). Many traders watch these levels, which is why they are shown. They are arithmetic, not a forecast." },
 };
 export function openLearn(kind, v) {
-  const L = LEARN[kind], ind = APP.catalogue.find((x) => x.id === L?.id);
+  const stu = PANELS[kind] || OVERLAYS[kind];
+  const L = LEARN[kind] || (stu && { id: stu.guide, metric: stu.metric, name: stu.name, how: stu.short }), ind = APP.catalogue.find((x) => x.id === L?.id);
   if (!L || !v) return;
   if (!L.metric) { // a line on the chart rather than a panel
-    openSheet(esc(L.name), `<h3>How to read the lines</h3><p>${esc(L.how)}</p><p class="disclaimer">${esc(DISCLAIMER)}</p>`);
+    openSheet(esc(L.name), `<h3>How to read the lines</h3><p>${esc(L.how)}</p>${L.id ? `<button class="btn block" data-guide="${esc(L.id)}">Open the full guide</button>` : ""}<p class="disclaimer">${esc(DISCLAIMER)}</p>`, (body) => {
+      const g = body.querySelector("[data-guide]"); if (g) g.onclick = () => { closeSheet(); openIndicator(L.id); };
+    });
     return;
   }
   const d = v.daily.now, val = d[L.metric];
-  openSheet(esc(ind?.name || kind), `
-    <div class="learnnow"><span class="label">Right now</span><b>${val == null ? "–" : fmt(val, L.metric === "macdHist" ? 2 : 1)}${L.metric === "volRatio" && val != null ? "x usual" : ""}</b><p>${esc(describe(L.metric, d, v.daily.prev))}</p></div>
+  openSheet(esc(stu?.name || ind?.name || kind), `
+    <div class="learnnow"><span class="label">Right now</span><b>${val == null ? "–" : fmt(val, L.metric === "macdHist" ? 2 : METRICS[L.metric]?.digits ?? 1)}${L.metric === "volRatio" && val != null ? "x usual" : METRICS[L.metric]?.unit && val != null ? METRICS[L.metric].unit : ""}</b><p>${esc(describe(L.metric, d, v.daily.prev))}</p></div>
     ${ind?.short ? `<h3>What it measures</h3><p>${esc(ind.short)}</p>` : ""}
-    <h3>How to read the panel</h3><p>${esc(L.how)}</p>
+    <h3>How to read ${OVERLAYS[kind] ? "the lines" : "the panel"}</h3><p>${esc(L.how)}</p>
     <button class="btn block" data-guide="${esc(L.id)}">Open the full guide</button>
     <p class="disclaimer">${esc(DISCLAIMER)}</p>`, (body) => {
     body.querySelector("[data-guide]").onclick = () => { closeSheet(); openIndicator(L.id); };
