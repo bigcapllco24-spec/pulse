@@ -1,4 +1,7 @@
 name: Data and deploy
+# Two paths:
+# - A code push publishes the app straight away (about a minute), reusing the prices and news already live.
+# - Every 2 hours (or when run by hand) the data job refreshes coin candles and news, checks rules, then publishes.
 on:
   push:
     branches: [main]
@@ -22,9 +25,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
+        if: github.event_name != 'push'
         with:
           node-version: 22
+      - name: Reuse the live prices and news (code push)
+        if: github.event_name == 'push'
+        run: |
+          base="${SITE_URL:-https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}}"
+          for f in candles.json news.json; do
+            curl -fsS --max-time 20 "$base/data/$f" -o "/tmp/$f" && node -e "JSON.parse(require('fs').readFileSync('/tmp/$f'))" && mv "/tmp/$f" "web/data/$f" \
+              || echo "Using the copy of $f in the repository"
+          done
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
       - name: Refresh data (coins, news) and check rules
+        if: github.event_name != 'push'
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           COINGECKO_DEMO_KEY: ${{ secrets.COINGECKO_DEMO_KEY }}
