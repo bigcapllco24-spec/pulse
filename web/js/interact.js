@@ -6,7 +6,6 @@ import { fmt, METRICS } from "./indicators.js";
 import { PANELS, OVERLAYS, valueAt, tagOf, panelFact } from "./studies.js";
 import { esc, money, pct, arrow, fmtDay, toast, openSheet, closeSheet, haptic, DISCLAIMER } from "./ui.js";
 import { APP } from "./app.js";
-import { openIndicator } from "./pages.js";
 import { coachEvent } from "./coach.js";
 
 // Chart geometry (must match chart.js): viewBox 360 x 210, 46 px price gutter on the right, 22 px top, 14 px bottom.
@@ -131,36 +130,40 @@ const LEARN = {
   SR: { name: "Support and resistance", how: "Each dashed line marks a price where the chart turned more than once in this view: green lines below today's price (support), red lines above it (resistance). The number shows how many times it turned there; “recent high” or “recent low” marks a single clear turn. Lines move when you change the time range. They describe the past and do not predict where the price will go." },
   PIV: { name: "Pivot points", how: "Worked out from the previous month's high, low and close (the previous year's on weekly charts): P = (high + low + close) ÷ 3, R1 = 2P − low, S1 = 2P − high, R2 = P + (high − low), S2 = P − (high − low). Many traders watch these levels, which is why they are shown. They are arithmetic, not a forecast." },
 };
+// One guide for every indicator, line and panel, always in the same order: what it reads now, what it did in
+// this view, what it shows, how to read it, how it's worked out, usual settings, what to keep in mind, alerts.
+// kind: a chart code (RSI, BB…), SR or PIV, or a guide id from the catalogue. v: the chart it was opened from.
 export function openLearn(kind, v) {
-  const stu = PANELS[kind] || OVERLAYS[kind];
-  const L = LEARN[kind] || (stu && { id: stu.guide, metric: stu.metric, name: stu.name, how: stu.short }), ind = APP.catalogue.find((x) => x.id === L?.id);
-  if (!L || !v) return;
-  if (!L.metric) { // a line on the chart rather than a panel
-    openSheet(esc(L.name), `<h3>How to read the lines</h3><p>${esc(L.how)}</p>${L.id ? `<button class="btn block" data-guide="${esc(L.id)}">Open the full guide</button>` : ""}<p class="disclaimer">${esc(DISCLAIMER)}</p>`, (body) => {
-      const g = body.querySelector("[data-guide]"); if (g) g.onclick = () => { closeSheet(); openIndicator(L.id); };
-    });
-    return;
-  }
-  const d = v.daily.now, val = d[L.metric];
-  // a plain fact about this view, and one-tap alerts at the panel's own reference levels (crossings, not advice)
-  const fact = PANELS[kind] && v.ov ? panelFact(kind, v.ov, v.win) : "";
-  const P = PANELS[kind], tk = (v.key || "").split(":")[1] || "";
-  const lv = P?.metric === L.metric ? (P.refs?.length ? [...P.refs].sort((a, b) => b - a) : P.zero ? [0] : []) : [];
-  const alerts = v.key ? lv.flatMap((x) => (lv.length === 1 ? [["crossAbove", x], ["crossBelow", x]] : x === Math.max(...lv) ? [["crossAbove", x]] : [["crossBelow", x]])) : [];
-  openSheet(esc(stu?.name || ind?.name || kind), `
-    <div class="learnnow"><span class="label">Right now</span><b>${val == null ? "–" : fmt(val, L.metric === "macdHist" ? 2 : METRICS[L.metric]?.digits ?? 1)}${L.metric === "volRatio" && val != null ? "x usual" : METRICS[L.metric]?.unit && val != null ? METRICS[L.metric].unit : ""}</b><p>${esc(describe(L.metric, d, v.daily.prev))}</p></div>
-    ${ind?.short ? `<h3>What it measures</h3><p>${esc(ind.short)}</p>` : ""}
-    ${fact ? `<h3>In this view</h3><p>${esc(fact)}</p>` : ""}
-    <h3>How to read ${OVERLAYS[kind] ? "the lines" : "the panel"}</h3><p>${esc(L.how)}</p>
-    ${alerts.length ? `<h3>Alert me</h3><div class="opts">${alerts.map(([op, x], j) => `<button class="opt" data-ra="${j}">🔔 ${esc(OPS_TXT[op])} ${esc(String(x))}</button>`).join("")}</div><p class="hint">For ${esc(tk)}. Checked after every data refresh; you'll find it in Profile → Alert rules.</p>` : ""}
-    <button class="btn block" data-guide="${esc(L.id)}">Open the full guide</button>
+  const byGuide = (id) => Object.keys(PANELS).find((k) => PANELS[k].guide === id) || Object.keys(OVERLAYS).find((k) => OVERLAYS[k].guide === id);
+  const code = PANELS[kind] || OVERLAYS[kind] ? kind : LEARN[kind] ? null : byGuide(kind);
+  const stu = PANELS[code] || OVERLAYS[code], L = LEARN[kind] || LEARN[code] || {};
+  const ind = APP.catalogue.find((x) => x.id === (stu?.guide || L.id || kind)), ex = ind?.explainer || {};
+  const metric = stu?.metric ?? L.metric, name = stu?.name || L.name || ind?.name || kind;
+  const d = v?.daily?.now, val = metric && d ? d[metric] : null, unit = metric === "volRatio" ? "× usual" : METRICS[metric]?.unit || "";
+  const fact = v?.ov && PANELS[code] ? panelFact(code, v.ov, v.win) : "";
+  // one-tap alerts at the panel's own reference levels (crossings of a line, not advice)
+  const P = PANELS[code], tk = (v?.key || "").split(":")[1] || "";
+  const lv = P && P.metric === metric ? (P.refs?.length ? [...P.refs].sort((a, b) => b - a) : P.zero ? [0] : []) : [];
+  const alerts = v?.key ? lv.flatMap((x) => (lv.length === 1 ? [["crossAbove", x], ["crossBelow", x]] : x === Math.max(...lv) ? [["crossAbove", x]] : [["crossBelow", x]])) : [];
+  const sec = (h, body) => (body ? `<section class="gsec"><h3>${h}</h3>${body}</section>` : "");
+  const para = (t) => (t ? `<p>${esc(t)}</p>` : "");
+  const srcs = (ex.sources || []).filter((x) => /^https?:\/\//.test(x.url || "")).map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label || x.url)} ↗</a>`).join("");
+  openSheet(esc(name), `
+    ${d && metric ? `<div class="learnnow"><span class="cap">Right now${tk ? ` · ${esc(tk)}` : ""}</span><b>${val == null ? "–" : fmt(val, metric === "macdHist" ? 2 : METRICS[metric]?.digits ?? 1) + unit}</b><p>${esc(describe(metric, d, v.daily.prev))}</p></div>` : ""}
+    ${sec("In this view", para(fact))}
+    ${sec("What it shows", para(ex.measures || stu?.short || ind?.short))}
+    ${sec("How to read it", para(L.how || stu?.read))}
+    ${sec("How it's worked out", para(ex.calc))}
+    ${sec("Usual settings", para(ex.settings))}
+    ${sec("Keep in mind", para(ex.limits))}
+    ${sec("Alert me", alerts.length ? `<div class="opts">${alerts.map(([op, x], j) => `<button class="opt" data-ra="${j}">🔔 ${esc(OPS_TXT[op])} ${esc(String(x))}</button>`).join("")}</div><p class="hint">For ${esc(tk)}. Checked after every data refresh. Manage alerts in Profile → Alert rules.</p>` : "")}
+    ${srcs ? `<p class="gsrc">Sources: ${srcs}</p>` : ""}
     <p class="disclaimer">${esc(DISCLAIMER)}</p>`, (body) => {
-    body.querySelector("[data-guide]").onclick = () => { closeSheet(); openIndicator(L.id); };
     body.querySelectorAll("[data-ra]").forEach((b) => (b.onclick = async () => {
       const [op, x] = alerts[+b.dataset.ra];
-      const rule = { id: Math.random().toString(36).slice(2, 10), sym: v.key, metric: L.metric, op, value: x, note: "Set from the chart", active: true, createdAt: new Date().toISOString() };
+      const rule = { id: Math.random().toString(36).slice(2, 10), sym: v.key, metric, op, value: x, note: "Set from the chart", active: true, createdAt: new Date().toISOString() };
       await save({ rules: [...(store.data.rules || []), rule] }); closeSheet(); haptic();
-      toast(`Alert set: ${tk} ${METRICS[L.metric]?.label || kind} ${OPS_TXT[op]} ${x}`, { action: "Undo", onAction: () => save({ rules: (store.data.rules || []).filter((r) => r.id !== rule.id) }) });
+      toast(`Alert set: ${tk} ${METRICS[metric]?.label || name} ${OPS_TXT[op]} ${x}`, { action: "Undo", onAction: () => save({ rules: (store.data.rules || []).filter((r) => r.id !== rule.id) }) });
     }));
   });
 }

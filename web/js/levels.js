@@ -7,8 +7,8 @@
 //    most recently. Levels above the last close are resistance, below are support.
 // 2. Pivot points ("Pivot points", Traditional): from the previous period's high, low and close,
 //    P = (H + L + C) / 3, R1 = 2P − L, S1 = 2P − H, R2 = P + (H − L), S2 = P − (H − L).
-//    Daily charts use the previous month (TradingView's "Auto" for daily charts); weekly charts use the
-//    previous year.
+//    Intraday charts use the previous day, daily charts the previous month (TradingView's "Auto"), weekly
+//    charts the previous year.
 
 const avgRange = (bars) => bars.reduce((s, b) => s + (b.h - b.l), 0) / Math.max(1, bars.length);
 
@@ -44,8 +44,8 @@ export function swingLevels(v, { perSide = 2 } = {}) {
 }
 
 export function pivotLevels(v) {
-  const daily = v.interval !== "1W", all = v.bars, n = all.length, w = v.win.length;
-  const period = (t) => (daily ? t.slice(0, 7) : t.slice(0, 4)); // month or year
+  const intra = v.interval === "intraday", daily = v.interval !== "1W", all = v.bars, n = all.length, w = v.win.length;
+  const period = (t) => (intra ? t.slice(0, 10) : daily ? t.slice(0, 7) : t.slice(0, 4)); // day, month or year
   const cur = period(all[n - 1].t);
   let end = n - 1; while (end >= 0 && period(all[end].t) === cur) end--;
   if (end < 0) return [];
@@ -54,7 +54,7 @@ export function pivotLevels(v) {
   const H = Math.max(...prev.map((b) => b.h)), L = Math.min(...prev.map((b) => b.l)), C = prev[prev.length - 1].c;
   const P = (H + L + C) / 3, from = Math.max(0, end + 1 - (n - w));
   return [["R2", P + (H - L)], ["R1", 2 * P - L], ["P", P], ["S1", 2 * P - H], ["S2", P - (H - L)]]
-    .map(([kind, price]) => ({ kind, price, from, period: daily ? "previous month" : "previous year" }));
+    .map(([kind, price]) => ({ kind, price, from, period: intra ? "previous day" : daily ? "previous month" : "previous year" }));
 }
 
 export const levelsFor = (v, mode) => (!v || !mode || mode === "off" ? [] : mode === "pivots" ? pivotLevels(v) : swingLevels(v));

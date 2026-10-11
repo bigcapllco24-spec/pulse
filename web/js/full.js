@@ -3,7 +3,7 @@
 // Ranges from 1 day (15-minute candles) to the coin's full weekly history, from Kraken's free public data.
 // Daily charts reach back about 4 years: older daily candles come from Binance's free public market-data
 // mirror and are joined on before the app's own Kraken history, so you can keep dragging back in time.
-import { D } from "./data.js";
+import { D, krakenBars } from "./data.js";
 import { buildSeries, compute, toWeekly, extendedSeries } from "./indicators.js";
 import { OVERLAYS, PANELS, MAX_OVERLAYS, maxPanels, picks, keysOf } from "./studies.js";
 import { mainChart, lowerChart } from "./chart.js";
@@ -11,34 +11,19 @@ import { levelsFor } from "./levels.js";
 import { chartSettings, store, save } from "./store.js";
 import { initInteract, openLearn, cancelPendingHold } from "./interact.js";
 import { APP, buildFeed } from "./app.js";
+import { setLines } from "./pages.js";
 import { esc, money, pct, arrow, haptic, fmtDay, toast } from "./ui.js";
 
-const KRAKEN = { BTC: "XBTUSD", DOGE: "XDGUSD", RNDR: "RENDERUSD" };
 // range → candle size (Kraken minutes, or "d" for the app's daily candles) and how much time to show first
 const RANGES = { "1D": [15, 1], "1W": [60, 7], "1M": ["d", 30], "3M": ["d", 91], "6M": ["d", 182], "1Y": ["d", 365], "2Y": ["d", 730], "4Y": ["d", 1461], Max: [10080, 1e6] };
 const OPTS = Object.keys(RANGES);
-const NEXT = { "1M": "3M", "3M": "6M", "6M": "1Y", "1Y": "2Y", "2Y": "4Y" };
+const NEXT = { "1D": "1W", "1W": "1M", "1M": "3M", "3M": "6M", "6M": "1Y", "1Y": "2Y", "2Y": "4Y" };
 const IVLABEL = { 15: "15-minute", 60: "1-hour", d: "Daily", 10080: "Weekly" };
 const MIN_BARS = 12;
 const HIST_DAYS = 1461; // about 4 years of daily candles
 const BINANCE = { HYPE: null }; // coins Binance doesn't list are left with the app's own 2 years
-const cache = new Map(); // `${t}:${interval}` → { at, bars }
-
-export async function krakenBars(t, iv) {
-  const k = `${t}:${iv}`, hit = cache.get(k);
-  if (hit && Date.now() - hit.at < (iv < 1440 ? 120e3 : 3600e3)) return hit.bars;
-  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 9000);
-  try {
-    const r = await fetch(`https://api.kraken.com/0/public/OHLC?pair=${KRAKEN[t] || t + "USD"}&interval=${iv}`, { signal: ctl.signal });
-    const j = await r.json(); if (j.error?.length) throw new Error(j.error[0]);
-    const rows = Object.entries(j.result).find(([x]) => x !== "last")?.[1] || [];
-    const bars = rows.map((x) => ({ t: new Date(x[0] * 1000).toISOString().slice(0, iv < 1440 ? 16 : 10), o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[6] }));
-    if (bars.length < 5) throw new Error("no data");
-    cache.set(k, { at: Date.now(), bars }); return bars;
-  } finally { clearTimeout(timer); }
-}
-
 // Older daily candles (USDT pairs, which track USD closely), oldest first. Two pages of 1000 days.
+const cache = new Map(); // older daily history, per coin
 async function olderDaily(t) {
   const k = `${t}:hist`, hit = cache.get(k);
   if (hit && Date.now() - hit.at < 6 * 3600e3) return hit.bars;
@@ -227,11 +212,13 @@ function shell(body) {
 function wireBar() {
   el.querySelector("[data-fclose]").onclick = closeFull;
   el.querySelectorAll("[data-fr]").forEach((b) => (b.onclick = () => { stopFling(); st.range = b.dataset.fr; load(); }));
-  el.querySelector("[data-flv]").onclick = (e) => {
-    const pick = chartSettings(st.sym.key).levels; st.levels = st.levels === "off" ? (pick && pick !== "off" ? pick : "sr") : "off";
+  el.querySelector("[data-flv]").onclick = async (e) => { // the same lines as the feed, for every coin
+    const pick = store.data?.settings?.levelsPick || "sr"; st.levels = st.levels === "off" ? pick : "off";
     e.currentTarget.setAttribute("aria-pressed", st.levels !== "off"); e.currentTarget.lastChild.textContent = st.levels === "pivots" ? "Pivots" : "S/R";
-    st.lvKey = null; if (st.bars) redraw();
+    st.lvKey = null; st.changed = true; if (st.bars) redraw();
+    await setLines(st.levels);
   };
+
 }
 
 // ---------- indicators: add or remove, one shared choice for every coin's chart

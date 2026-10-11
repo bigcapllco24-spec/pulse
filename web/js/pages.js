@@ -7,13 +7,13 @@ import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./sea
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
 import { OVERLAYS, PANELS, MAX_OVERLAYS, maxPanels, SETS, picks } from "./studies.js";
-import { D, view, storiesFor, RANGE_LABEL, resolveInterval } from "./data.js";
-import { $, esc, money, pct, arrow, fmtDay, ago, toast, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
+import { D, view, storiesFor, RANGE_LABEL, resolveInterval, dailyOf } from "./data.js";
+import { $, esc, money, pct, arrow, fmtDay, ago, toast, haptic, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
 import { startTour, resetTours } from "./coach.js";
+import { openLearn } from "./interact.js";
 import { APP, buildFeed, showTab, currentSyms, listName, applyTheme, doRefresh } from "./app.js";
 
 const symDoc = (r) => ({ key: r.key, t: r.t, n: r.n, m: r.m, ty: r.ty });
-const indById = (id) => [...APP.catalogue, ...(store.data?.customIndicators || [])].find((x) => x.id === id);
 
 export function initPages() {
   window.addEventListener("hashchange", () => {
@@ -134,8 +134,8 @@ export function openSwitcher() {
 export function renderDash() {
   const el = $("dash"), cs = chartSettings(), syms = currentSyms(), wl = watchlists();
   const cur = store.data?.settings?.list || "all", w = wl.find((x) => x.id === cur), editing = APP.dashEdit && w;
-  const withData = syms.map((s) => ({ s, v: view(s.key, cs) })).filter((x) => x.v);
-  const noData = syms.filter((s) => !view(s.key, cs));
+  const withData = syms.map((s) => ({ s, v: view(s.key, dailyOf(cs)) })).filter((x) => x.v);
+  const noData = syms.filter((s) => !view(s.key, dailyOf(cs)));
   const sort = APP.dashSort || "move";
   if (!editing) withData.sort((a, b) => sort === "az" ? a.s.t.localeCompare(b.s.t) : sort === "rsi" ? (a.v.now.rsi14 ?? 999) - (b.v.now.rsi14 ?? 999) : Math.abs(b.v.daily.now.changePct) - Math.abs(a.v.daily.now.changePct));
   const ups = withData.filter((x) => x.v.daily.now.changePct > 0).length;
@@ -184,7 +184,7 @@ const GROUPS = [
   ["Charts & learning", [["chart", "Chart style", "Time range, candles and lines"]]],
   ["Alerts", [["rules", "Alert rules", "Get told when your levels are hit"], ["alerts", "Alerts", "Everything that has fired"]]],
   ["Sharing", [["lists", "Shared lists", "Follow a list with friends"]]],
-  ["Account & privacy", [["account", "Account", "Recovery code, devices, delete"], ["appearance", "Appearance", "Dark, light or match phone"]]],
+  ["Account & privacy", [["account", "Account", "Username, delete your data"], ["appearance", "Appearance", "Dark, light or match phone"]]],
   ["Help", [["tour", "Show the app tour again", "Swipes, charts and watchlists in a minute"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]]],
 ];
 const icon = (k) => `<svg class="pic" viewBox="0 0 24 24" aria-hidden="true">${ICON[k] || ""}</svg>`;
@@ -256,18 +256,21 @@ function pWatchlists(el, back) {
 }
 
 // Chart options, shared by Profile → Chart style (everyone's default) and the chip on each feed card.
-const RANGE_OPTS = [["1M", "1M"], ["3M", "3M"], ["6M", "6M"], ["1Y", "1Y"], ["2Y", "2Y"]];
+const RANGE_OPTS = [["1D", "1D"], ["1W", "1W"], ["1M", "1M"], ["3M", "3M"], ["6M", "6M"], ["1Y", "1Y"], ["2Y", "2Y"]];
 const CANDLE_OPTS = [["auto", "Auto"], ["1D", "Daily"], ["1W", "Weekly"]];
 const TYPE_OPTS = [["candles", "Candles"], ["line", "Line"], ["area", "Area"]];
 const LEVEL_OPTS = [["off", "Off"], ["sr", "Support & resistance"], ["pivots", "Pivot points"]];
-function chartOptsHtml(c) {
+const LINES_HINT = "Support & resistance: prices where the chart turned at least twice. Pivot points: levels worked out from the previous day, month or year. Both describe the past, not the future.";
+function chartOptsHtml(c, { lines = true } = {}) {
   const opt = (key, vals) => `<div class="opts">${vals.map(([v, l]) => `<button class="opt" data-k="${key}" data-v="${v}" aria-pressed="${String(c[key]) === String(v)}">${l}</button>`).join("")}</div>`;
   const iv = resolveInterval(c);
-  return `<h2>Time range</h2>${opt("range", RANGE_OPTS)}<p class="hint">${esc(RANGE_LABEL[c.range] || "")} of ${iv === "1W" ? "weekly" : "daily"} candles. Each ${iv === "1W" ? "candle is one week" : "candle is one day"}.</p>
-    <h2>Candle size</h2>${opt("interval", CANDLE_OPTS)}<p class="hint">Auto uses daily candles up to 6 months and weekly candles for 1 and 2 years, so the chart never gets crowded.</p>
+  const each = { "15m": "15 minutes", "1h": "one hour", "1D": "one day", "1W": "one week" }[iv];
+  const intra = iv === "15m" || iv === "1h";
+  return `<h2>Time range</h2>${opt("range", RANGE_OPTS)}<p class="hint">${esc(RANGE_LABEL[c.range] || "")} of candles. Each candle is ${each}.</p>
+    ${intra ? "" : `<h2>Candle size</h2>${opt("interval", CANDLE_OPTS)}<p class="hint">Auto uses daily candles up to 6 months and weekly candles for 1 and 2 years, so the chart never gets crowded.</p>`}
     <h2>Chart type</h2>${opt("type", TYPE_OPTS)}
-    <p class="hint" style="margin-top:14px">Indicators (RSI, MACD, Bollinger Bands and more) are added from the full-screen chart: tap ⤢ on any chart, then Indicators.</p>
-    <h2>Lines on the chart</h2>${opt("levels", LEVEL_OPTS)}<p class="hint">Support & resistance: prices where the chart turned at least twice. Pivot points: levels worked out from the previous month (or year). Both describe the past, not the future.</p>`;
+    <p class="hint" style="margin-top:14px">Indicators such as RSI, MACD and Bollinger Bands: tap <b>ƒx</b> on any card.</p>
+    ${lines ? `<h2>Lines on the chart</h2>${opt("levels", LEVEL_OPTS)}<p class="hint">${LINES_HINT} Applies to every coin; the S/R button on a card changes it too.</p>` : `<p class="hint">Lines on the chart (support & resistance, pivots): tap <b>S/R</b> on any card.</p>`}`;
 }
 function pChart(el, back) {
   const c = chartSettings(), custom = Object.keys(store.data.settings?.chartBy || {});
@@ -276,7 +279,7 @@ function pChart(el, back) {
     ${custom.length ? `<h2>Coins with their own chart</h2><p>${custom.map((k) => `<span class="pill">${esc(k.split(":")[1])}</span>`).join(" ")} <button class="btn ghost sm" id="cReset">Reset all to default</button></p>` : ""}`;
   const re = () => { pChart(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
   const set = async ({ _pick, ...patch }) => { await save({ settings: { ...store.data.settings, ...(_pick ? { levelsPick: patch.levels } : {}), chart: { ...store.data.settings.chart, ...patch } } }); APP.needsRebuild = true; re(); };
-  el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => set(b.dataset.k === "levels" && b.dataset.v !== "off" ? { levels: b.dataset.v, _pick: 1 } : { [b.dataset.k]: b.dataset.v })));
+  el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => (b.dataset.k === "levels" ? setLines(b.dataset.v).then(re) : set({ [b.dataset.k]: b.dataset.v }))));
   el.querySelector("#cReset")?.addEventListener("click", async () => { await save({ settings: { ...store.data.settings, chartBy: {} } }); APP.needsRebuild = true; re(); });
 }
 
@@ -287,7 +290,7 @@ export function openChartSheet(sym, onChange) {
   const draw = (body) => {
     const own = !!store.data?.settings?.chartBy?.[sym.key];
     body.innerHTML = `<div class="seg scope" role="group" aria-label="Apply to">${[["coin", `Just ${sym.t}`], ["all", w ? `All in ${w.name}` : "All my coins"]].map(([k, l]) => `<button data-scope="${k}" aria-pressed="${scope === k}">${esc(l)}</button>`).join("")}</div>
-      ${chartOptsHtml(chartSettings(sym.key))}
+      ${chartOptsHtml(chartSettings(sym.key), { lines: false })}
       ${own ? `<p style="margin-top:14px"><button class="btn ghost sm" id="csReset">Use my default chart for ${esc(sym.t)}</button></p>` : ""}`;
     body.querySelectorAll("[data-scope]").forEach((b) => (b.onclick = () => { scope = b.dataset.scope; draw(body); }));
     body.querySelectorAll("[data-k]").forEach((b) => (b.onclick = async () => {
@@ -310,13 +313,8 @@ async function applyChart(sym, scope, w, patch) {
   await save({ settings: { ...st, chartBy: by } });
 }
 
-export async function openIndicator(id) {
-  const i = indById(id); if (!i) return;
-  const ex = i.explainer;
-  const srcs = (ex?.sources || []).filter((s) => /^https?:\/\//.test(s.url || "")).map((s) => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label || s.url)}</a></li>`).join("");
-  openSheet(esc(i.name), ex ? `${[["What it measures", ex.measures], ["How it's calculated", ex.calc], ["Usual settings", ex.settings], ["What it misses", ex.limits]].map(([k, v]) => `<div class="label" style="margin-top:12px">${k}</div><p>${esc(v)}</p>`).join("")}
-    ${srcs ? `<div class="label" style="margin-top:12px">Sources</div><ul>${srcs}</ul>` : ""}` : `<p>${esc(i.short || "No explainer yet.")}</p>`);
-}
+// Every guide uses the one template in interact.js, so all explanations read the same way.
+export const openIndicator = (id) => openLearn(id);
 
 const RULE_METRICS = ["price", "changePct", "rsi14", "stochRsi", "mfi14", "cmo14", "uo", "cmf20", "aroonOsc", "hv20", "distSma20Pct", "distSma50Pct", "macdHist", "pctB", "distHigh50Pct", "volRatio", "atrPct", "stochK", "willR", "cci20", "adx14", "roc12"];
 function pRules(el, back, preKey) {
@@ -349,7 +347,7 @@ export function demoRules() {
     if (r.active === false) continue;
     const keys = r.sym === "*" ? allSyms().filter((s) => s.m === "CRYPTO").map((s) => s.key) : [r.sym];
     for (const k of keys) {
-      const v = view(k, { ...cs, interval: "1D" }); if (!v || !ruleMet(r, v.now, v.prev)) continue;
+      const v = view(k, { ...dailyOf(cs), interval: "1D" }); if (!v || !ruleMet(r, v.now, v.prev)) continue;
       const id = `${r.id}-${k}-${v.lastBar.t}`.replace(/[^\w-]/g, "_"); if (have.has(id)) continue;
       const m = METRICS[r.metric];
       fresh.push({ id, at: new Date().toISOString(), sym: k, read: false, text: `${k.split(":")[1]}: ${m.label} ${OPS[r.op]} ${r.value}${m.unit || ""} (now ${fmt(v.now[r.metric], m.digits)}${m.unit || ""}).${r.note ? " " + r.note : ""}` });
@@ -418,7 +416,7 @@ function pLegal(el, back) {
   el.innerHTML = `${back}<h1>Legal and disclaimer</h1>
     <h2>Not investment advice</h2><p>${esc(DISCLAIMER)} Check facts and consult a registered adviser before investing.</p>
     <h2>Fact tags and sorting</h2><p>Tags such as “Volume 2.1x usual” or “New 50-day high” state facts about the latest data. Sorting by move, news or RSI orders your own list by that fact. Neither is a signal or a ranking of investments.</p>
-    <h2>Privacy</h2><p>We don't ask for or store your name, email, phone number, location or contacts, and use no tracking or advertising cookies. We keep a random account ID derived from your recovery code, the username you choose (if any), your watchlists, chart style, rules and indicator choices, list nicknames and, if you turn on alerts, a push token. You can delete everything from Account.</p>
+    <h2>Privacy</h2><p>We don't ask for or store your name, email, phone number, location or contacts, and use no tracking or advertising cookies. We keep a random account ID for this app on this phone, the username you choose (if any), your watchlists, chart style, rules and indicator choices, list nicknames and, if you turn on alerts, a push token. You can delete everything from Account.</p>
     <h2>Data sources</h2><p>Coin prices from Kraken's public data, checked against CoinGecko. News found via the GDELT Project and linked to each publisher.</p>
     <h2>Age</h2><p>For people aged 18 and over.</p>
     <h2>Grievance contact</h2><p>${esc(CONFIG.companyName)} · <a href="mailto:${esc(CONFIG.grievanceEmail)}">${esc(CONFIG.grievanceEmail)}</a>. Complaints acknowledged within 24 hours, resolved within 15 days.</p>
@@ -440,7 +438,7 @@ export function openIndicatorsSheet(onChange) {
     for (const [code, x] of Object.entries(reg)) (groups[x.group] ||= []).push([code, x]);
     return Object.entries(groups).map(([g, items]) => `<div class="sgroup">${esc(g)}</div>` + items.map(([code, x]) => {
       const on = chosen.includes(code);
-      return `<div class="srow"><button class="sinfo" data-sguide="${esc(x.guide)}" aria-label="About ${esc(x.name)}"><span class="t">${esc(x.name)}</span><span class="s">${esc(x.short)}</span></button>
+      return `<div class="srow"><button class="sinfo" data-sguide="${code}" aria-label="About ${esc(x.name)}"><span class="t">${esc(x.name)}</span><span class="s">${esc(x.short)}</span></button>
         <button class="stog" data-stog="${code}" aria-pressed="${on}">${on ? "On" : "Add"}</button></div>`;
     }).join("")).join("");
   };
@@ -463,4 +461,23 @@ export function openIndicatorsSheet(onChange) {
     root.querySelectorAll("[data-sguide]").forEach((b) => (b.onclick = () => openIndicator(b.dataset.sguide)));
   };
   openSheet("Indicators", body(), wire);
+}
+
+// ---------- lines on the chart (S/R button on every card): one choice for every coin
+export async function setLines(mode) {
+  const st = store.data.settings, by = { ...(st.chartBy || {}) };
+  for (const k of Object.keys(by)) { const o = { ...by[k] }; delete o.levels; if (Object.keys(o).length) by[k] = o; else delete by[k]; }
+  await save({ settings: { ...st, ...(mode !== "off" ? { levelsPick: mode } : {}), chart: { ...(st.chart || {}), levels: mode }, chartBy: by } });
+  APP.needsRebuild = true;
+}
+export function openLinesSheet(onChange) {
+  const cur = () => store.data?.settings?.chart?.levels || "off";
+  const desc = { off: "Just the candles.", sr: "Dashed lines at prices where the chart turned at least twice in this view: green below the price, red above it.", pivots: "Levels worked out from the previous period's high, low and close (the previous day, month or year)." };
+  const draw = (body) => {
+    body.innerHTML = `<p class="hint">Applies to every coin. Tap a line's label on the chart to learn how it's drawn.</p>
+      <div class="choices">${LEVEL_OPTS.map(([v, l]) => `<button class="choice" data-line="${v}" aria-pressed="${cur() === v}"><b>${esc(l)}</b><span>${esc(desc[v])}</span></button>`).join("")}</div>
+      <p class="disclaimer">Lines describe past prices. They don't predict where the price will go.</p>`;
+    body.querySelectorAll("[data-line]").forEach((b) => (b.onclick = async () => { await setLines(b.dataset.line); haptic(); onChange?.(); closeSheet(); }));
+  };
+  openSheet("Lines on the chart", "", draw);
 }

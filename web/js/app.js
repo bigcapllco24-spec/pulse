@@ -9,11 +9,11 @@ import { mainChart, lowerChart } from "./chart.js";
 import { levelsFor, swingLevels } from "./levels.js";
 import { picks, studyWindow, maxPanels, OVERLAYS, PANELS } from "./studies.js";
 import { startTour, coachEvent } from "./coach.js";
-import { openFull, krakenBars } from "./full.js";
+import { openFull } from "./full.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
-import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES } from "./data.js";
+import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, krakenBars, INTRA, intraState, IV_LABEL, resolveInterval, dailyOf } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, openIndicatorsSheet, demoRules } from "./pages.js";
+import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules } from "./pages.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
 const LOWER_KEY = { RSI: "rsi14", MACD: "macdHist", VOL: "volRatio" };
@@ -23,11 +23,11 @@ export function currentSyms() {
   const list = store.data?.settings?.list || "all";
   let syms = list === "all" ? allSyms() : (watchlists().find((w) => w.id === list)?.syms || allSyms());
   const order = chartSettings().order;
-  const chg = (s) => view(s.key, chartSettings())?.daily.now.changePct;
+  const chg = (s) => view(s.key, dailyOf(chartSettings()))?.daily.now.changePct;
   if (order === "move") syms = [...syms].sort((a, b) => Math.abs(chg(b) ?? -1) - Math.abs(chg(a) ?? -1));
   else if (order === "news") syms = [...syms].sort((a, b) => storiesFor(b.key).length - storiesFor(a.key).length);
   else if (order === "az") syms = [...syms].sort((a, b) => a.t.localeCompare(b.t));
-  else if (order === "rsi") syms = [...syms].sort((a, b) => (view(a.key, chartSettings())?.now.rsi14 ?? 999) - (view(b.key, chartSettings())?.now.rsi14 ?? 999));
+  else if (order === "rsi") syms = [...syms].sort((a, b) => (view(a.key, dailyOf(chartSettings()))?.now.rsi14 ?? 999) - (view(b.key, dailyOf(chartSettings()))?.now.rsi14 ?? 999));
   return syms;
 }
 export function listName() {
@@ -242,14 +242,14 @@ function renderMain(c, it) {
     c._v = { ...v, ov, picks: { over: pk.over, lower: shown } }; // what hold-to-read and the panel guides read from
     main.innerHTML = `<div class="head"><div class="hl"><div class="tkrow"><span class="tk">${esc(s.t)}</span><span class="chg ${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span></div>
       <div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span></div></div>
-      <div class="hr"><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${v.interval === "1W" ? "weekly" : "daily"} candles"><b>${esc(v.range)}</b><span>${v.interval === "1W" ? "Weekly" : "Daily"}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
-      <div class="hr2"><button class="lvbtn fxchip" data-ind aria-label="Indicators: ${pk.over.length + pk.lower.length} on"><i>ƒx</i>${pk.over.length + pk.lower.length || "Add"}</button><button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div></div>
+      <div class="hr"><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${esc(v.ivLabel.toLowerCase())} candles"><b>${esc(v.range)}</b><span>${esc(v.ivLabel)}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
+      <div class="hr2"><button class="lvbtn fxchip" data-fx aria-label="Indicators: ${pk.over.length + pk.lower.length} on"><i>ƒx</i>${pk.over.length + pk.lower.length || "Add"}</button><button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div></div>
       <div class="chartbox"><button class="fxbtn" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: pk.over, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
       ${shown.length ? `<div class="lowers${shown.length > 2 ? " g2" : ""}">${shown.map((k) => lowerChart(v.win, ov, k)).join("")}</div>` : ""}${dots}`;
   } else {
     c._v = null;
-    main.innerHTML = `<div class="head"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div>
-      <div class="chartbox nodata"><p>${D.status === "refreshing" ? `Loading ${esc(s.t)} prices…` : `${esc(s.t)} prices couldn't load. Pull to refresh or tap “Updated” at the top.`}</p></div>${dots}`;
+    main.innerHTML = `<div class="head"><div class="hl"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div><div class="hr"><button class="tfbtn" data-tf aria-label="Chart settings for ${esc(s.t)}"><b>${esc(cs.range)}</b><span>${esc(IV_LABEL[resolveInterval(cs)] || "")}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button></div></div>
+      <div class="chartbox nodata"><p>${INTRA[cs.range] && D.series[s.key] ? (intraState(s.key, cs.range).failed ? `${esc(s.t)}'s ${cs.range === "1D" ? "15-minute" : "hourly"} candles couldn't load just now. Tap the time chip to pick a longer range, or try again in a minute.` : `Loading ${cs.range === "1D" ? "15-minute" : "hourly"} candles for ${esc(s.t)}…`) : D.status === "refreshing" ? `Loading ${esc(s.t)} prices…` : `${esc(s.t)} prices couldn't load. Pull to refresh or tap “Updated” at the top.`}</p></div>${dots}`;
   }
 }
 const addDays = (d, n) => new Date(new Date(d + "T00:00:00Z").getTime() + n * 864e5).toISOString().slice(0, 10);
@@ -377,7 +377,7 @@ function renderDetails(c, it) {
     // 6. readings in plain words
     // readings for the indicators on your chart, in plain words
     const pkr = picks(store.data?.settings?.chart), seenM = new Set();
-    const rows = [...pkr.over.map((k) => OVERLAYS[k]), ...pkr.lower.map((k) => PANELS[k])].filter((x) => x?.metric && !seenM.has(x.metric) && seenM.add(x.metric)).map((x) => ({ i: { id: x.guide }, m: x.metric }));
+    const rows = [...pkr.over.map((k) => OVERLAYS[k]), ...pkr.lower.map((k) => PANELS[k])].filter((x) => x?.metric && !seenM.has(x.metric) && seenM.add(x.metric)).map((x) => ({ i: { id: Object.keys(OVERLAYS).find((k) => OVERLAYS[k] === x) || Object.keys(PANELS).find((k) => PANELS[k] === x) }, m: x.metric }));
     html += sec("Readings", "readings", rows.length ? `<div class="readings">${rows.map(({ i, m }) => { const meta = METRICS[m] || { label: m, digits: 2 }; return `<button class="reading" data-ind="${esc(i.id)}"><span class="k">${esc(meta.label)}</span><span class="v">${fmt(d[m], meta.digits)}${meta.unit && d[m] != null ? esc(meta.unit) : ""}</span><span class="d">${esc(describe(m, d, v.daily.prev))}</span></button>`; }).join("")}</div>` : `<p class="hint">No indicators on your chart. Open any chart full screen (⤢) and tap Indicators to add some.</p>`);
     // 7. ranges and the nearest past turning points
     const lv = swingLevels({ bars: all, win: all.slice(-Math.min(182, all.length)), interval: "1D" }, { perSide: 1 });
@@ -392,7 +392,7 @@ function renderDetails(c, it) {
   html += sec("About", "", `<p class="dline">${esc(s.n)} · ${esc(TYLABEL[s.ty] || "")}</p><p class="hint">Prices: ${esc(v?.source || "Kraken")} daily candles${v?.live ? ", refreshed when you opened the app" : ""}. Facts and explanations only, never advice.</p><p class="disclaimer">${esc(DISCLAIMER)}</p>`);
   pane.innerHTML = html + `</div>`;
   pane.querySelectorAll("[data-how]").forEach((bt) => (bt.onclick = () => { const p = bt.closest("section").querySelector(".how"); p.hidden = !p.hidden; bt.setAttribute("aria-expanded", String(!p.hidden)); }));
-  pane.querySelectorAll("[data-ind]").forEach((bt) => (bt.onclick = () => openIndicator(bt.dataset.ind)));
+  pane.querySelectorAll("[data-ind]").forEach((bt) => (bt.onclick = () => openLearn(bt.dataset.ind, c._v)));
   pane.querySelector("[data-addrule]")?.addEventListener("click", () => { location.hash = ""; showTab("profile", "rules", s.key); });
   pane.querySelectorAll("[data-save]").forEach((bt) => (bt.onclick = () => openListsFor(s)));
   const mb = pane.querySelector("[data-movebox]");
@@ -548,25 +548,30 @@ function wire(c, it) {
   if (it.type !== "sym") return;
   const justScrubbed = () => Date.now() - (APP.scrubEndAt || 0) < 400;
   c.querySelectorAll("[data-learn]").forEach((p) => p.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) openLearn(p.dataset.learn, c._v); }));
-  // ƒx chip: add or remove indicators; every card in view redraws as you pick
-  c.querySelector("[data-ind]")?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    openIndicatorsSheet(() => feed.querySelectorAll(".card").forEach((x) => { if (x._v !== undefined && x.dataset.filled && APP.seq[+x.dataset.i]?.type === "sym") { renderMain(x, APP.seq[+x.dataset.i]); wire(x, APP.seq[+x.dataset.i]); } }));
-  });
-  // S/R chip: one tap shows or hides the lines (the last style picked, support & resistance by default)
-  c.querySelector("[data-lv]")?.addEventListener("click", async (e) => {
-    e.stopPropagation();
-    const cs = chartSettings(it.sym.key), on = (cs.levels || "off") !== "off", st = store.data.settings;
-    const next = on ? "off" : st.levelsPick || "sr", by = { ...(st.chartBy || {}) };
-    for (const k of Object.keys(by)) { const o = { ...by[k] }; delete o.levels; if (Object.keys(o).length) by[k] = o; else delete by[k]; }
-    await save({ settings: { ...st, chart: { ...(st.chart || {}), levels: next }, chartBy: by } });
-    haptic(); renderMain(c, it); wire(c, it); APP.needsRebuild = true;
-    if (next !== "off" && !ls.get("pl.lvTip")) { ls.set("pl.lvTip", 1); toast("Dashed lines mark prices where the chart turned before. Tap a label to learn more."); }
-  });
+  // ƒx chip: add or remove indicators. S/R chip: pick the lines on the chart. Both apply to every coin, so every
+  // card on screen redraws at once.
+  c.querySelector("[data-fx]")?.addEventListener("click", (e) => { e.stopPropagation(); openIndicatorsSheet(() => redrawCards()); });
+  c.querySelector("[data-lv]")?.addEventListener("click", (e) => { e.stopPropagation(); openLinesSheet(() => redrawCards()); });
   c.querySelector(".chartbox:not(.nodata)")?.addEventListener("click", () => { if (!justScrubbed()) chartTapHint(); });
   c.querySelector("[data-full]")?.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) { coachEvent("full"); openFull(it.sym); } });
-  c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); coachEvent("tf"); openChartSheet(it.sym, () => { renderMain(c, it); wire(c, it); }); });
+  c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); coachEvent("tf"); openChartSheet(it.sym, () => redrawCards()); });
 }
+
+// Redraw every filled coin card in place (after a chart setting changes or intraday candles arrive), so no card
+// on screen shows an older setting. key: only that coin's cards.
+export function redrawCards(key) {
+  feed.querySelectorAll(".card").forEach((c) => {
+    const it = APP.seq[+c.dataset.i];
+    if (!c.dataset.filled || it?.type !== "sym" || (key && it.sym.key !== key)) return;
+    renderMain(c, it); wire(c, it);
+    if (c.querySelector('[data-pane="details"]')?.childElementCount) renderDetails(c, it);
+  });
+  APP.needsRebuild = true;
+}
+document.addEventListener("pulse-intra", (e) => redrawCards(e.detail));
+// turning the phone changes how many panels fit, so cards redraw once the rotation settles
+let rzT = 0, lastFit = maxPanels();
+addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { if (maxPanels() !== lastFit) { lastFit = maxPanels(); redrawCards(); } }, 250); });
 
 // ---------- tabs and refresh
 export function showTab(tab, sub, arg) {
