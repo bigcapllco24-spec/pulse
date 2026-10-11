@@ -30,10 +30,12 @@ def demo_mode(ctx):
 
 def kraken_route(route):
     pair = _re.search(r"pair=([A-Z]+)", route.request.url).group(1)
-    rnd = _random.Random(pair); price = rnd.uniform(0.2, 900); rows = []; t0 = 1791504000 - 729 * 86400
-    for k in range(730):
+    weekly = "interval=10080" in route.request.url
+    rnd = _random.Random(pair + ("w" if weekly else "")); price = rnd.uniform(0.2, 900); rows = []
+    step, count = (7 * 86400, 400) if weekly else (86400, 730); t0 = 1791504000 - (count - 1) * step
+    for k in range(count):
         o = price; c = o * (1 + rnd.gauss(0, 0.03)); h = max(o, c) * (1 + abs(rnd.gauss(0, 0.01))); l = min(o, c) * (1 - abs(rnd.gauss(0, 0.01)))
-        rows.append([t0 + k * 86400, f"{o:.6f}", f"{h:.6f}", f"{l:.6f}", f"{c:.6f}", f"{c:.6f}", f"{rnd.uniform(1e3, 1e6):.2f}", 100]); price = c
+        rows.append([t0 + k * step, f"{o:.6f}", f"{h:.6f}", f"{l:.6f}", f"{c:.6f}", f"{c:.6f}", f"{rnd.uniform(1e3, 1e6):.2f}", 100]); price = c
     route.fulfill(status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"}, body=_json.dumps({"error": [], "result": {pair: rows, "last": rows[-1][0]}}))
 
 def active(p):
@@ -177,14 +179,18 @@ def phone_tests(b):
     box = p.evaluate("(()=>{const r=document.querySelector('.card.active .chartbox').getBoundingClientRect();return [r.left,r.top,r.width,r.height]})()")
     cx, cy = box[0] + box[2] * 0.5, box[1] + box[3] * 0.4
     pos0 = active(p); top0 = p.evaluate("document.getElementById('feed').scrollTop")
+    RECTS = "(()=>{const c=document.querySelector('.card.active'); return ['.tk','.price','.chg','.chartbox'].map(q=>{const r=c.querySelector(q).getBoundingClientRect(); return [Math.round(r.top),Math.round(r.height)]})})()"
+    rects0 = p.evaluate(RECTS)
     cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": cx, "y": cy}]}); p.wait_for_timeout(450)
     for k in range(1, 9):
         cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": cx - 15 * k, "y": cy + 4 * k}]}); time.sleep(0.03)
-    st = p.evaluate("(()=>{const c=document.querySelector('.card.active');return {tk:c.querySelector('.tk').textContent, info:c.querySelector('.scrubinfo')?.textContent||'', lines:c.querySelectorAll('.xh').length}})()")
+    st = p.evaluate("(()=>{const c=document.querySelector('.card.active');return {tk:c.querySelector('.tk').textContent, info:c.querySelector('.scrubcard')?.innerText||'', lines:c.querySelectorAll('.xh').length}})()")
+    rects1 = p.evaluate(RECTS)
     cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(300)
     moved = p.evaluate("document.getElementById('feed').scrollTop") != top0 or active(p)[1] != "main"
-    check("phone: holding the chart shows that day's date, prices, RSI and MACD without moving the feed",
-          "·" in st["tk"] and "RSI" in st["info"] and "MACD" in st["info"] and st["lines"] >= 3 and not moved and active(p)[0] == pos0[0], f"{st} moved={moved}")
+    check("phone: holding the chart shows a readout card (date, open/high/low/close, RSI, MACD) without moving the feed",
+          st["tk"] == "BTC" and all(w in st["info"] for w in ["Open", "High", "Low", "Close", "RSI", "MACD"]) and st["lines"] >= 3 and not moved and active(p)[0] == pos0[0], f"{st} moved={moved}")
+    check("phone: while holding, the name, price and chart stay exactly in place and the same size", rects0 == rects1, f"{rects0} -> {rects1}")
     chip = p.locator(".card.active .alertchip")
     chip_text = chip.inner_text() if chip.count() else ""
     rules0 = p.evaluate("(JSON.parse(localStorage.getItem('pl.demoAccount'))||{}).rules?.length||0")
@@ -268,6 +274,39 @@ def phone_tests(b):
     check("phone: dashboard lists coins with data and the other symbols", rows >= len(ORDER), f"rows={rows}")
     p.locator("#dash [data-open='CRYPTO:XRP']").click(); p.wait_for_timeout(1300)
     check("phone: tapping a dashboard row opens that card in the feed", active(p)[0] == "XRP", str(active(p)))
+
+    # full-screen chart for one coin over longer periods
+    p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
+    p.click(".card.active [data-full]"); p.wait_for_timeout(800)
+    fs = p.evaluate("(()=>{const f=document.getElementById('full'); return {open: !!f && !f.hidden, range: f?.querySelector('[data-fr][aria-pressed=true]')?.textContent, rects: f?.querySelectorAll('.chartbox svg rect').length||0, tk: f?.querySelector('.tk')?.textContent}})()")
+    p.click("#full [data-fr='5Y']"); p.wait_for_timeout(1500)
+    f5 = p.evaluate("(()=>{const f=document.getElementById('full'); return {range: f.querySelector('[data-fr][aria-pressed=true]').textContent, note: f.querySelector('.fnote')?.textContent||'', rects: f.querySelectorAll('.chartbox svg rect').length}})()")
+    check("phone: expand opens a full-screen chart of that coin over a longer range (3M feed → 1Y), and 5Y loads weekly history",
+          fs["open"] and fs["tk"] == "BTC" and fs["range"] == "1Y" and fs["rects"] > 20 and f5["range"] == "5Y" and "Weekly" in f5["note"] and f5["rects"] > 100, f"{fs} {f5}")
+    fb = p.evaluate("(()=>{const r=document.querySelector('#full .chartbox').getBoundingClientRect();return [r.left+r.width/2, r.top+r.height/2]})()")
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": fb[0], "y": fb[1]}]}); p.wait_for_timeout(450)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": fb[0] - 50, "y": fb[1]}]}); p.wait_for_timeout(150)
+    fcard = p.evaluate("document.querySelector('#full .scrubcard')?.innerText||''")
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(300)
+    p.click("#full [data-fclose]"); p.wait_for_timeout(400)
+    check("phone: hold-to-read works in full screen, and ✕ closes it back to the feed", "Open" in fcard and p.evaluate("document.getElementById('full').hidden") and active(p)[0] == "BTC", fcard[:60].replace("\n", " "))
+
+    # profile: grouped settings and a username that can be changed only twice
+    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
+    groups = p.locator("#profile h2.pg").all_inner_texts()
+    p.click("#pName"); p.wait_for_timeout(400)
+    p.fill("#uIn", "ab"); bad1 = p.inner_text("#uMsg"); p.fill("#uIn", "pulse98765432"); bad2 = p.inner_text("#uMsg")
+    names, lefts = ["chart_fan", "chart_fan2", "chart.fan3"], []
+    for n in names:
+        if not p.is_visible("#sheet"): p.click("#pName"); p.wait_for_timeout(400)
+        p.fill("#uIn", n); p.click("#uSave"); p.wait_for_timeout(500)
+        lefts.append(p.inner_text("#profile .phead b") + " | " + (p.inner_text("#profile .pleft") if p.locator("#profile .pleft").count() else ""))
+    p.click("#pName"); p.wait_for_timeout(500)
+    blocked = (p.inner_text("#toast") if p.is_visible("#toast") else "") and not p.is_visible("#sheet")
+    check("phone: profile is grouped (Charts, Alerts, Sharing, Account, Help)", len(groups) == 5, " | ".join(groups))
+    check("phone: username rejects bad names (too short, phone-like numbers)", "3 to 20" in bad1 and "phone" in bad2, f"{bad1} / {bad2}")
+    check("phone: username can be set, then changed twice, then no more", lefts[0].startswith("@chart_fan |") and "2 username changes left" in lefts[0] and "1 username change left" in lefts[1] and "No username changes left" in lefts[2] and bool(blocked), " ; ".join(lefts))
+    p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(600)
 
     # watchlists live on the dashboard: chips switch lists (and the feed), Edit removes a coin
     p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(500)

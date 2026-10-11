@@ -10,7 +10,7 @@ Every change follows the same five steps. Nothing is reported as done until step
    pipeline: 4/4 checks passed
    worker: 6/6 checks passed
    levels: 4/4 checks passed
-   e2e: 69/69 checks passed
+   e2e: 75/75 checks passed
    ALL CHECKS PASSED
    ```
    While iterating, run one suite: `scripts/check.sh e2e` (add `-v` to list every check).

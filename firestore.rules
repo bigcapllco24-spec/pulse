@@ -5,8 +5,23 @@ service cloud.firestore {
   match /databases/{db}/documents {
     function signedIn() { return request.auth != null; }
 
+    // Username: a public display name. Set once, then changed at most twice; every change must claim the
+    // new name in /usernames in the same write, so names stay unique.
+    function nameDoc(name) { return /databases/$(db)/documents/usernames/$(name); }
+    function usernameOk(acct) {
+      let before = resource.data.get('username', null);
+      let after = request.resource.data.get('username', null);
+      let n0 = resource.data.get('usernameChanges', 0);
+      let n1 = request.resource.data.get('usernameChanges', 0);
+      return (after == before && n1 == n0)
+        || (after is string && existsAfter(nameDoc(after)) && getAfter(nameDoc(after)).data.acct == acct
+            && n1 == (before == null ? n0 : n0 + 1) && n1 <= 2);
+    }
+
     match /accounts/{acct} {
-      allow get, create, update, delete: if signedIn() && acct.size() == 64;
+      allow get, delete: if signedIn() && acct.size() == 64;
+      allow create: if signedIn() && acct.size() == 64 && !request.resource.data.keys().hasAny(['username', 'usernameChanges']);
+      allow update: if signedIn() && acct.size() == 64 && usernameOk(acct);
       match /alerts/{alert} {
         allow read, update, delete: if signedIn() && acct.size() == 64;   // written by the data job only
       }
@@ -15,6 +30,14 @@ service cloud.firestore {
     match /follows/{sym} {
       allow create: if signedIn() && request.resource.data.keys().hasOnly(['key', 't', 'n', 'm', 'ty', 'at']);
       allow update: if signedIn() && request.resource.data.keys().hasOnly(['key', 't', 'n', 'm', 'ty', 'at']);
+    }
+    match /usernames/{name} {
+      allow get: if signedIn();
+      allow create: if signedIn() && name.matches('^[a-z0-9_.]{3,20}$') && request.resource.data.keys().hasOnly(['acct', 'at'])
+        && request.resource.data.acct is string && request.resource.data.acct.size() == 64
+        && getAfter(/databases/$(db)/documents/accounts/$(request.resource.data.acct)).data.username == name;
+      allow delete: if signedIn() && (!existsAfter(/databases/$(db)/documents/accounts/$(resource.data.acct))
+        || getAfter(/databases/$(db)/documents/accounts/$(resource.data.acct)).data.get('username', null) != name);
     }
     // Shared lists: anyone with the long random link can read and edit.
     match /lists/{list} {

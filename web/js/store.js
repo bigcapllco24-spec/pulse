@@ -267,10 +267,46 @@ export function signOutDevice() {
   location.reload();
 }
 
+// ---- username: a public display name, set once and changed at most twice more (three names in total).
+// Names are unique: usernames/{name} points at the account that holds it. firestore.rules enforces the limit.
+export const USERNAME_CHANGES = 2;
+export const usernameChangesLeft = () => (store.data?.username ? USERNAME_CHANGES - (store.data.usernameChanges || 0) : USERNAME_CHANGES + 1);
+const RESERVED = /^(admin|administrator|pulse|support|help|official|moderator|mod|team|staff|root|system|null|undefined)$/;
+export function checkUsername(raw) {
+  const name = String(raw || "").trim().toLowerCase().replace(/^@/, "");
+  if (name.length < 3 || name.length > 20) return { name, error: "Use 3 to 20 characters." };
+  if (!/^[a-z0-9_.]+$/.test(name)) return { name, error: "Use letters, numbers, dots or underscores only." };
+  if (/^[._]|[._]$|\.\./.test(name)) return { name, error: "It can't start or end with a dot or underscore." };
+  if (/\d{7,}/.test(name)) return { name, error: "Long runs of numbers look like phone numbers. Please pick something else." };
+  if (RESERVED.test(name)) return { name, error: "That name is reserved." };
+  return { name, error: null };
+}
+export async function setUsername(raw) {
+  const { name, error } = checkUsername(raw);
+  if (error) throw new Error(error);
+  const old = store.data?.username || null;
+  if (old === name) return name;
+  if (usernameChangesLeft() <= 0) throw new Error("You've used all your username changes.");
+  const changes = (store.data.usernameChanges || 0) + (old ? 1 : 0);
+  if (store.mode === "demo") { await save({ username: name, usernameChanges: changes }); return name; }
+  const { db, f } = fb;
+  await f.runTransaction(db, async (tx) => {
+    const ref = f.doc(db, "usernames", name), taken = await tx.get(ref);
+    if (taken.exists() && taken.data().acct !== store.id) throw new Error("That username is taken. Try another.");
+    tx.set(ref, { acct: store.id, at: new Date().toISOString() });
+    if (old) tx.delete(f.doc(db, "usernames", old));
+    tx.update(f.doc(db, "accounts", store.id), { username: name, usernameChanges: changes });
+  });
+  store.data = { ...store.data, username: name, usernameChanges: changes };
+  store.emit("account");
+  return name;
+}
+
 export async function deleteAccount() {
   if (store.mode === "demo") { [LS.demo, LS.demoAlerts, LS.demoLists, LS.hidden].forEach(ls.del); location.reload(); return; }
   for (const l of store.data.lists || []) await leaveList(l.id);
   await clearAlerts();
-  await fb.f.deleteDoc(fb.f.doc(fb.db, "accounts", store.id));
+  if (store.data?.username) { const b = fb.f.writeBatch(fb.db); b.delete(fb.f.doc(fb.db, "usernames", store.data.username)); b.delete(fb.f.doc(fb.db, "accounts", store.id)); await b.commit(); }
+  else await fb.f.deleteDoc(fb.f.doc(fb.db, "accounts", store.id));
   signOutDevice();
 }

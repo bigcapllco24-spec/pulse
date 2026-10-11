@@ -1,6 +1,6 @@
 // Dashboard, Profile, sheets (add stocks, watchlists, switcher) and onboarding.
 import { CONFIG } from "../config.js";
-import { store, save, chartSettings, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
+import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
   createAccount, restore, normCode, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList,
   getShared, callAI, enablePush, signOutDevice, deleteAccount } from "./store.js";
 import { loadSymbols, searchSymbols, searchIndicators, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
@@ -184,17 +184,37 @@ export function renderDash() {
 }
 
 // ---------- profile
-const MENU = [["chart", "Chart style", "Window, candles, averages, RSI and MACD"], ["indicators", "Indicators", "What the readings show"],
-  ["rules", "Rules", "Get alerted when your levels are hit"], ["alerts", "Alerts", ""], ["lists", "Shared lists", "Track a list with friends"],
-  ["account", "Account", "Recovery code, devices, delete"], ["appearance", "Appearance", "Dark or light"], ["tour", "Show the app tour again", "Swipes, charts and watchlists in a minute"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]];
+// Profile: a header with the username, then settings grouped by what people come here to do.
+const ICON = {
+  chart: '<path d="M3 17l5-6 4 4 4-7 5 9"/>', indicators: '<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>', rules: '<path d="M12 3a6 6 0 016 6c0 5 2 6 2 6H4s2-1 2-6a6 6 0 016-6zM10 19a2 2 0 004 0"/>',
+  alerts: '<path d="M4 4h16v12H5l-1 4z"/>', lists: '<circle cx="8" cy="9" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M2 20c1-4 4-5 6-5s5 1 6 5M14 20c.5-2.5 2-3.5 3.5-3.5S21 17.5 22 20"/>',
+  account: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>', appearance: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z"/>',
+  tour: '<path d="M5 3l14 9-14 9z"/>', legal: '<path d="M7 3h8l4 4v14H7zM15 3v4h4M10 12h6M10 16h6"/>',
+};
+const GROUPS = [
+  ["Charts & learning", [["chart", "Chart style", "Time range, candles, panels, lines"], ["indicators", "Indicators", "What the readings show"]]],
+  ["Alerts", [["rules", "Alert rules", "Get told when your levels are hit"], ["alerts", "Alerts", "Everything that has fired"]]],
+  ["Sharing", [["lists", "Shared lists", "Follow a list with friends"]]],
+  ["Account & privacy", [["account", "Account", "Recovery code, devices, delete"], ["appearance", "Appearance", "Dark, light or match phone"]]],
+  ["Help", [["tour", "Show the app tour again", "Swipes, charts and watchlists in a minute"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]]],
+];
+const icon = (k) => `<svg class="pic" viewBox="0 0 24 24" aria-hidden="true">${ICON[k] || ""}</svg>`;
 export function renderProfile(sub, arg) {
   const el = $("profile");
   const back = `<button class="btn ghost sm" id="pBack" style="padding-left:0">‹ Profile</button>`;
   if (!sub) {
     const unread = store.alerts.filter((a) => !a.read).length;
-    el.innerHTML = `<h1>Profile</h1>${store.mode === "demo" ? `<div class="notice warn">Demo mode: saved on this phone only. AI features turn on once Firebase and the AI relay are set up (see README).</div>` : ""}
-      <div class="list">${MENU.map(([k, l, d]) => `<button class="row" data-p="${k}"><span class="main"><span class="t">${l}${k === "alerts" && unread ? ` <span class="pill confirmed">${unread} new</span>` : ""}</span>${d ? `<span class="s">${d}</span>` : ""}</span><span class="chev">›</span></button>`).join("")}</div>
+    const u = store.data?.username, left = usernameChangesLeft(), nW = watchlists().length, nC = allSyms().length;
+    el.innerHTML = `<div class="phead">
+        <div class="pav" aria-hidden="true">${esc((u || "?")[0].toUpperCase())}</div>
+        <div class="pwho"><b>${u ? "@" + esc(u) : "Pick a username"}</b><span>${nC} coins · ${nW} watchlist${nW === 1 ? "" : "s"}${store.mode === "demo" ? " · saved on this phone" : ""}</span></div>
+        <button class="btn sm" id="pName">${u ? "Change" : "Set"}</button>
+      </div>
+      ${u ? `<p class="hint pleft">${left > 0 ? `${left} username change${left === 1 ? "" : "s"} left` : "No username changes left"}</p>` : ""}
+      ${store.mode === "demo" ? `<div class="notice warn">Demo mode: saved on this phone only.</div>` : ""}
+      ${GROUPS.map(([g, rows]) => `<h2 class="pg">${g}</h2><div class="list pgl">${rows.map(([k, l, d]) => `<button class="row" data-p="${k}">${icon(k)}<span class="main"><span class="t">${l}${k === "alerts" && unread ? ` <span class="pill confirmed">${unread} new</span>` : ""}</span><span class="s">${d}</span></span><span class="chev">›</span></button>`).join("")}</div>`).join("")}
       <p class="disclaimer">${esc(DISCLAIMER)}</p>`;
+    el.querySelector("#pName").onclick = () => openUsernameSheet();
     el.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => {
       if (b.dataset.p === "tour") { resetTours(); showTab("feed"); setTimeout(() => startTour("feed"), 300); return; }
       renderProfile(b.dataset.p);
@@ -205,6 +225,27 @@ export function renderProfile(sub, arg) {
   fn(el, back, arg);
   el.querySelector("#pBack").onclick = () => renderProfile();
   el.parentElement.scrollTop = 0;
+}
+
+// Username sheet: live checks, a clear count of changes left, and a warning against real names.
+export function openUsernameSheet() {
+  const cur = store.data?.username || "", left = usernameChangesLeft();
+  if (cur && left <= 0) { toast("You've used all your username changes."); return; }
+  openSheet(cur ? "Change username" : "Choose a username", `
+    <label class="field"><span>Username</span><div class="uname"><span>@</span><input id="uIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" value="${esc(cur)}" placeholder="e.g. chartwatcher"></div></label>
+    <p class="hint" id="uMsg">3–20 letters, numbers, dots or underscores.</p>
+    <div class="notice">Your username is public in shared lists. Don't use your real name, email or phone number.</div>
+    <p class="hint">${cur ? `Changing it uses 1 of your ${left} remaining change${left === 1 ? "" : "s"}.` : `After choosing one you can change it ${USERNAME_CHANGES} more times.`}</p>
+    <button class="btn primary block" id="uSave" disabled>${cur ? "Change username" : "Save username"}</button>`, (body) => {
+    const inp = body.querySelector("#uIn"), msg = body.querySelector("#uMsg"), btn = body.querySelector("#uSave");
+    const check = () => { const { name, error } = checkUsername(inp.value); const same = name === cur; msg.textContent = error || (same ? "That's your current username." : `@${name} looks good.`); msg.className = "hint " + (error ? "bad" : same ? "" : "good"); btn.disabled = !!error || same; };
+    inp.oninput = check; check(); setTimeout(() => inp.focus(), 250);
+    btn.onclick = async () => {
+      btn.disabled = true; btn.textContent = "Saving…";
+      try { const n = await setUsername(inp.value); closeSheet(); toast(`You're @${n}.`); renderProfile(); }
+      catch (e) { msg.textContent = e.message || "Couldn't save. Try again."; msg.className = "hint bad"; btn.disabled = false; btn.textContent = cur ? "Change username" : "Save username"; }
+    };
+  });
 }
 
 function pWatchlists(el, back) {
@@ -387,7 +428,7 @@ function pLists(el, back) {
   const lists = [...store.lists.values()];
   const link = (id) => location.origin + location.pathname + "#/join/" + id;
   el.innerHTML = `${back}<h1>Shared lists</h1><p class="hint">Anyone with a list's link can see and edit it. Members show by a nickname; we never ask for names.</p>
-    <form class="box" id="lForm"><div class="field"><label for="lName">New shared list</label><input id="lName" maxlength="40" required placeholder="e.g. Weekend watchlist"></div><div class="field"><label for="lNick">Your nickname in it</label><input id="lNick" maxlength="24" required></div><button class="btn primary block">Create</button></form>
+    <form class="box" id="lForm"><div class="field"><label for="lName">New shared list</label><input id="lName" maxlength="40" required placeholder="e.g. Weekend watchlist"></div><div class="field"><label for="lNick">Your nickname in it</label><input id="lNick" value="${esc(store.data?.username || "")}" maxlength="24" required></div><button class="btn primary block">Create</button></form>
     ${lists.map((l) => `<div class="box"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h3>${esc(l.name)}</h3><span><button class="btn sm" data-copy="${esc(l.id)}">Invite link</button> <button class="btn ghost sm" data-leave="${esc(l.id)}">Leave</button></span></div>
       <p class="hint">Members: ${esc(Object.values(l.members || {}).join(", ") || "just you")}</p><p>${(l.symbols || []).map((s) => esc(s.t)).join(", ") || `<span class="hint">Empty</span>`}</p>
       ${(l.symbols || []).length ? `<button class="btn sm" data-copyto="${esc(l.id)}">Copy into a watchlist</button>` : ""}</div>`).join("")}`;
@@ -398,7 +439,7 @@ function pLists(el, back) {
   el.querySelectorAll("[data-copyto]").forEach((b) => (b.onclick = async () => { const l = store.lists.get(b.dataset.copyto); const id = await newWatchlist(l.name); await save({ watchlists: watchlists().map((w) => (w.id === id ? { ...w, syms: l.symbols } : w)) }); toast(`Copied into “${l.name}”.`); }));
 }
 async function joinFlow(id) {
-  const nick = prompt("Your nickname in this shared list (others see only this):");
+  const nick = store.data?.username || prompt("Your nickname in this shared list (others see only this):");
   if (!nick) return;
   try { await joinList(id, nick); toast("Joined. Find it in Profile → Shared lists."); renderProfile("lists"); } catch (e) { toast(e.message, { ms: 5000 }); }
   history.replaceState(null, "", location.pathname);
@@ -425,7 +466,7 @@ function pLegal(el, back) {
     <h2>Not investment advice</h2><p>${esc(DISCLAIMER)} Check facts and consult a registered adviser before investing.</p>
     <h2>How AI is used</h2><p>Explanations of news, price moves and indicators are written by an AI model from linked sources, once per story or move, and are the same for every user. They describe what happened and what a number measures. They never say whether to buy, sell or hold and never predict prices. Each is labelled with its date and sources.</p>
     <h2>Fact tags and sorting</h2><p>Tags such as “Volume 2.1x usual” or “New 50-day high” state facts about the latest data. Sorting by move, news or RSI orders your own list by that fact. Neither is a signal or a ranking of investments.</p>
-    <h2>Privacy</h2><p>We don't ask for or store your name, email, phone number, location or contacts, and use no tracking or advertising cookies. We keep a random account ID derived from your recovery code, your watchlists, chart style, rules and indicator choices, list nicknames and, if you turn on alerts, a push token. You can delete everything from Account.</p>
+    <h2>Privacy</h2><p>We don't ask for or store your name, email, phone number, location or contacts, and use no tracking or advertising cookies. We keep a random account ID derived from your recovery code, the username you choose (if any), your watchlists, chart style, rules and indicator choices, list nicknames and, if you turn on alerts, a push token. You can delete everything from Account.</p>
     <h2>Data sources</h2><p>Coin prices from Kraken's public data, checked against CoinGecko. News found via the GDELT Project and linked to each publisher.</p>
     <h2>Age</h2><p>For people aged 18 and over.</p>
     <h2>Grievance contact</h2><p>${esc(CONFIG.companyName)} · <a href="mailto:${esc(CONFIG.grievanceEmail)}">${esc(CONFIG.grievanceEmail)}</a>. Complaints acknowledged within 24 hours, resolved within 15 days.</p>

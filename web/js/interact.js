@@ -43,11 +43,14 @@ function start(feed, id) {
   const main = c.querySelector('[data-pane="main"]'), box = main.querySelector(".chartbox .plot"), svg = box?.querySelector("svg.chart");
   if (!svg) return;
   try { feed.setPointerCapture(id); } catch {}
-  const head = { tk: main.querySelector(".tk"), price: main.querySelector(".price"), chg: main.querySelector(".chg") };
-  scrub = { id, c, v, main, box, svg, head, saved: { tk: head.tk.textContent, price: head.price.textContent, chg: head.chg.outerHTML },
+  const q = (sel) => main.querySelector(sel) || c.parentElement?.querySelector(sel); // the full-screen chart keeps its header outside the card
+  const head = { tk: q(".tk"), price: q(".price"), chg: q(".chg") };
+  if (!head.price || !head.chg) return;
+  scrub = { id, c, v, main, box, svg, head, saved: { price: head.price.textContent, chg: head.chg.outerHTML },
     lo: +svg.dataset.lo, hi: +svg.dataset.hi, level: null };
   APP.scrub = true;
-  box.insertAdjacentHTML("beforeend", `<div class="xh"></div><div class="yh"><span></span></div><div class="scrubinfo"></div>`);
+  // Readout card floats inside the chart, so the name, price and chart never move or resize while holding.
+  box.insertAdjacentHTML("beforeend", `<div class="xh"></div><div class="yh"><span></span></div><div class="scrubcard" aria-live="polite"></div>`);
   main.querySelectorAll(".lower .lplot").forEach((l) => l.insertAdjacentHTML("beforeend", `<div class="xh"></div>`));
   main.classList.add("scrubbing");
   coachEvent("scrub");
@@ -69,25 +72,26 @@ function move(cx, cy) {
   if (i === s.i) return;
   s.i = i;
   const b = s.v.win[i], g = s.v.bars.length - n + i, prev = s.v.bars[g - 1], chg = prev ? ((b.c - prev.c) / prev.c) * 100 : null;
-  const sym = APP.seq[+s.c.dataset.i]?.sym;
-  s.head.tk.textContent = `${sym?.t || ""} · ${fmtDay(b.t)}`;
   s.head.price.textContent = money(b.c, "CRYPTO");
-  const chgEl = s.main.querySelector(".chg");
+  const chgEl = s.head.chg;
   chgEl.className = `chg ${chg == null || chg >= 0 ? "up" : "down"}`; chgEl.textContent = chg == null ? "–" : `${arrow(chg)} ${pct(chg)}`;
   const rsi = s.v.ov.rsi14?.[i], mh = s.v.ov.macdHist?.[i];
-  s.box.querySelector(".scrubinfo").textContent = `O ${fmtPrice(b.o)} H ${fmtPrice(b.h)} L ${fmtPrice(b.l)} C ${fmtPrice(b.c)}` +
-    `${rsi != null ? ` · RSI ${rsi.toFixed(0)}` : ""}${mh != null ? ` · MACD ${fmt(mh, 2)}` : ""}`;
+  const card = s.box.querySelector(".scrubcard");
+  card.innerHTML = `<div class="sc-d"><b>${esc(fmtDay(b.t))}</b>${chg == null ? "" : `<span class="${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span>`}</div>
+    <div class="sc-g"><span>Open</span><b>${fmtPrice(b.o)}</b><span>High</span><b>${fmtPrice(b.h)}</b><span>Low</span><b>${fmtPrice(b.l)}</b><span>Close</span><b>${fmtPrice(b.c)}</b></div>
+    ${rsi != null || mh != null ? `<div class="sc-i">${rsi != null ? `RSI <b>${rsi.toFixed(0)}</b>` : ""}${mh != null ? `<i></i>MACD <b>${fmt(mh, 2)}</b>` : ""}</div>` : ""}`;
+  card.classList.toggle("right", xPct < 50); // keep the card away from the finger
   if (navigator.vibrate && i % 5 === 0) haptic();
 }
 
 function end(offerAlert) {
   const s = scrub; scrub = null; APP.scrub = false; APP.scrubEndAt = Date.now();
   s.main.classList.remove("scrubbing");
-  s.main.querySelectorAll(".xh,.scrubinfo").forEach((el) => el.remove());
-  s.head.tk.textContent = s.saved.tk; s.head.price.textContent = s.saved.price;
-  s.main.querySelector(".chg").outerHTML = s.saved.chg;
+  s.main.querySelectorAll(".xh,.scrubcard").forEach((el) => el.remove());
+  s.head.price.textContent = s.saved.price;
+  s.head.chg.outerHTML = s.saved.chg;
   const yh = s.box.querySelector(".yh");
-  const sym = APP.seq[+s.c.dataset.i]?.sym, last = s.v.lastBar.c;
+  const sym = s.c._sym || APP.seq[+s.c.dataset.i]?.sym, last = s.v.lastBar.c;
   if (!offerAlert || !sym || s.level == null) { yh?.remove(); return; }
   // One tap turns the level under the finger into an alert rule.
   const level = +s.level.toPrecision(5), op = level >= last ? "above" : "below";

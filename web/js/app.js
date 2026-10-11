@@ -8,6 +8,7 @@ import { describe } from "./describe.js";
 import { mainChart, lowerChart } from "./chart.js";
 import { levelsFor } from "./levels.js";
 import { startTour, coachEvent } from "./coach.js";
+import { openFull } from "./full.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
@@ -240,7 +241,7 @@ function renderMain(c, it) {
       <div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span></div></div>
       <div class="hr"><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${v.interval === "1W" ? "weekly" : "daily"} candles"><b>${esc(v.range)}</b><span>${v.interval === "1W" ? "Weekly" : "Daily"}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
       <button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div>
-      <div class="chartbox">${mainChart(v.win, v.ov, { type: cs.type, closeOnly: v.closeOnly, maKeys: cs.mas, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
+      <div class="chartbox"><button class="fxbtn" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>${mainChart(v.win, v.ov, { type: cs.type, closeOnly: v.closeOnly, maKeys: cs.mas, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
       ${String(cs.lower || "none").split(",").filter((k) => k !== "none").map((k) => lowerChart(v.win, v.ov, k)).join("")}${dots}`;
   } else {
     main.innerHTML = `<div class="head"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div>
@@ -506,6 +507,7 @@ function wire(c, it) {
     if (next !== "off" && !ls.get("pl.lvTip")) { ls.set("pl.lvTip", 1); toast("Dashed lines mark prices where the chart turned before. Tap a label to learn more."); }
   });
   c.querySelector(".chartbox:not(.nodata)")?.addEventListener("click", () => { if (!justScrubbed()) chartTapHint(); });
+  c.querySelector("[data-full]")?.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) { coachEvent("full"); openFull(it.sym); } });
   c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); coachEvent("tf"); openChartSheet(it.sym, () => { renderMain(c, it); wire(c, it); }); });
 }
 
