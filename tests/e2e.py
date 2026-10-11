@@ -172,6 +172,22 @@ def phone_tests(b):
     sheet = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
     check("phone: tapping the RSI panel explains it with today's reading", "RSI" in sheet and "right now" in sheet.lower() and "how to read" in sheet.lower(), sheet[:120].replace("\n", " "))
     p.click("#sheet [data-close]"); p.wait_for_timeout(500)
+    # every panel that can be under the chart: tap it, then "Open the full guide" — the guide must stay open
+    p.evaluate("(()=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.settings.chart={...a.settings.chart, lower:'RSI,MACD,VOL'}; localStorage.setItem('pl.demoAccount', JSON.stringify(a))})()")
+    p.reload(); p.wait_for_timeout(2500)
+    p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
+    guide_ok, guide_detail = True, []
+    for kind in ["RSI", "MACD", "VOL"]:
+        p.click(f".card.active .lower[data-learn={kind}]"); p.wait_for_timeout(500)
+        first = p.inner_text("#sheet .sh-head") if p.is_visible("#sheet") else ""
+        p.click("#sheet [data-guide]"); p.wait_for_timeout(1000)
+        after = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+        ok = bool(first) and len(after) > 40
+        guide_ok &= ok; guide_detail.append(f"{kind}: {'stays open' if ok else 'CLOSED'}")
+        p.click("#sheet [data-close]"); p.wait_for_timeout(500)
+    check("phone: RSI, MACD and volume panels open their guide and it stays on screen", guide_ok, "; ".join(guide_detail))
+    p.evaluate("(()=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.settings.chart={...a.settings.chart, lower:'RSI,MACD'}; localStorage.setItem('pl.demoAccount', JSON.stringify(a))})()")
+    p.reload(); p.wait_for_timeout(2500)
     # quiz on the caught-up card
     p.evaluate(f"document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight*{len(ORDER)+1})"); p.wait_for_timeout(1200)
     nq = p.locator(".card.active .qq").count()

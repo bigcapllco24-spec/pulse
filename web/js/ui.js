@@ -28,8 +28,12 @@ export function toast(msg, { action, onAction, ms = 3200 } = {}) {
 }
 
 let onCloseFn = null;
+let closeTimer = null;
 export function openSheet(title, body, onMount, onClose) {
   const sh = $("sheet"), bd = $("backdrop");
+  // A sheet opened right after another one closes (e.g. "Open the full guide") must not be hidden by the
+  // first sheet's closing animation.
+  clearTimeout(closeTimer); closeTimer = null;
   sh.innerHTML = `<div class="grab"></div><div class="sh-head"><h2 id="shTitle">${title}</h2><button class="btn ghost" data-close aria-label="Close">Done</button></div><div class="sh-body">${body}</div>`;
   sh.hidden = false; bd.hidden = false;
   requestAnimationFrame(() => { sh.classList.add("on"); bd.classList.add("on"); });
@@ -43,7 +47,7 @@ export function closeSheet() {
   const sh = $("sheet"), bd = $("backdrop");
   if (sh.hidden) return;
   sh.classList.remove("on"); bd.classList.remove("on");
-  setTimeout(() => { sh.hidden = true; bd.hidden = true; sh.innerHTML = ""; }, 260);
+  closeTimer = setTimeout(() => { closeTimer = null; sh.hidden = true; bd.hidden = true; sh.innerHTML = ""; }, 260);
   const fn = onCloseFn; onCloseFn = null; fn?.();
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
