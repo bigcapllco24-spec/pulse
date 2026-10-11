@@ -20,12 +20,12 @@ def check(name, ok, detail=""):
 ORDER = ["BTC", "ETH", "BNB", "XRP", "SOL", "TRX", "ZEC", "HYPE", "DOGE", "LINK"]
 COINS = set(ORDER)
 
-# Kraken stand-in: the test browser has no internet, so every coin gets 120 days of made-up daily candles.
+# Kraken stand-in: the test browser has no internet, so every coin gets 2 years of made-up daily candles.
 import json as _json, random as _random, re as _re
 def kraken_route(route):
     pair = _re.search(r"pair=([A-Z]+)", route.request.url).group(1)
-    rnd = _random.Random(pair); price = rnd.uniform(0.2, 900); rows = []; t0 = 1781913600
-    for k in range(120):
+    rnd = _random.Random(pair); price = rnd.uniform(0.2, 900); rows = []; t0 = 1791504000 - 729 * 86400
+    for k in range(730):
         o = price; c = o * (1 + rnd.gauss(0, 0.03)); h = max(o, c) * (1 + abs(rnd.gauss(0, 0.01))); l = min(o, c) * (1 - abs(rnd.gauss(0, 0.01)))
         rows.append([t0 + k * 86400, f"{o:.6f}", f"{h:.6f}", f"{l:.6f}", f"{c:.6f}", f"{c:.6f}", f"{rnd.uniform(1e3, 1e6):.2f}", 100]); price = c
     route.fulfill(status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"}, body=_json.dumps({"error": [], "result": {pair: rows, "last": rows[-1][0]}}))
@@ -125,6 +125,28 @@ def phone_tests(b):
     check("phone: card is just name, price, today's move and the chart", not card["extra"] and "BTC" in card["head"] and "%" in card["head"] and card["chartH"] > 250, str(card))
     left(); dv = active(p)[1]; right(); right(); nv = active(p)[1]; left()
     check("phone: details and news open by swiping alone", dv == "details" and nv == "news", f"{dv} {nv}")
+
+    # the time axis names the months under the chart, and the chip says what the chart covers
+    ax = p.locator(".card.active .xaxis span").all_inner_texts(); tf0 = p.inner_text(".card.active [data-tf]").replace("\n", " ")
+    import re as _r2
+    check("phone: months are labelled under the chart and the chip shows the range (3M Daily)", len(ax) >= 2 and all(_r2.fullmatch(r"[A-Z][a-z]{2}|20\d\d|\d{1,2}", t) for t in ax) and tf0.startswith("3M") and "Daily" in tf0, f"{ax} / {tf0}")
+    # chart chip: change just this coin, then all coins
+    p.click(".card.active [data-tf]"); p.wait_for_timeout(400)
+    p.click("#sheet [data-scope=coin]"); p.click("#sheet [data-k=range][data-v='1Y']"); p.wait_for_timeout(300)
+    p.click("#sheet [data-close]"); p.wait_for_timeout(900)
+    btc_tf = p.inner_text(".card.active [data-tf]").replace("\n", " ")
+    up(); eth_tf = p.inner_text(".card.active [data-tf]").replace("\n", " ")
+    check("phone: 'Just BTC' changes only BTC's chart (1Y weekly), other coins keep 3M", btc_tf.startswith("1Y") and "Weekly" in btc_tf and eth_tf.startswith("3M"), f"BTC={btc_tf} ETH={eth_tf}")
+    p.click(".card.active [data-tf]"); p.wait_for_timeout(400)
+    p.click("#sheet [data-scope=all]"); p.click("#sheet [data-k=range][data-v='6M']"); p.wait_for_timeout(300)
+    p.click("#sheet [data-close]"); p.wait_for_timeout(900)
+    eth2 = p.inner_text(".card.active [data-tf]").replace("\n", " "); down(); btc2 = p.inner_text(".card.active [data-tf]").replace("\n", " ")
+    check("phone: 'All my coins' changes every coin's chart (6M)", eth2.startswith("6M") and btc2.startswith("6M"), f"ETH={eth2} BTC={btc2}")
+    p.click(".card.active [data-tf]"); p.wait_for_timeout(400); p.click("#sheet [data-k=range][data-v='3M']"); p.wait_for_timeout(300); p.click("#sheet [data-close]"); p.wait_for_timeout(900)
+    # details pane is organised in clear sections
+    left(); secs = p.locator(".card.active [data-pane=details] .dsec h3").all_inner_texts(); right()
+    want = ["TODAY", "PERFORMANCE", "READINGS", "WHERE THE PRICE SITS", "YOUR ALERTS", "WATCHLISTS", "ABOUT"]
+    check("phone: details are in sections: Today, Performance, Readings, Ranges, Alerts, Watchlists, About", all(any(t.upper().startswith(w) for t in secs) for w in want), " | ".join(secs))
 
     # hold and slide on the chart reads any day; releasing offers a one-tap alert at that level
     box = p.evaluate("(()=>{const r=document.querySelector('.card.active .chartbox').getBoundingClientRect();return [r.left,r.top,r.width,r.height]})()")
@@ -234,11 +256,12 @@ def phone_tests(b):
 
     # chart style changes reach the feed
     p.click("[data-p=chart]"); p.wait_for_timeout(300)
-    p.click("[data-k=window][data-v='20']"); p.click("[data-k=type][data-v=line]"); p.click("[data-k=lower][data-v=MACD]"); p.wait_for_timeout(300)
+    p.click("[data-k=range][data-v='1M']"); p.click("[data-k=type][data-v=line]"); p.click("[data-k=lower][data-v=MACD]"); p.wait_for_timeout(300)
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(1200)
     p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
     line = p.locator(".card.active .chartbox .pline").count(); low = p.inner_text(".card.active .lower-label")
-    check("phone: chart style (line, MACD) applies to cards", line == 1 and "MACD" in low, f"line={line} / {low}")
+    tf = p.inner_text(".card.active [data-tf]").replace("\n", " ")
+    check("phone: chart style (1 month, line, MACD) applies to cards", line == 1 and "MACD" in low and tf.startswith("1M"), f"line={line} / {low} / {tf}")
 
     # indicator switch reaches details
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(300); p.click("#pBack") if p.locator("#pBack").count() else None

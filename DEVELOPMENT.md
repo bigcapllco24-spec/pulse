@@ -9,7 +9,7 @@ Every change follows the same five steps. Nothing is reported as done until step
    syntax: all files parse
    pipeline: 4/4 checks passed
    worker: 6/6 checks passed
-   e2e: 56/56 checks passed
+   e2e: 60/60 checks passed
    ALL CHECKS PASSED
    ```
    While iterating, run one suite: `scripts/check.sh e2e` (add `-v` to list every check).

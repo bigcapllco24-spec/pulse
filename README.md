@@ -92,4 +92,4 @@ firestore.rules      database security rules
 
 ## Checks
 
-Run `scripts/check.sh` (needs Node 20+, Python 3 with Playwright and Chromium). It runs 66 checks across the app, the data job and the AI relay and prints one line per suite. See `DEVELOPMENT.md` for the process and what is and isn't covered.
+Run `scripts/check.sh` (needs Node 20+, Python 3 with Playwright and Chromium). It runs 70 checks across the app, the data job and the AI relay and prints one line per suite. See `DEVELOPMENT.md` for the process and what is and isn't covered.

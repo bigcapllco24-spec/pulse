@@ -15,7 +15,7 @@ async function kraken(t) {
   if (j.error?.length) throw new Error(j.error.join(", "));
   const rows = Object.entries(j.result).find(([k]) => k !== "last")?.[1] || [];
   // [time, open, high, low, close, vwap, volume, count]; the last row is today's bar, still forming.
-  return rows.slice(-300).map((x) => [new Date(x[0] * 1000).toISOString().slice(0, 10), +x[1], +x[2], +x[3], +x[4], +x[6]]);
+  return rows.slice(-730).map((x) => [new Date(x[0] * 1000).toISOString().slice(0, 10), +x[1], +x[2], +x[3], +x[4], +x[6]]);
 }
 
 async function gecko(tickers) {

@@ -15,7 +15,7 @@ export function loadCached() {
 }
 function saveCache() {
   const series = {};
-  for (const [k, v] of Object.entries(D.series)) series[k] = { ...v, bars: v.bars.slice(-260).map((b) => [b.t, b.o, b.h, b.l, b.c, b.v]) };
+  for (const [k, v] of Object.entries(D.series)) series[k] = { ...v, bars: v.bars.slice(-730).map((b) => [b.t, b.o, b.h, b.l, b.c, b.v]) };
   ls.set(CACHE, { generatedAt: D.generatedAt, series });
 }
 
@@ -30,7 +30,7 @@ async function kraken(t) {
   const j = await getJSON(`https://api.kraken.com/0/public/OHLC?pair=${KRAKEN[t] || t + "USD"}&interval=1440`);
   if (j.error?.length) throw new Error(j.error[0]);
   const rows = Object.entries(j.result).find(([k]) => k !== "last")?.[1] || [];
-  return rows.slice(-300).map((x) => ({ t: new Date(x[0] * 1000).toISOString().slice(0, 10), o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[6] }));
+  return rows.slice(-730).map((x) => ({ t: new Date(x[0] * 1000).toISOString().slice(0, 10), o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[6] }));
 }
 
 // One refresh for the whole watchlist. A failed symbol never breaks the others.
@@ -58,29 +58,38 @@ export async function refresh(syms) {
 }
 
 // Everything a card needs for one symbol under the current chart settings.
+// Chart time ranges in days. Candles are daily up to 6 months and weekly from 1 year, unless the person picks one.
+export const RANGES = { "1M": 30, "3M": 91, "6M": 182, "1Y": 365, "2Y": 730 };
+export const RANGE_LABEL = { "1M": "1 month", "3M": "3 months", "6M": "6 months", "1Y": "1 year", "2Y": "2 years" };
+export const resolveInterval = (c) => (c.interval === "1D" || c.interval === "1W" ? c.interval : (RANGES[c.range] || 91) >= 365 ? "1W" : "1D");
+
 // Results are cached per series object and window, so lists, sorting and the dashboard don't recompute every
 // indicator on each call. A refresh replaces the series object, which drops its cache automatically.
 const viewCache = new WeakMap();
 export function view(key, chart) {
   const s = D.series[key];
   if (!s?.bars?.length) return null;
-  const ck = `${chart.interval}|${chart.window}`;
+  const ck = `${resolveInterval(chart)}|${chart.range}`;
   let m = viewCache.get(s);
   if (!m) viewCache.set(s, (m = new Map()));
   if (!m.has(ck)) m.set(ck, computeView(key, s, chart));
   return m.get(ck);
 }
 function computeView(key, s, chart) {
-  const bars = chart.interval === "1W" ? toWeekly(s.bars) : s.bars;
+  const interval = resolveInterval(chart);
+  const bars = interval === "1W" ? toWeekly(s.bars) : s.bars;
   const series = buildSeries(bars);
-  const n = bars.length, w = Math.min(chart.window, n), from = n - w;
+  // window by calendar time: every candle whose date falls inside the chosen range (at least 5 candles)
+  const n = bars.length, cut = new Date(Date.parse(bars[n - 1].t) - (RANGES[chart.range] || 91) * 864e5).toISOString().slice(0, 10);
+  let from = bars.findIndex((b) => b.t > cut); if (from < 0 || n - from < 5) from = Math.max(0, n - 5);
+  const w = n - from;
   const slice = (a) => a.slice(from);
   const win = bars.slice(from);
   const ov = {};
   for (const k of Object.keys(series)) ov[k] = slice(series[k]);
   const r = compute(bars, series);
-  const daily = chart.interval === "1W" ? compute(s.bars) : r;
-  return { key, source: s.source, closeOnly: !!s.closeOnly, live: !!s.live, bars, win, ov, now: r.now, prev: r.prev, daily, lastBar: bars[n - 1], prevBar: bars[n - 2],
+  const daily = interval === "1W" ? compute(s.bars) : r;
+  return { key, range: chart.range, interval, source: s.source, closeOnly: !!s.closeOnly, live: !!s.live, bars, win, ov, now: r.now, prev: r.prev, daily, lastBar: bars[n - 1], prevBar: bars[n - 2],
     windowChange: ((win[w - 1].c - win[0].c) / win[0].c) * 100 };
 }
 

@@ -39,7 +39,7 @@ function start(feed, id) {
   const h = hold; hold = null;
   const c = h?.c, v = c?._v;
   if (!v || APP.dragging) return;
-  const main = c.querySelector('[data-pane="main"]'), box = main.querySelector(".chartbox"), svg = box.querySelector("svg.chart");
+  const main = c.querySelector('[data-pane="main"]'), box = main.querySelector(".chartbox .plot"), svg = box?.querySelector("svg.chart");
   if (!svg) return;
   try { feed.setPointerCapture(id); } catch {}
   const head = { tk: main.querySelector(".tk"), price: main.querySelector(".price"), chg: main.querySelector(".chg") };

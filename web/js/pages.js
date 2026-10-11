@@ -1,18 +1,17 @@
 // Dashboard, Profile, sheets (add stocks, watchlists, switcher) and onboarding.
 import { CONFIG } from "../config.js";
-import { store, save, DEFAULT_CHART, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
+import { store, save, chartSettings, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
   createAccount, restore, normCode, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList,
   getShared, callAI, enablePush, signOutDevice, deleteAccount } from "./store.js";
 import { loadSymbols, searchSymbols, searchIndicators, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
-import { D, view, storiesFor } from "./data.js";
+import { D, view, storiesFor, RANGE_LABEL, resolveInterval } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
-import { APP, buildFeed, showTab, currentSyms, applyTheme, doRefresh } from "./app.js";
+import { APP, buildFeed, showTab, currentSyms, listName, applyTheme, doRefresh } from "./app.js";
 
 const MAX_ACTIVE = 6;
 const symDoc = (r) => ({ key: r.key, t: r.t, n: r.n, m: r.m, ty: r.ty });
-const chartSettings = () => ({ ...DEFAULT_CHART, ...(store.data?.settings?.chart || {}) });
 const indById = (id) => [...APP.catalogue, ...(store.data?.customIndicators || [])].find((x) => x.id === id);
 
 export function initPages() {
@@ -222,22 +221,61 @@ function pWatchlists(el, back) {
   el.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => { const [w, k] = pair(b, "rm"); await save({ watchlists: watchlists().map((x) => (x.id === w ? { ...x, syms: x.syms.filter((s) => s.key !== k) } : x)) }); re(); }));
 }
 
-function pChart(el, back) {
-  const c = chartSettings();
+// Chart options, shared by Profile → Chart style (everyone's default) and the chip on each feed card.
+const RANGE_OPTS = [["1M", "1M"], ["3M", "3M"], ["6M", "6M"], ["1Y", "1Y"], ["2Y", "2Y"]];
+const CANDLE_OPTS = [["auto", "Auto"], ["1D", "Daily"], ["1W", "Weekly"]];
+const TYPE_OPTS = [["candles", "Candles"], ["line", "Line"], ["area", "Area"]];
+const LOWER_OPTS = [["RSI,MACD", "RSI + MACD"], ["RSI", "RSI"], ["MACD", "MACD"], ["VOL", "Volume"], ["none", "None"]];
+function chartOptsHtml(c) {
   const opt = (key, vals) => `<div class="opts">${vals.map(([v, l]) => `<button class="opt" data-k="${key}" data-v="${v}" aria-pressed="${String(c[key]) === String(v)}">${l}</button>`).join("")}</div>`;
-  el.innerHTML = `${back}<h1>Chart style</h1><p class="hint">One style for every chart, so moves are easy to compare while scrolling.</p>
-    <h2>Window</h2>${opt("window", [[20, "20 bars"], [50, "50 bars"], [100, "100 bars"], [200, "200 bars"]])}
-    <h2>Candle size</h2>${opt("interval", [["1D", "Daily"], ["1W", "Weekly"]])}
-    <h2>Chart type</h2>${opt("type", [["candles", "Candles"], ["line", "Line"], ["area", "Area"]])}
+  const iv = resolveInterval(c);
+  return `<h2>Time range</h2>${opt("range", RANGE_OPTS)}<p class="hint">${esc(RANGE_LABEL[c.range] || "")} of ${iv === "1W" ? "weekly" : "daily"} candles. Each ${iv === "1W" ? "candle is one week" : "candle is one day"}.</p>
+    <h2>Candle size</h2>${opt("interval", CANDLE_OPTS)}<p class="hint">Auto uses daily candles up to 6 months and weekly candles for 1 and 2 years, so the chart never gets crowded.</p>
+    <h2>Chart type</h2>${opt("type", TYPE_OPTS)}
+    <h2>Panels under the chart</h2>${opt("lower", LOWER_OPTS)}`;
+}
+function pChart(el, back) {
+  const c = chartSettings(), custom = Object.keys(store.data.settings?.chartBy || {});
+  el.innerHTML = `${back}<h1>Chart style</h1><p class="hint">Your default for every coin. To change one coin, tap the time chip on its card in the feed.</p>
+    ${chartOptsHtml(c)}
     <h2>Moving averages</h2><div class="opts">${[["sma20", "SMA 20"], ["sma50", "SMA 50"], ["sma200", "SMA 200"], ["ema20", "EMA 20"], ["ema50", "EMA 50"]].map(([v, l]) => `<button class="opt" data-ma="${v}" aria-pressed="${(c.mas || []).includes(v)}">${l}</button>`).join("")}</div><p class="hint">Up to 3.</p>
-    <h2>Panels under the chart</h2>${opt("lower", [["RSI,MACD", "RSI + MACD"], ["RSI", "RSI 14"], ["MACD", "MACD"], ["VOL", "Volume"], ["none", "None"]])}`;
-  const set = async (patch) => { await save({ settings: { ...store.data.settings, chart: { ...c, ...patch } } }); pChart(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
-  el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => set({ [b.dataset.k]: /^\d+$/.test(b.dataset.v) ? +b.dataset.v : b.dataset.v })));
+    ${custom.length ? `<h2>Coins with their own chart</h2><p>${custom.map((k) => `<span class="pill">${esc(k.split(":")[1])}</span>`).join(" ")} <button class="btn ghost sm" id="cReset">Reset all to default</button></p>` : ""}`;
+  const re = () => { pChart(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
+  const set = async (patch) => { await save({ settings: { ...store.data.settings, chart: { ...store.data.settings.chart, ...patch } } }); APP.needsRebuild = true; re(); };
+  el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => set({ [b.dataset.k]: b.dataset.v })));
   el.querySelectorAll("[data-ma]").forEach((b) => (b.onclick = () => {
     const m = new Set(c.mas || []);
     if (m.has(b.dataset.ma)) m.delete(b.dataset.ma); else { if (m.size >= 3) return toast("Up to 3 averages keep charts readable."); m.add(b.dataset.ma); }
     set({ mas: [...m] });
   }));
+  el.querySelector("#cReset")?.addEventListener("click", async () => { await save({ settings: { ...store.data.settings, chartBy: {} } }); APP.needsRebuild = true; re(); });
+}
+
+// The time chip on a feed card: change this coin's chart, or every coin in the list the feed is showing.
+export function openChartSheet(sym, onChange) {
+  const list = store.data?.settings?.list || "all", w = watchlists().find((x) => x.id === list);
+  let scope = store.data?.settings?.chartBy?.[sym.key] ? "coin" : "all";
+  const draw = (body) => {
+    const own = !!store.data?.settings?.chartBy?.[sym.key];
+    body.innerHTML = `<div class="seg scope" role="group" aria-label="Apply to">${[["coin", `Just ${sym.t}`], ["all", w ? `All in ${w.name}` : "All my coins"]].map(([k, l]) => `<button data-scope="${k}" aria-pressed="${scope === k}">${esc(l)}</button>`).join("")}</div>
+      ${chartOptsHtml(chartSettings(sym.key))}
+      ${own ? `<p style="margin-top:14px"><button class="btn ghost sm" id="csReset">Use my default chart for ${esc(sym.t)}</button></p>` : ""}`;
+    body.querySelectorAll("[data-scope]").forEach((b) => (b.onclick = () => { scope = b.dataset.scope; draw(body); }));
+    body.querySelectorAll("[data-k]").forEach((b) => (b.onclick = async () => { await applyChart(sym, scope, w, { [b.dataset.k]: b.dataset.v }); draw(body); onChange?.(); }));
+    body.querySelector("#csReset")?.addEventListener("click", async () => { const by = { ...(store.data.settings.chartBy || {}) }; delete by[sym.key]; await save({ settings: { ...store.data.settings, chartBy: by } }); scope = "all"; draw(body); onChange?.(); });
+  };
+  openSheet(`Chart · ${esc(sym.t)}`, "", draw, () => buildFeed({ keepKey: sym.key }));
+}
+async function applyChart(sym, scope, w, patch) {
+  const st = store.data.settings, by = { ...(st.chartBy || {}) };
+  if (scope === "coin") by[sym.key] = { ...(by[sym.key] || {}), ...patch };
+  else if (w) for (const x of w.syms || []) by[x.key] = { ...(by[x.key] || {}), ...patch };
+  else { // all my coins: becomes the default, and no coin keeps an older value for these settings
+    for (const k of Object.keys(by)) { const o = { ...by[k] }; for (const p of Object.keys(patch)) delete o[p]; if (Object.keys(o).length) by[k] = o; else delete by[k]; }
+    await save({ settings: { ...st, chart: { ...(st.chart || {}), ...patch }, chartBy: by } });
+    return;
+  }
+  await save({ settings: { ...st, chartBy: by } });
 }
 
 function pIndicators(el, back) {

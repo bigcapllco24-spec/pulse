@@ -44,9 +44,33 @@ export function mainChart(win, ov, opts) {
   // price labels as HTML so they keep their shape while the drawing stretches to fit the screen
   const ly = Y(last), top = (y) => ((y / H) * 100).toFixed(2) + "%";
   body += `<line x1="0" x2="${pw}" y1="${ly.toFixed(1)}" y2="${ly.toFixed(1)}" class="lastline"/>`;
+  // time axis like TradingView: month names (the year at each January), or day numbers on short ranges
+  const ticks = timeTicks(win, opts.days || 91);
+  for (const t of ticks) body += `<line x1="${X(t.i).toFixed(1)}" x2="${X(t.i).toFixed(1)}" y1="${PT}" y2="${H - PB}" class="grid vgrid"/>`;
+  const xaxis = `<div class="xaxis" aria-hidden="true">${ticks.map((t) => `<span class="${t.major ? "maj" : ""}" style="left:${((X(t.i) / W) * 100).toFixed(2)}%">${t.label}</span>`).join("")}</div>`;
   const labels = `<span class="ax" style="top:${top(PT)}">${f(hi - pad)}</span><span class="ax" style="top:${top(H - PB)}">${f(lo + pad)}</span>` +
     `<span class="axlast ${up ? "pu" : "pd"}" style="top:${top(ly)}">${f(last)}</span>`;
-  return `<svg class="chart" data-lo="${lo}" data-hi="${hi}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${n} ${opts.interval === "1W" ? "weeks" : "days"}, ${up ? "up" : "down"} ${Math.abs(((last - first) / first) * 100).toFixed(1)}%, last ${f(last)}">${body}</svg>${labels}`;
+  return `<div class="plot"><svg class="chart" data-lo="${lo}" data-hi="${hi}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${n} ${opts.interval === "1W" ? "weeks" : "days"}, ${up ? "up" : "down"} ${Math.abs(((last - first) / first) * 100).toFixed(1)}%, last ${f(last)}, from ${win[0].t} to ${win[n - 1].t}">${body}</svg>${labels}</div>${xaxis}`;
+}
+
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// Where to put date labels under the chart: at most about 6, never crowded.
+export function timeTicks(win, days) {
+  const out = [];
+  if (days <= 45) { // short range: day numbers each week, the month name where a month starts
+    let lastMonth = win[0].t.slice(5, 7);
+    win.forEach((b, i) => {
+      const m = b.t.slice(5, 7), d = +b.t.slice(8, 10);
+      if (m !== lastMonth) { out.push({ i, label: MON[+m - 1], major: true }); lastMonth = m; }
+      else if (i > 1 && i < win.length - 1 && new Date(b.t + "T00:00:00Z").getUTCDay() === 1 && !out.some((t) => Math.abs(t.i - i) < 4)) out.push({ i, label: String(d) });
+    });
+    return out;
+  }
+  const starts = [];
+  win.forEach((b, i) => { if (i > 0 && b.t.slice(0, 7) !== win[i - 1].t.slice(0, 7)) starts.push({ i, m: +b.t.slice(5, 7), y: b.t.slice(0, 4) }); });
+  const every = starts.length <= 7 ? 1 : starts.length <= 14 ? 2 : starts.length <= 21 ? 3 : 6;
+  for (const s of starts) if (s.m === 1 || (s.m - 1) % every === 0) out.push({ i: s.i, label: s.m === 1 ? s.y : MON[s.m - 1], major: s.m === 1 });
+  return out;
 }
 
 // Lower panel: RSI with 30/70 lines, MACD histogram + lines, or volume bars.

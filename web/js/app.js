@@ -1,18 +1,17 @@
 // Pulse: the chart feed. Scroll up or down for the next symbol; swipe for its news (finger moves right)
 // or its details (finger moves left). The feed loops through the watchlist with a "caught up" card between rounds.
 import { CONFIG } from "../config.js";
-import { store, ls, init, save, STARTER, allSyms, watchlists, callAI, getShared, getSharedMany } from "./store.js";
-import { loadSymbols, MKLABEL, TYLABEL, findSymbol } from "./search.js";
+import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists, callAI, getShared, getSharedMany } from "./store.js";
+import { loadSymbols, TYLABEL, findSymbol } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { describe } from "./describe.js";
 import { mainChart, lowerChart } from "./chart.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
-import { D, loadCached, refresh, view, bigMove, storiesFor } from "./data.js";
+import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, renderOnboarding, demoRules } from "./pages.js";
+import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, renderOnboarding, demoRules } from "./pages.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
-const chartSettings = () => ({ window: 50, interval: "1D", type: "candles", mas: [], lower: "RSI,MACD", order: "watchlist", ...(store.data?.settings?.chart || {}) });
 const LOWER_KEY = { RSI: "rsi14", MACD: "macdHist", VOL: "volRatio" };
 
 // ---------- which symbols, in which order
@@ -224,16 +223,19 @@ function fillCard(c, it) {
 
 // ---------- main pane
 function renderMain(c, it) {
-  const s = it.sym, cs = chartSettings(), v = view(s.key, cs);
+  const s = it.sym, cs = chartSettings(s.key), v = view(s.key, cs);
   const main = c.querySelector('[data-pane="main"]');
   c._v = v;
   // Only what matters while scrolling: the name, today's price and move, and the chart. News and details are a swipe away.
   const dots = `<div class="dots" aria-hidden="true"><i></i><i class="on"></i><i></i></div>` + (ls.get("pl.hinted") ? "" : `<div class="swipehint">Swipe ← details · → news</div>`);
   if (v) {
     const chg = v.daily.now.changePct;
-    main.innerHTML = `<div class="head"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span>
+    // The chip at the top right says what the chart covers and opens the chart settings for this coin.
+    const own = !!store.data?.settings?.chartBy?.[s.key];
+    main.innerHTML = `<div class="head"><div class="hl"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span>
       <span class="chg ${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span></div></div>
-      <div class="chartbox">${mainChart(v.win, v.ov, { type: cs.type, closeOnly: v.closeOnly, maKeys: cs.mas, interval: cs.interval })}</div>
+      <button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${v.interval === "1W" ? "weekly" : "daily"} candles"><b>${esc(v.range)}</b><span>${v.interval === "1W" ? "Weekly" : "Daily"}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button></div>
+      <div class="chartbox">${mainChart(v.win, v.ov, { type: cs.type, closeOnly: v.closeOnly, maKeys: cs.mas, interval: v.interval, days: RANGES[v.range] })}</div>
       ${String(cs.lower || "none").split(",").filter((k) => k !== "none").map((k) => lowerChart(v.win, v.ov, k)).join("")}${dots}`;
   } else {
     main.innerHTML = `<div class="head"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div>
@@ -250,7 +252,7 @@ function renderNews(c, it, scope) {
   const keys = new Set(APP.syms.map((x) => x.key));
   let stories = scope === "sym" ? storiesFor(s.key) : scope === "mine" ? (D.news.stories || []).filter((st) => st.syms.some((k) => keys.has(k))) : (D.news.stories || []).filter((st) => st.scopes?.length);
   stories = stories.slice(0, 40);
-  const win = view(s.key, chartSettings())?.win;
+  const win = view(s.key, chartSettings(s.key))?.win;
   const winDates = new Set((win || []).map((b) => b.t));
   pane.innerHTML = `<div class="pane-wrap"><h2 class="side">News · ${esc(s.t)}</h2>
     <div class="seg" role="group" aria-label="Which news">${[["sym", s.t], ["mine", "All my news"], ["market", "Market"]].map(([k, l]) => `<button data-scope="${k}" aria-pressed="${k === scope}">${esc(l)}</button>`).join("")}</div>
@@ -305,29 +307,42 @@ async function explain(key, root) {
 
 // ---------- details pane
 function renderDetails(c, it) {
-  const s = it.sym, cs = chartSettings(), v = view(s.key, cs), pane = c.querySelector('[data-pane="details"]');
+  const s = it.sym, v = view(s.key, { ...chartSettings(s.key), interval: "1D", range: "1Y" }), pane = c.querySelector('[data-pane="details"]');
   const lists = watchlists().filter((w) => (w.syms || []).some((x) => x.key === s.key)).map((w) => w.name);
   const rules = (store.data?.rules || []).filter((r) => r.sym === s.key || (r.sym === "*" && s.m === "CRYPTO"));
-  let html = `<div class="pane-wrap"><h2 class="side">${esc(s.t)} details</h2>`;
-  if (v) {
-    const b = v.daily ? D.series[s.key].bars.at(-1) : v.lastBar, d = v.daily.now;
-    html += v.closeOnly ? `<div class="stat-grid" style="grid-template-columns:1fr 1fr"><div><span>Close ${esc(fmtDay(b.t))}</span><b>${esc(money(b.c, s.m))}</b></div><div><span>Change</span><b class="${d.changePct >= 0 ? "up" : "down"}">${pct(d.changePct)}</b></div></div>` : `<div class="stat-grid">${[["Open", b.o], ["High", b.h], ["Low", b.l], ["Close", b.c]].map(([k, x]) => `<div><span>${k}</span><b>${esc(money(x, s.m))}</b></div>`).join("")}</div>`;
-    if (bigMove(v)) html += `<div class="box" data-movebox>${moveHtml(s, v)}</div>`;
+  const sec = (title, body, extra = "") => `<section class="dsec"${extra}><h3>${title}</h3>${body}</section>`;
+  let html = `<div class="pane-wrap det">`;
+  if (!v) {
+    html += `<div class="dhead"><div><h2>${esc(s.t)}</h2><span>${esc(s.n)}</span></div></div><div class="notice">Prices for ${esc(s.t)} haven't loaded yet.</div>`;
+  } else {
+    const all = D.series[s.key].bars, b = all.at(-1), d = v.daily.now, chg = d.changePct, last = b.c;
+    // 1. who and where: name, price, today's move
+    html += `<div class="dhead"><div><h2>${esc(s.t)}</h2><span>${esc(s.n)}</span></div><div class="r"><b>${esc(money(last, s.m))}</b><span class="${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)} today</span></div></div>`;
+    // 2. today: open/high/low/close, where the close sits in the day's range, volume
+    const dayP = b.h > b.l ? ((b.c - b.l) / (b.h - b.l)) * 100 : 50;
+    html += sec(`Today · ${esc(fmtDay(b.t))}`, `<div class="stat-grid">${[["Open", b.o], ["High", b.h], ["Low", b.l], ["Close", b.c]].map(([k, x]) => `<div><span>${k}</span><b>${esc(money(x, s.m))}</b></div>`).join("")}</div>
+      <div class="rangerow"><span>Day's range</span><span>closed ${dayP.toFixed(0)}% of the way up</span></div><div class="rangebar"><i style="left:${dayP.toFixed(1)}%"></i></div><div class="rangerow"><span>${esc(money(b.l, s.m))}</span><span>${esc(money(b.h, s.m))}</span></div>
+      ${d.volRatio != null ? `<p class="dline">Volume was <b>${fmt(d.volRatio, 1)}x</b> a usual day.</p>` : ""}`);
+    if (bigMove(v)) html += `<section class="dsec box" data-movebox>${moveHtml(s, v)}</section>`;
+    // 3. performance over familiar periods
+    const back = (days) => { const cut = new Date(Date.parse(b.t) - days * 864e5).toISOString().slice(0, 10); const p = [...all].reverse().find((x) => x.t <= cut); return p ? ((last - p.c) / p.c) * 100 : null; };
+    const perf = [["1W", 7], ["1M", 30], ["3M", 91], ["6M", 182], ["1Y", 365]].map(([l, n]) => [l, back(n)]).filter(([, x]) => x != null);
+    html += sec("Performance", `<div class="perf">${perf.map(([l, x]) => `<div><span>${l}</span><b class="${x >= 0 ? "up" : "down"}">${pct(x, 1)}</b></div>`).join("")}</div>`);
+    // 4. readings in plain words
     const act = (store.data?.indicators?.active || []).map((id) => APP.catalogue.find((x) => x.id === id)).filter(Boolean);
     const rows = act.flatMap((i) => (i.metrics || []).map((m) => ({ i, m })));
-    html += `<h2>Readings</h2>${rows.map(({ i, m }) => { const meta = METRICS[m] || { label: m, digits: 2 }; return `<button class="reading" data-ind="${esc(i.id)}"><span class="k">${esc(meta.label)}</span><span class="v">${fmt(d[m], meta.digits)}${meta.unit && d[m] != null ? esc(meta.unit) : ""}</span><span class="d">${esc(describe(m, d, v.daily.prev))}</span></button>`; }).join("") || `<p class="hint">No indicators switched on. Choose them in Profile → Indicators.</p>`}`;
-    const all = D.series[s.key].bars, last = all.at(-1).c;
+    html += sec("Readings", rows.length ? `<div class="readings">${rows.map(({ i, m }) => { const meta = METRICS[m] || { label: m, digits: 2 }; return `<button class="reading" data-ind="${esc(i.id)}"><span class="k">${esc(meta.label)}</span><span class="v">${fmt(d[m], meta.digits)}${meta.unit && d[m] != null ? esc(meta.unit) : ""}</span><span class="d">${esc(describe(m, d, v.daily.prev))}</span></button>`; }).join("")}</div><p class="hint">Tap a reading to learn what it measures. Daily candles.</p>` : `<p class="hint">No indicators switched on. Choose them in Profile → Indicators.</p>`);
+    // 5. where the price sits in longer ranges
     const rng = (n) => { const w = all.slice(-n); const lo = Math.min(...w.map((x) => x.l)), hi = Math.max(...w.map((x) => x.h)); return { lo, hi, p: hi > lo ? ((last - lo) / (hi - lo)) * 100 : 50 }; };
-    html += `<h2>Where the price sits</h2>${[[50, "50-day range"], [Math.min(250, all.length), all.length >= 250 ? "52-week range" : `${all.length}-day range`]].map(([n, l]) => { const r = rng(n); return `<div class="box"><div class="rangerow"><b style="color:var(--text)">${l}</b><span>${r.p.toFixed(0)}% of the way up</span></div><div class="rangebar"><i style="left:${r.p.toFixed(1)}%"></i></div><div class="rangerow"><span>${esc(money(r.lo, s.m))}</span><span>${esc(money(r.hi, s.m))}</span></div></div>`; }).join("")}`;
-    html += `<h2>Your rules</h2>${rules.length ? `<div class="list">${rules.map((r) => { const met = ruleMet(r, d, v.daily.prev); return `<div class="row"><div class="main"><span class="t">${esc(METRICS[r.metric]?.label || r.metric)} ${esc(OPS[r.op])} ${esc(r.value)}</span><span class="s">${met ? "Met on the latest bar" : "Not met"}${r.note ? " · " + esc(r.note) : ""}</span></div>${met ? `<span class="tag rule" style="opacity:1;transform:none">Met</span>` : ""}</div>`; }).join("")}</div>` : `<p class="hint">No rules for ${esc(s.t)} yet.</p>`}
-      <button class="btn sm" data-addrule style="margin-top:8px">Add a rule for ${esc(s.t)}</button>`;
-    html += `<h2>About</h2><div class="box"><p>${esc(s.n)} · ${esc(TYLABEL[s.ty] || "")} · ${esc(MKLABEL[s.m] || s.m)}</p><p class="hint">Data: ${esc(v.source)}${v.live ? ", refreshed when you opened the app" : ""}.</p></div>`;
-  } else {
-    html += `<div class="notice">Prices for ${esc(s.t)} haven't loaded yet.</div>`;
+    html += sec("Where the price sits", [[30, "30-day range"], [Math.min(365, all.length), all.length >= 365 ? "52-week range" : `${all.length}-day range`]].map(([n, l]) => { const r = rng(n); return `<div class="rng"><div class="rangerow"><b>${l}</b><span>${r.p.toFixed(0)}% of the way up</span></div><div class="rangebar"><i style="left:${r.p.toFixed(1)}%"></i></div><div class="rangerow"><span>${esc(money(r.lo, s.m))}</span><span>${esc(money(r.hi, s.m))}</span></div></div>`; }).join(""));
+    // 6. alerts the person set
+    html += sec("Your alerts", `${rules.length ? `<div class="list">${rules.map((r) => { const met = ruleMet(r, d, v.daily.prev); return `<div class="row"><div class="main"><span class="t">${esc(METRICS[r.metric]?.label || r.metric)} ${esc(OPS[r.op])} ${esc(r.metric === "price" ? money(+r.value, s.m) : r.value)}</span><span class="s">${met ? "Met on the latest candle" : "Not met yet"}${r.note ? " · " + esc(r.note) : ""}</span></div>${met ? `<span class="tag rule" style="opacity:1;transform:none">Met</span>` : ""}</div>`; }).join("")}</div>` : `<p class="hint">No alerts for ${esc(s.t)} yet. Hold the chart and slide to a price to set one in a tap.</p>`}
+      <button class="btn sm" data-addrule>Add an alert</button>`);
   }
-  html += `<h2>In your watchlists</h2><p>${lists.length ? lists.map(esc).join(", ") : "None"} · <button class="btn ghost sm" data-save>Change</button></p>
-    <p class="disclaimer">${esc(DISCLAIMER)}</p></div>`;
-  pane.innerHTML = html;
+  // 7. watchlists and the small print
+  html += sec("Watchlists", `<p class="dline">${lists.length ? lists.map((n) => `<span class="pill">${esc(n)}</span>`).join(" ") : "Not in a watchlist"} <button class="btn ghost sm" data-save>Change</button></p>`);
+  html += sec("About", `<p class="dline">${esc(s.n)} · ${esc(TYLABEL[s.ty] || "")}</p><p class="hint">Prices: ${esc(v?.source || "Kraken")} daily candles${v?.live ? ", refreshed when you opened the app" : ""}.</p><p class="disclaimer">${esc(DISCLAIMER)}</p>`);
+  pane.innerHTML = html + `</div>`;
   pane.querySelectorAll("[data-ind]").forEach((b) => (b.onclick = () => openIndicator(b.dataset.ind)));
   pane.querySelector("[data-addrule]")?.addEventListener("click", () => { location.hash = ""; showTab("profile", "rules", s.key); });
   pane.querySelectorAll("[data-save]").forEach((b) => (b.onclick = () => openListsFor(s)));
@@ -479,6 +494,7 @@ function wire(c, it) {
   const justScrubbed = () => Date.now() - (APP.scrubEndAt || 0) < 400;
   c.querySelectorAll("[data-learn]").forEach((p) => p.addEventListener("click", () => { if (!justScrubbed()) openLearn(p.dataset.learn, c._v); }));
   c.querySelector(".chartbox:not(.nodata)")?.addEventListener("click", () => { if (!justScrubbed()) chartTapHint(); });
+  c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); openChartSheet(it.sym, () => { renderMain(c, it); wire(c, it); }); });
 }
 
 // ---------- tabs and refresh
@@ -557,6 +573,8 @@ export function applyTheme() {
     const wl = watchlists().map((w) => ((w.syms || []).every((x) => OLD.has(x.key)) && w.id === "w1" ? { ...w, syms: STARTER.slice() } : { ...w, syms: (w.syms || []).filter((x) => x.m === "CRYPTO") }));
     save({ watchlists: wl, settings: { ...store.data.settings, coinsOnly: 1 } }).catch(() => {});
   }
+  // v5: windows in bars (20/50/100/200) become time ranges (1M/3M/3M/6M); candle size picks itself unless set.
+  if (ch && "window" in ch) { const { window: w, ...rest } = store.data.settings.chart; save({ settings: { ...store.data.settings, chart: { ...rest, range: { 20: "1M", 50: "3M", 100: "3M", 200: "6M" }[w] || "3M", interval: rest.interval === "1W" ? "1W" : "auto" } } }).catch(() => {}); }
   // v4: RSI and MACD panels under every chart by default.
   if (ch && ch.v2 && !ch.v4) save({ settings: { ...store.data.settings, chart: { ...ch, lower: "RSI,MACD", v4: 1 } } }).catch(() => {});
   if (ch && !ch.v2) save({ settings: { ...store.data.settings, chart: { ...ch, type: "candles", mas: [], lower: "RSI,MACD", v2: 1, v4: 1 } } }).catch(() => {});
