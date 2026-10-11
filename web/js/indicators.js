@@ -180,9 +180,9 @@ export function buildSeries(bars) {
   return s;
 }
 
-export function compute(bars) {
+export function compute(bars, s) {
   if (!bars || bars.length < 2) return null;
-  const s = buildSeries(bars);
+  s = s || buildSeries(bars); // callers that already built the series pass it in to save a second pass
   const n = bars.length;
   return { bar: last(bars).t, now: readingAt(s, n - 1), prev: readingAt(s, n - 2) };
 }

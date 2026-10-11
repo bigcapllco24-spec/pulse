@@ -8,7 +8,7 @@ const path = (pts) => pts.reduce((s, p, i) => (p == null ? s : s + (s && pts[i -
 
 export const MA_COLORS = ["var(--ma1)", "var(--ma2)", "var(--ma3)"];
 
-// win: bars in the window [{t,o,h,l,c,v}], ov: {key: values[] aligned to win}, opts: {type, closeOnly, pins:[index], maKeys:[...]}
+// win: bars in the window [{t,o,h,l,c,v}], ov: {key: values[] aligned to win}, opts: {type, closeOnly, maKeys:[...]}
 export function mainChart(win, ov, opts) {
   const n = win.length;
   if (!n) return "";
@@ -41,14 +41,12 @@ export function mainChart(win, ov, opts) {
     const d = path((ov[k] || []).map((v, i) => (v == null ? null : [X(i), Y(v)])));
     if (d) body += `<path d="${d}" class="ma draw" style="stroke:${MA_COLORS[j % 3]}" pathLength="1"/>`;
   });
-  // news pins under the candles that have stories
-  const pinsHtml = (opts.pins || []).map((i) => `<button class="pinh" data-pin="${win[i].t}" style="left:${((X(i) / W) * 100).toFixed(2)}%" aria-label="News on ${win[i].t}"></button>`).join("");
   // price labels as HTML so they keep their shape while the drawing stretches to fit the screen
   const ly = Y(last), top = (y) => ((y / H) * 100).toFixed(2) + "%";
   body += `<line x1="0" x2="${pw}" y1="${ly.toFixed(1)}" y2="${ly.toFixed(1)}" class="lastline"/>`;
   const labels = `<span class="ax" style="top:${top(PT)}">${f(hi - pad)}</span><span class="ax" style="top:${top(H - PB)}">${f(lo + pad)}</span>` +
     `<span class="axlast ${up ? "pu" : "pd"}" style="top:${top(ly)}">${f(last)}</span>`;
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${n} ${opts.interval === "1W" ? "weeks" : "days"}, ${up ? "up" : "down"} ${Math.abs(((last - first) / first) * 100).toFixed(1)}%, last ${f(last)}">${body}</svg>${labels}${pinsHtml}`;
+  return `<svg class="chart" data-lo="${lo}" data-hi="${hi}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${n} ${opts.interval === "1W" ? "weeks" : "days"}, ${up ? "up" : "down"} ${Math.abs(((last - first) / first) * 100).toFixed(1)}%, last ${f(last)}">${body}</svg>${labels}`;
 }
 
 // Lower panel: RSI with 30/70 lines, MACD histogram + lines, or volume bars.
@@ -77,7 +75,7 @@ export function lowerChart(win, s, kind) {
     label = `Volume <b>${r == null ? "–" : r.toFixed(1) + "x"}</b> usual`;
   }
   const [lab, ...axes] = label.split("<span class=\"ax\"");
-  return `<div class="lower">${axes.map((a) => "<span class=\"ax\"" + a).join("")}<span class="lower-label">${lab}</span><svg class="chart" viewBox="0 0 ${W} ${LH}" preserveAspectRatio="none" aria-hidden="true">${body}</svg></div>`;
+  return `<div class="lower" data-learn="${kind}" role="button" aria-label="What ${kind === "VOL" ? "volume" : kind} shows">${axes.map((a) => "<span class=\"ax\"" + a).join("")}<span class="lower-label">${lab}</span><svg class="chart" viewBox="0 0 ${W} ${LH}" preserveAspectRatio="none" aria-hidden="true">${body}</svg></div>`;
 }
 
 export function sparkline(vals, w = 80, h = 28) {

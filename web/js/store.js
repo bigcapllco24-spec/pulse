@@ -214,11 +214,6 @@ export async function leaveList(id) {
   else { store.lists.delete(id); ls.set(LS.demoLists, [...store.lists.values()]); }
   await save({ lists: (store.data.lists || []).filter((l) => l.id !== id) });
 }
-export async function setListSymbols(id, symbols) {
-  if (store.mode === "demo") { const l = store.lists.get(id); if (l) { l.symbols = symbols; ls.set(LS.demoLists, [...store.lists.values()]); store.emit("lists"); } return; }
-  await fb.f.updateDoc(fb.f.doc(fb.db, "lists", id), { symbols });
-  for (const s of symbols) await noteFollow(s);
-}
 
 // ---- shared AI results (written by the AI worker, readable by everyone)
 const cacheFor = (coll) => (coll === "explain" ? store.explain : coll === "moves" ? store.moves : store.indDocs);

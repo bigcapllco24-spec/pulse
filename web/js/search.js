@@ -2,7 +2,6 @@
 // [ticker, name, market, type, weight]. Ranked by match quality, then popularity.
 export const MKLABEL = { NSE: "NSE", NASDAQ: "Nasdaq", NYSE: "NYSE", ARCA: "NYSE Arca", CRYPTO: "Crypto", INDEX: "Index" };
 export const TYLABEL = { S: "Stock", E: "ETF", C: "Coin", I: "Index" };
-export const REGION = (m) => (m === "NSE" || m === "INDEX" ? "IN" : m === "CRYPTO" ? "CRYPTO" : "US");
 
 const ALIAS = { google: "GOOGL", alphabet: "GOOGL", facebook: "META", sbi: "SBIN", "state bank": "SBIN", "l&t": "LT", lnt: "LT", airtel: "BHARTIARTL",
   zomato: "ETERNAL", ril: "RELIANCE", hul: "HINDUNILVR", "hindustan lever": "HINDUNILVR", "m&m": "M&M", mahindra: "M&M", "tata motors": "TMPV",

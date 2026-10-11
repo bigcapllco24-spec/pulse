@@ -58,9 +58,19 @@ export async function refresh(syms) {
 }
 
 // Everything a card needs for one symbol under the current chart settings.
+// Results are cached per series object and window, so lists, sorting and the dashboard don't recompute every
+// indicator on each call. A refresh replaces the series object, which drops its cache automatically.
+const viewCache = new WeakMap();
 export function view(key, chart) {
   const s = D.series[key];
   if (!s?.bars?.length) return null;
+  const ck = `${chart.interval}|${chart.window}`;
+  let m = viewCache.get(s);
+  if (!m) viewCache.set(s, (m = new Map()));
+  if (!m.has(ck)) m.set(ck, computeView(key, s, chart));
+  return m.get(ck);
+}
+function computeView(key, s, chart) {
   const bars = chart.interval === "1W" ? toWeekly(s.bars) : s.bars;
   const series = buildSeries(bars);
   const n = bars.length, w = Math.min(chart.window, n), from = n - w;
@@ -68,32 +78,10 @@ export function view(key, chart) {
   const win = bars.slice(from);
   const ov = {};
   for (const k of Object.keys(series)) ov[k] = slice(series[k]);
-  const r = compute(bars);
+  const r = compute(bars, series);
   const daily = chart.interval === "1W" ? compute(s.bars) : r;
   return { key, source: s.source, closeOnly: !!s.closeOnly, live: !!s.live, bars, win, ov, now: r.now, prev: r.prev, daily, lastBar: bars[n - 1], prevBar: bars[n - 2],
     windowChange: ((win[w - 1].c - win[0].c) / win[0].c) * 100 };
-}
-
-// Short factual tags that stand out while scrolling. Facts only: never "oversold", "breakout" or similar.
-export function factTags(v) {
-  if (!v) return [];
-  const d = v.daily.now, tags = [];
-  const s = D.series[v.key].bars, n = s.length;
-  const chg = d.changePct;
-  if (chg != null && n > 30) {
-    let k = 0; for (let i = n - 2; i > 0 && k < 250; i--, k++) { const c = ((s[i].c - s[i - 1].c) / s[i - 1].c) * 100; if (Math.abs(c) >= Math.abs(chg)) break; }
-    if (k >= 20) tags.push({ t: `Biggest ${chg >= 0 ? "rise" : "fall"} in ${k} days`, cls: chg >= 0 ? "up" : "down" });
-  }
-  if (!v.closeOnly && n > 2) {
-    const gap = ((s[n - 1].o - s[n - 2].c) / s[n - 2].c) * 100;
-    if (Math.abs(gap) >= 2) tags.push({ t: `Gap ${gap > 0 ? "up" : "down"} ${Math.abs(gap).toFixed(1)}%`, cls: gap > 0 ? "up" : "down" });
-  }
-  if (d.volRatio != null && d.volRatio >= 1.8) tags.push({ t: `Volume ${d.volRatio.toFixed(1)}x usual` });
-  if (d.high50 != null && d.price >= d.high50 * 0.999) tags.push({ t: "New 50-day high", cls: "up" });
-  else if (d.low50 != null && d.price <= d.low50 * 1.001) tags.push({ t: "New 50-day low", cls: "down" });
-  if (d.rsi14 != null && d.rsi14 < 30) tags.push({ t: `RSI under 30 (${d.rsi14.toFixed(0)})` });
-  else if (d.rsi14 != null && d.rsi14 > 70) tags.push({ t: `RSI over 70 (${d.rsi14.toFixed(0)})` });
-  return tags.slice(0, 3);
 }
 
 // Was today's move unusually large? (more than twice the typical daily move)

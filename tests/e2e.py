@@ -126,6 +126,42 @@ def phone_tests(b):
     left(); dv = active(p)[1]; right(); right(); nv = active(p)[1]; left()
     check("phone: details and news open by swiping alone", dv == "details" and nv == "news", f"{dv} {nv}")
 
+    # hold and slide on the chart reads any day; releasing offers a one-tap alert at that level
+    box = p.evaluate("(()=>{const r=document.querySelector('.card.active .chartbox').getBoundingClientRect();return [r.left,r.top,r.width,r.height]})()")
+    cx, cy = box[0] + box[2] * 0.5, box[1] + box[3] * 0.4
+    pos0 = active(p); top0 = p.evaluate("document.getElementById('feed').scrollTop")
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": cx, "y": cy}]}); p.wait_for_timeout(450)
+    for k in range(1, 9):
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": cx - 15 * k, "y": cy + 4 * k}]}); time.sleep(0.03)
+    st = p.evaluate("(()=>{const c=document.querySelector('.card.active');return {tk:c.querySelector('.tk').textContent, info:c.querySelector('.scrubinfo')?.textContent||'', lines:c.querySelectorAll('.xh').length}})()")
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(300)
+    moved = p.evaluate("document.getElementById('feed').scrollTop") != top0 or active(p)[1] != "main"
+    check("phone: holding the chart shows that day's date, prices, RSI and MACD without moving the feed",
+          "·" in st["tk"] and "RSI" in st["info"] and "MACD" in st["info"] and st["lines"] >= 3 and not moved and active(p)[0] == pos0[0], f"{st} moved={moved}")
+    chip = p.locator(".card.active .alertchip")
+    chip_text = chip.inner_text() if chip.count() else ""
+    rules0 = p.evaluate("(JSON.parse(localStorage.getItem('pl.demoAccount'))||{}).rules?.length||0")
+    if chip.count(): chip.click(); p.wait_for_timeout(400)
+    rules1 = p.evaluate("(JSON.parse(localStorage.getItem('pl.demoAccount'))||{}).rules?.length||0")
+    toast_t = p.inner_text("#toast") if p.is_visible("#toast") else ""
+    check("phone: releasing offers 'Alert me if…' and one tap creates the alert", "Alert me if BTC goes" in chip_text and rules1 == rules0 + 1 and "Alert set" in toast_t, f"chip='{chip_text}' rules {rules0}->{rules1} toast='{toast_t}'")
+    # tap a panel to learn what it shows
+    p.click(".card.active .lower[data-learn=RSI]"); p.wait_for_timeout(500)
+    sheet = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+    check("phone: tapping the RSI panel explains it with today's reading", "RSI" in sheet and "right now" in sheet.lower() and "how to read" in sheet.lower(), sheet[:120].replace("\n", " "))
+    p.click("#sheet [data-close]"); p.wait_for_timeout(500)
+    # quiz on the caught-up card
+    p.evaluate(f"document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight*{len(ORDER)+1})"); p.wait_for_timeout(1200)
+    nq = p.locator(".card.active .qq").count()
+    if nq: p.locator(".card.active .qq").first.locator(".qa").first.click(); p.wait_for_timeout(200)
+    marked = p.locator(".card.active .qq").first.locator(".qa.right").count() if nq else 0
+    p.wait_for_timeout(1300)
+    vis = p.evaluate("""(()=>{const c=document.querySelector('.card.active'); const q=[...c.querySelectorAll('.qq')].find(x=>!x.hidden); const h=c.querySelector('h1');
+      if(!q||!h) return false; return h.getBoundingClientRect().top >= document.querySelector('.topbar').getBoundingClientRect().bottom - 30 && q.getBoundingClientRect().bottom <= document.querySelector('.tabbar').getBoundingClientRect().top
+        && c.querySelector('[data-qn]').textContent === '2'})()""")
+    check("phone: caught-up card has a 3-question quiz that marks answers and fits on screen", active(p)[0] == "done" and nq == 3 and marked == 1 and vis, f"{active(p)} q={nq} marked={marked} fits={vis}")
+    p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
+
     # layout: nothing hidden under the tab bar, no sideways page scroll
     lay = p.evaluate("""(()=>{const c=document.querySelector('.card.active'); const edge=c.querySelector('.dots').getBoundingClientRect(); const tab=document.querySelector('.tabbar').getBoundingClientRect();
       return {edgeBottom: edge.bottom, tabTop: tab.top, sw: document.documentElement.scrollWidth, w: innerWidth}})()""")
@@ -227,6 +263,10 @@ def phone_tests(b):
     st = p.inner_text("#status")
     check("phone: refresh finishes (never stuck on Updating)", "Updating" not in st, st)
 
+    # daily recap on the first card after the first visit
+    p.evaluate("localStorage.setItem('pl.lastOpen', JSON.stringify(new Date(Date.now()-3600e3).toISOString()))"); p.reload(); p.wait_for_timeout(2500)
+    rc = p.inner_text(".card.active") if p.locator(".card.active").count() else ""
+    check("phone: the first card is a daily recap (up count, biggest rise and fall)", "daily recap" in rc.lower() and "biggest rise" in rc.lower() and "up today" in rc.lower(), rc[:150].replace("\n", " "))
     check("phone: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 

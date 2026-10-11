@@ -8,7 +8,7 @@ import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
 import { D, view, storiesFor } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
-import { APP, buildFeed, showTab, currentSyms, listName, applyTheme, doRefresh } from "./app.js";
+import { APP, buildFeed, showTab, currentSyms, applyTheme, doRefresh } from "./app.js";
 
 const MAX_ACTIVE = 6;
 const symDoc = (r) => ({ key: r.key, t: r.t, n: r.n, m: r.m, ty: r.ty });

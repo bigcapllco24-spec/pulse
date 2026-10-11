@@ -83,7 +83,7 @@ web/                 the app (static files, no build step)
   js/indicators.js   indicator maths (shared with the data job); matches TradingView's RSI method
   js/store.js        accounts, watchlists, shared lists, alerts, AI calls, push
   js/search.js       symbol and indicator search; data/symbols.json holds about 15,000 listings
-  js/tv.js           TradingView widgets
+  js/interact.js     hold-to-read chart, alert from chart, tap-to-learn panels, quiz
   js/describe.js     plain-language meaning of each reading
 pipeline/            data job run by GitHub Actions (no npm packages)
 worker/              AI relay for Cloudflare Workers
@@ -92,4 +92,4 @@ firestore.rules      database security rules
 
 ## Checks
 
-Run `scripts/check.sh` (needs Node 20+, Python 3 with Playwright and Chromium). It runs 58 checks across the app, the data job and the AI relay and prints one line per suite. See `DEVELOPMENT.md` for the process and what is and isn't covered.
+Run `scripts/check.sh` (needs Node 20+, Python 3 with Playwright and Chromium). It runs 63 checks across the app, the data job and the AI relay and prints one line per suite. See `DEVELOPMENT.md` for the process and what is and isn't covered.
