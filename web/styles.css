@@ -6,6 +6,7 @@
   --up-soft: rgba(61,214,140,.14); --down-soft: rgba(255,107,97,.14); --warn: #E6B84C; --warn-soft: rgba(230,184,76,.14);
   --ma1: #F5C451; --ma2: #B48CFF; --ma3: #5BC8F5; --pin: #7EA2FF; --glass: rgba(11,15,20,.72);
   --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --gapb: 0px; /* set by app.js when an iOS Home Screen app leaves an unused strip at the bottom */
   --tab: 64px; --safe-b: env(safe-area-inset-bottom); --safe-t: env(safe-area-inset-top);
   color-scheme: dark;
 }
@@ -29,9 +30,9 @@ a { color: var(--accent); text-decoration: none; }
 .label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
 
 /* ---------- screens */
-.screen { position: fixed; inset: 0; bottom: 0; }
+.screen { position: fixed; inset: 0; bottom: calc(-1 * var(--gapb)); }
 .screen[hidden] { display: none; }
-.page { position: fixed; inset: 0; overflow-y: auto; padding: calc(16px + var(--safe-t)) 16px calc(var(--tab) + 24px + var(--safe-b)); overscroll-behavior: contain; }
+.page { position: fixed; inset: 0; bottom: calc(-1 * var(--gapb)); overflow-y: auto; padding: calc(16px + var(--safe-t)) 16px calc(var(--tab) + 24px + var(--safe-b)); overscroll-behavior: contain; }
 .page-inner { max-width: 560px; margin: 0 auto; }
 h1 { font-size: 28px; line-height: 1.15; margin: 8px 0 14px; letter-spacing: -.02em; }
 h2 { font-size: 17px; margin: 22px 0 10px; letter-spacing: -.01em; }
@@ -39,7 +40,7 @@ h3 { font-size: 15px; margin: 0; }
 p { margin: 6px 0; }
 
 /* ---------- tab bar */
-.tabbar { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; height: calc(var(--tab) + var(--safe-b)); padding-bottom: var(--safe-b); display: flex; justify-content: center; background: var(--glass); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); border-top: 1px solid var(--line); }
+.tabbar { position: fixed; z-index: 40; left: 0; right: 0; bottom: calc(-1 * var(--gapb)); height: calc(var(--tab) + var(--safe-b)); padding-bottom: var(--safe-b); display: flex; justify-content: center; background: var(--glass); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); border-top: 1px solid var(--line); }
 .tabbar button { position: relative; flex: 0 1 130px; background: none; border: 0; display: grid; justify-items: center; align-content: center; gap: 3px; color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer; }
 .tabbar svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .tabbar button[aria-current="page"] { color: var(--text); }
@@ -47,7 +48,7 @@ p { margin: 6px 0; }
 .tabbar .dot { position: absolute; top: 10px; right: calc(50% - 17px); width: 8px; height: 8px; border-radius: 50%; background: var(--down); }
 
 /* ---------- feed */
-.feed { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: contain; touch-action: none; scrollbar-width: none; }
+.feed { position: fixed; inset: 0; bottom: calc(-1 * var(--gapb)); overflow: hidden; overscroll-behavior: contain; touch-action: none; scrollbar-width: none; }
 .feed::-webkit-scrollbar { display: none; }
 /* Each card is exactly one feed-height tall, so snap points always line up with the screen. */
 .card { position: relative; height: 100%; overflow: hidden; touch-action: none; }
@@ -98,9 +99,10 @@ p { margin: 6px 0; }
 .active .tag:nth-child(2) { transition-delay: .08s; } .active .tag:nth-child(3) { transition-delay: .16s; } .active .tag:nth-child(4) { transition-delay: .24s; }
 .chartbox { position: relative; flex: 1 1 auto; min-height: 220px; margin: 8px 0 4px; }
 .chartbox .chart { position: absolute; inset: 0; width: 100%; height: 100%; }
-.lower { position: relative; height: 64px; flex: none; }
-.lower .chart { width: 100%; height: 100%; }
-.lower-label { position: absolute; left: 0; top: -2px; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.lower { flex: none; }
+.lower .lplot { position: relative; height: 48px; }
+.lower .chart { width: 100%; height: 100%; display: block; }
+.lower-label { display: block; font-size: 11.5px; line-height: 16px; color: var(--muted); font-weight: 600; }
 .lower-label b { color: var(--text); }
 @keyframes nudge { 0%, 70%, 100% { transform: translateY(0); } 80% { transform: translateY(-3px); } 90% { transform: translateY(1px); } }
 .src { font-size: 11px; color: var(--muted); flex: 1; text-align: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -207,7 +209,7 @@ button.row, a.row { width: 100%; background: none; border-left: 0; border-right:
 /* bottom sheet */
 .backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.5); opacity: 0; transition: opacity .2s; }
 .backdrop.on { opacity: 1; }
-.sheet { position: fixed; z-index: 61; left: 0; right: 0; bottom: 0; max-height: 92dvh; display: flex; flex-direction: column; background: var(--surface); border-radius: 22px 22px 0 0; transform: translateY(100%); transition: transform .26s cubic-bezier(.2,.8,.2,1); max-width: 600px; margin: 0 auto; }
+.sheet { position: fixed; z-index: 61; left: 0; right: 0; bottom: calc(-1 * var(--gapb)); max-height: 92dvh; display: flex; flex-direction: column; background: var(--surface); border-radius: 22px 22px 0 0; transform: translateY(100%); transition: transform .26s cubic-bezier(.2,.8,.2,1); max-width: 600px; margin: 0 auto; }
 .sheet.on { transform: none; }
 .sheet .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 8px auto 4px; flex: none; }
 .sheet .sh-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 16px 8px; flex: none; }
@@ -220,7 +222,7 @@ button.row, a.row { width: 100%; background: none; border-left: 0; border-right:
 .check { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .check input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
 .check .input { flex: 1; }
-.toast { position: fixed; z-index: 80; left: 50%; transform: translateX(-50%); bottom: calc(var(--tab) + 14px + var(--safe-b)); background: var(--text); color: var(--bg); padding: 11px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; max-width: calc(100% - 32px); display: flex; gap: 12px; align-items: center; }
+.toast { position: fixed; z-index: 80; left: 50%; transform: translateX(-50%); bottom: calc(var(--tab) + 14px + var(--safe-b) - var(--gapb)); background: var(--text); color: var(--bg); padding: 11px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; max-width: calc(100% - 32px); display: flex; gap: 12px; align-items: center; }
 .toast button { border: 0; background: none; color: var(--accent); font-weight: 800; cursor: pointer; }
 :root:not([data-theme="light"]) .toast button { color: #2B4FC7; }
 
@@ -252,10 +254,9 @@ button.row, a.row { width: 100%; background: none; border-left: 0; border-right:
 .wbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .wbar b { font-size: 18px; }
 .wbar span { display: flex; gap: 6px; flex-wrap: wrap; }
-.lower { height: 58px; }
 /* hold-to-read crosshair, alert chip, learn sheet, quiz, recap */
 .pane.main { -webkit-touch-callout: none; }
-.chartbox .xh, .lower .xh { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--muted); pointer-events: none; z-index: 2; }
+.chartbox .xh, .lower .lplot .xh { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--muted); pointer-events: none; z-index: 2; }
 .chartbox .yh { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed var(--muted); pointer-events: none; z-index: 2; }
 .chartbox .yh span { position: absolute; right: 0; transform: translateY(-50%); background: var(--text); color: var(--bg); font-size: 11px; font-weight: 800; padding: 1px 6px; border-radius: 5px; }
 .chartbox .scrubinfo { position: absolute; left: 0; right: 46px; top: -4px; font-size: 11.5px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 3; }

@@ -47,7 +47,7 @@ function start(feed, id) {
     lo: +svg.dataset.lo, hi: +svg.dataset.hi, level: null };
   APP.scrub = true;
   box.insertAdjacentHTML("beforeend", `<div class="xh"></div><div class="yh"><span></span></div><div class="scrubinfo"></div>`);
-  main.querySelectorAll(".lower").forEach((l) => l.insertAdjacentHTML("beforeend", `<div class="xh"></div>`));
+  main.querySelectorAll(".lower .lplot").forEach((l) => l.insertAdjacentHTML("beforeend", `<div class="xh"></div>`));
   main.classList.add("scrubbing");
   haptic();
   move(h.x2 ?? h.x, h.y2 ?? h.y);

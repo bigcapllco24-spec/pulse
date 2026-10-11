@@ -522,6 +522,18 @@ document.addEventListener("visibilitychange", () => {
   else if (Date.now() - lastRefresh > 60000) doRefresh(false);
 });
 
+// iOS Home Screen apps sometimes lay the page out shorter than the screen (by about the status bar's height),
+// leaving an empty strip under the tab bar. Measure it and stretch the layout to the real bottom edge.
+function fitScreen() {
+  const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+  const portrait = innerHeight > innerWidth, sh = portrait ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width);
+  const gap = standalone && /iPhone|iPad|iPod/.test(navigator.userAgent) ? Math.max(0, Math.min(80, sh - innerHeight)) : 0;
+  document.documentElement.style.setProperty("--gapb", gap + "px");
+}
+fitScreen();
+addEventListener("resize", fitScreen);
+addEventListener("orientationchange", () => setTimeout(fitScreen, 300));
+
 export function applyTheme() {
   const t = store.data?.settings?.theme || "dark";
   const dark = t === "dark" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);

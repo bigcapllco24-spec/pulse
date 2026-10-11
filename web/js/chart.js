@@ -75,7 +75,7 @@ export function lowerChart(win, s, kind) {
     label = `Volume <b>${r == null ? "–" : r.toFixed(1) + "x"}</b> usual`;
   }
   const [lab, ...axes] = label.split("<span class=\"ax\"");
-  return `<div class="lower" data-learn="${kind}" role="button" aria-label="What ${kind === "VOL" ? "volume" : kind} shows">${axes.map((a) => "<span class=\"ax\"" + a).join("")}<span class="lower-label">${lab}</span><svg class="chart" viewBox="0 0 ${W} ${LH}" preserveAspectRatio="none" aria-hidden="true">${body}</svg></div>`;
+  return `<div class="lower" data-learn="${kind}" role="button" aria-label="What ${kind === "VOL" ? "volume" : kind} shows"><span class="lower-label">${lab}</span><div class="lplot">${axes.map((a) => "<span class=\"ax\"" + a).join("")}<svg class="chart" viewBox="0 0 ${W} ${LH}" preserveAspectRatio="none" aria-hidden="true">${body}</svg></div></div>`;
 }
 
 export function sparkline(vals, w = 80, h = 28) {

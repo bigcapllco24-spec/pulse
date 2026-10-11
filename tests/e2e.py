@@ -167,6 +167,11 @@ def phone_tests(b):
       return {edgeBottom: edge.bottom, tabTop: tab.top, sw: document.documentElement.scrollWidth, w: innerWidth}})()""")
     check("phone: card controls sit above the tab bar", lay["edgeBottom"] <= lay["tabTop"], str(lay))
     check("phone: no sideways page scroll", lay["sw"] <= lay["w"], str(lay))
+    tabs = p.evaluate("[...document.querySelectorAll('.tabbar button')].map(b=>b.dataset.tab).join(',')")
+    tb = p.evaluate("(()=>{const r=document.querySelector('.tabbar').getBoundingClientRect();return [r.bottom, innerHeight]})()")
+    check("phone: tab bar is Dashboard, Feed (centre), Profile and sits on the bottom edge", tabs == "dash,feed,profile" and abs(tb[0] - tb[1]) < 1, f"{tabs} {tb}")
+    ov = p.evaluate("""(()=>{const c=document.querySelector('.card.active'); return [...c.querySelectorAll('.lower')].every(l=>l.querySelector('.lower-label').getBoundingClientRect().bottom <= l.querySelector('svg').getBoundingClientRect().top + 0.5)})()""")
+    check("phone: RSI and MACD labels sit above their lines, not on them", ov)
 
     # add-stock sheet with a new watchlist
     p.click("#addBtn"); p.wait_for_timeout(500)
@@ -270,6 +275,17 @@ def phone_tests(b):
     check("phone: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
+def ios_homescreen_test(b):
+    # Simulates the iOS Home Screen bug: the page is laid out 56 px shorter than the screen.
+    ctx = b.new_context(viewport={"width": 390, "height": 788}, is_mobile=True, has_touch=True,
+                        user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148")
+    ctx.add_init_script("Object.defineProperty(navigator,'standalone',{get:()=>true}); Object.defineProperty(screen,'height',{get:()=>844}); Object.defineProperty(screen,'width',{get:()=>390});")
+    ctx.route("https://api.kraken.com/**", kraken_route)
+    p = ctx.new_page(); p.goto(BASE); p.wait_for_timeout(1500)
+    r = p.evaluate("(()=>{const t=document.querySelector('.tabbar').getBoundingClientRect(), f=document.getElementById('feed'); return [t.bottom, f.clientHeight, getComputedStyle(document.documentElement).getPropertyValue('--gapb').trim()]})()")
+    check("iOS Home Screen: tab bar and feed reach the real bottom of the screen (no empty strip)", abs(r[0] - 844) < 1 and r[1] == 844, str(r))
+    ctx.close()
+
 def desktop_tests(b):
     p = b.new_page(viewport={"width": 1280, "height": 800}); errs = []
     p.route("https://api.kraken.com/**", kraken_route)
@@ -326,6 +342,8 @@ def desktop_tests(b):
 
 with sync_playwright() as pw:
     b = pw.chromium.launch(executable_path=CHROME)
+    try: ios_homescreen_test(b)
+    except Exception as e: check("iOS Home Screen: test ran", False, repr(e)[:300])
     try: phone_tests(b)
     except Exception as e: check("phone: suite ran to the end", False, repr(e)[:300])
     try: desktop_tests(b)
