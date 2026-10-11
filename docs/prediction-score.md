@@ -1,7 +1,7 @@
 # Prediction score
 
-A game: predict where a coin's price will be after 30 minutes, 1 hour, 1 day or 1 year. Each prediction gets its own
-score, and every resolved prediction feeds a profile score from 300 to 900 that can be compared between people.
+A game: predict where a coin's price will be after 30 minutes, 1 hour, 1 day or 1 year. Each person has **one public
+number, the profile score (300 to 900)**, comparable between everyone. Each prediction shows only how close it was.
 The code is `web/js/score.js` (shared by the app and the data job); the checks are `tests/score.test.mjs`.
 
 Predictions are a game, not advice. The app never publishes price calls: no money or prizes, and other people's
@@ -9,7 +9,7 @@ predictions stay hidden until they resolve.
 
 ## Making a prediction
 
-- Pick a coin, a period and a price. Today's price (P₀) and the coin's daily volatility are recorded by the server.
+- Pick a coin, a period and a price. Today's price and the coin's daily volatility are recorded by the server.
 - **One open prediction per coin per period.** A new one can be made once the last one has been scored.
 - **It must be a real call:** at least a quarter of a typical move up or down from today's price, and no more than
   six typical moves (which catches typos).
@@ -23,48 +23,56 @@ Every distance is measured in typical moves for the coin and the period, so peri
 
 Daily volatility is the standard deviation of the last 30 daily log returns, never treated as below 0.2%.
 
-## 1. Prediction score: one prediction on its own
+## What people see for each prediction
 
-Depends only on the prediction, so **identical predictions always get the identical score.**
+How close it was, and nothing else: how far off in percent, and a label judged in typical moves.
+
+    You said $84,000 · it was $83,500 · 0.6% above · Spot on
+
+| Miss (typical moves) | Label |
+|---|---|
+| under 0.25 | Spot on |
+| 0.25 to 0.5 | Very close |
+| 0.5 to 1 | Close |
+| 1 to 2 | Off |
+| 2 or more | Far off |
+
+The same percent can earn different labels: 3% off is "Far off" over 30 minutes but "Spot on" over a year.
+
+## The trade score (internal, 0 to 100)
+
+Never shown. It is the building block of the profile score, and depends only on the prediction itself, so
+**identical predictions always get the identical trade score.**
 
     miss       = |ln(predicted ÷ actual)| ÷ typical move
-    closeness  = 100 × e^(−miss)                 exact = 100, one typical move off ≈ 37
-    score      = closeness × period value
+    closeness  = e^(−miss)                              1 = exact, 0.37 = one typical move off
+    skill      = (miss of "no change") − miss           > 0 when the call beat guessing today's price
+    direction  = 1 if the price moved the way the call said, else 0
 
-| Period | Value | Most points |
-|---|---|---|
-| 30 minutes | ×1 | 100 |
-| 1 hour | ×1.5 | 150 |
-| 1 day | ×3 | 300 |
-| 1 year | ×4.5 | 450 |
-
-Two more facts are recorded for the profile, without changing this score:
-- **Skill:** how much closer the call was than guessing "no change" would have been, in typical moves.
-- **Direction:** whether the price moved the way the call said.
+    trade score = 100 × (4/7 × closeness + 2/7 × (½ + ½·tanh(skill)) + 1/7 × direction)
 
 Example: BTC at 82,000, daily volatility 2.5%, 1-day call of 84,000, ends at 83,500.
-Miss 0.24 typical moves → closeness 78.8 → **236 points**. "No change" would have missed by 0.73, so skill is +0.49,
-and the direction was right.
+Miss 0.24 typical moves → closeness 0.79; "no change" would have missed by 0.73, so skill is +0.49; direction right.
+**Trade score 80.** The person sees "0.6% above · Spot on".
 
-## 2. Profile score: the whole record (300 to 900)
+There's no period multiplier in the trade score: longer periods count more inside the profile score instead.
 
-Depends on everything that came before, so **the same new prediction can move two profiles by different amounts.**
+## The profile score (public, 300 to 900)
 
-### Per period
+Built only from trade scores, so **the same trade score can move two profiles by different amounts.**
 
-Each period is scored on its own from its resolved predictions:
+### 1. Per period: quality and consistency
 
-| Part | Weight | How |
+| Part | Share | How |
 |---|---|---|
-| Closeness | 40% | Average closeness |
-| Consistency | 25% | 40% share scoring 50 or more · 30% tight spread (1 − gap between 25th and 75th percentile) · 30% average of the worst 20% |
-| Skill | 20% | ½ + ½·tanh(average skill) |
-| Direction | 10% | Hit rate on calls, starting from 2 hits in 4 |
+| Quality | 70% | Average trade score |
+| Consistency | 25% | From the trade scores: 40% share scoring 50 or more · 30% tight spread (1 − gap between 25th and 75th percentile) · 30% average of the worst 20% |
 | Breadth | 5% | Across the whole profile: coins (up to 5), periods played, months active (up to 6) |
 
-Consistency needs at least 3 results in a period; until then it sits at 0.5.
+Consistency needs at least 3 results in a period; until then it sits at 0.5. Combined with the trade score's parts,
+the overall mix is closeness 40%, consistency 25%, skill 20%, direction 10%, breadth 5%.
 
-### Fading
+### 2. Fading
 
 A result starts fading when it is **scored** (not when it was made), so a 1-year call is never penalised for waiting.
 
@@ -73,10 +81,9 @@ A result starts fading when it is **scored** (not when it was made), so a 1-year
 | 30 min, 1 hour, 1 day | 90 days |
 | 1 year | 1 year |
 
-Fading only sets how results weigh against each other within a period. It never shrinks the amount of evidence, so
-inactivity alone doesn't change a score.
+Fading only sets how results weigh against each other within a period, so inactivity alone doesn't change a score.
 
-### Longer periods count more
+### 3. Longer periods count more
 
 Periods blend by their share times their confidence, confidence = results ÷ (results + k):
 
@@ -90,20 +97,20 @@ Periods blend by their share times their confidence, confidence = results ÷ (re
 Example: 40 thirty-minute, 20 one-day and 2 one-year results blend 17% / 51% / 33%. Each 1-year result moves the
 score about 40 times as much as each 30-minute one. Periods not played yet don't count.
 
-### The 300 to 900 scale
+### 4. The 300 to 900 scale
 
-The blended value is placed on a scale calibrated with simulated players on random-walk prices:
+Calibrated with simulated players on random-walk prices:
 
 | Player (60 predictions) | Score |
 |---|---|
 | Perfect | about 850 |
-| Sees 70% of the move | about 696 |
-| Sees 40% of the move | about 603 |
+| Sees 70% of the move | about 695 |
+| Sees 40% of the move | about 611 |
 | Random calls | 550 |
-| Always the wrong way | about 431 |
+| Always the wrong way | about 417 |
 
 With few results the score is pulled toward 550 (chance level): `550 + (score − 550) × n ÷ (n + 10)`. Every new
-profile starts at 550, and the score shows as **Provisional** until 10 predictions have resolved.
+profile starts at 550, and the score shows as **Provisional** until 10 predictions have been scored.
 
 | Band | Score |
 |---|---|
@@ -113,13 +120,23 @@ profile starts at 550, and the score shows as **Provisional** until 10 predictio
 | Fair | 550 to 599 (about chance) |
 | Building | 300 to 549 (worse than chance) |
 
-### Same prediction, different profiles
+### Same trade score, different profiles
 
-Two profiles average the same closeness (70). One is steady at 70; the other alternates 100 and 40.
+Two people with 20 one-day predictions each, both averaging a trade score of 57:
 
-- Steady: 717 (Very good). Streaky: 672 (Good). Same average, but consistency is 0.91 vs 0.44.
-- Both then make the identical 1-day prediction that misses (90 points for each).
-  The steady profile drops 12 points, the streaky one 8: the miss breaks a steady record more.
+| | Record | Consistency | Profile |
+|---|---|---|---|
+| Steady | every trade about 57 | 0.87 | 652 (Good) |
+| Swinging | alternates 93 and 21 | 0.34 | 587 (Fair) |
+
+Then both make the identical prediction:
+
+| Next prediction | Trade score | Steady | Swinging |
+|---|---|---|---|
+| A big miss ("Far off") | 11 | −13 | −9 |
+| A great call ("Spot on") | 93 | +8 | +9 |
+
+The miss costs the steady person more because it breaks a reliable record; the swinging person already has misses.
 
 ## Settings
 
