@@ -49,11 +49,11 @@ Never shown. It is the building block of the profile score, and depends only on 
     skill      = (miss of "no change") − miss           > 0 when the call beat guessing today's price
     direction  = 1 if the price moved the way the call said, else 0
 
-    trade score = 100 × (4/7 × closeness + 2/7 × (½ + ½·tanh(skill)) + 1/7 × direction)
+    trade score = 100 × (9/14 × closeness + 3/14 × direction + 1/7 × (½ + ½·tanh(skill)))
 
 Example: BTC at 82,000, daily volatility 2.5%, 1-day call of 84,000, ends at 83,500.
 Miss 0.24 typical moves → closeness 0.79; "no change" would have missed by 0.73, so skill is +0.49; direction right.
-**Trade score 80.** The person sees "0.6% above · Spot on".
+**Trade score 82.** The person sees "0.6% above · Spot on".
 
 There's no period multiplier in the trade score: longer periods count more inside the profile score instead.
 
@@ -70,7 +70,7 @@ Built only from trade scores, so **the same trade score can move two profiles by
 | Breadth | 5% | Across the whole profile: coins (up to 5), periods played, months active (up to 6) |
 
 Consistency needs at least 3 results in a period; until then it sits at 0.5. Combined with the trade score's parts,
-the overall mix is closeness 40%, consistency 25%, skill 20%, direction 10%, breadth 5%.
+the overall mix is closeness 45%, consistency 25%, direction 15%, skill 10%, breadth 5%.
 
 ### 2. Fading
 
@@ -104,8 +104,8 @@ Calibrated with simulated players on random-walk prices:
 | Player (60 predictions) | Score |
 |---|---|
 | Perfect | about 850 |
-| Sees 70% of the move | about 695 |
-| Sees 40% of the move | about 611 |
+| Sees 70% of the move | about 691 |
+| Sees 40% of the move | about 608 |
 | Random calls | 550 |
 | Always the wrong way | about 417 |
 
@@ -122,19 +122,19 @@ profile starts at 550, and the score shows as **Provisional** until 10 predictio
 
 ### Same trade score, different profiles
 
-Two people with 20 one-day predictions each, both averaging a trade score of 57:
+Two people with 20 one-day predictions each, both averaging a trade score of 58:
 
 | | Record | Consistency | Profile |
 |---|---|---|---|
-| Steady | every trade about 57 | 0.87 | 652 (Good) |
-| Swinging | alternates 93 and 21 | 0.34 | 587 (Fair) |
+| Steady | every trade about 58 | 0.87 | 647 (Good) |
+| Swinging | alternates 95 and 21 | 0.34 | 586 (Fair) |
 
 Then both make the identical prediction:
 
 | Next prediction | Trade score | Steady | Swinging |
 |---|---|---|---|
-| A big miss ("Far off") | 11 | −13 | −9 |
-| A great call ("Spot on") | 93 | +8 | +9 |
+| A big miss ("Far off") | 10 | −13 | −10 |
+| A great call ("Spot on") | 95 | +8 | +8 |
 
 The miss costs the steady person more because it breaks a reliable record; the swinging person already has misses.
 

@@ -13,8 +13,8 @@ function pred(miss, i, { h = "1d", coin = COINS[i % 5], made = NOW - (40 - i) * 
 }
 const trade = (p) => scorePrediction(p).trade;
 const P = (ps) => profileScore(ps, NOW);
-// Two records with the same average trade score (about 57): one steady, one swinging between 93 and 21.
-const steady = Array.from({ length: 20 }, (_, i) => pred(0.6, i, { side: -1 }));
+// Two records with the same average trade score (about 58): one steady, one swinging between 95 and 21.
+const steady = Array.from({ length: 20 }, (_, i) => pred(0.7, i, { side: -1 }));
 const streakyRaw = Array.from({ length: 20 }, (_, i) => pred(i % 2 ? 1.2 : 0.05, i, { side: -1 }));
 const avgT = (ps) => ps.reduce((a, p) => a + trade(p), 0) / ps.length;
 
@@ -64,7 +64,7 @@ const open = [{ coin: "CRYPTO:BTC", horizon: "1d", p0: 1, target: 2 }, { coin: "
 const vol = dailyVol([100, 110, 100, 110, 100]), r = Math.log(1.1);
 
 const checks = [
-  ["worked example: BTC 82,000 → called 84,000, ended 83,500 (1 day, 2.5% vol): closeness 0.79, skill +0.49, direction right, trade score 80.0", near(btc.closeness, 0.787567, 1e-5) && near(btc.skill, 0.48629, 1e-4) && btc.direction === 1 && near(btc.trade, 80.02, 0.01)],
+  ["worked example: BTC 82,000 → called 84,000, ended 83,500 (1 day, 2.5% vol): closeness 0.79, skill +0.49, direction right, trade score 82.4", near(btc.closeness, 0.787567, 1e-5) && near(btc.skill, 0.48629, 1e-4) && btc.direction === 1 && near(btc.trade, 82.42, 0.01)],
   ["what people see for it: 0.6% above · Spot on", closenessText(btc) === "0.6% above · Spot on"],
   ["identical predictions always get the identical trade score", trade(btcIn) === trade({ ...btcIn })],
   ["the trade score has no period multiplier: an exact call scores the same on every period", exactByPeriod.every((t) => near(t, exactByPeriod[0], 1e-9))],

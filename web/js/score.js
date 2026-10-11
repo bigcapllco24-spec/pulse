@@ -24,8 +24,8 @@ export const HORIZONS = {
   "1y": { label: "1 year", days: 365, share: 0.45, k: 5, halfLife: 365 },
 };
 // Trade score parts (add up to 1). Together with the profile weights below they give the overall mix agreed on:
-// closeness 40%, consistency 25%, skill 20%, direction 10%, breadth 5%.
-export const TRADE = { closeness: 4 / 7, skill: 2 / 7, direction: 1 / 7 };
+// closeness 45%, consistency 25%, direction 15%, skill 10%, breadth 5%.
+export const TRADE = { closeness: 9 / 14, skill: 1 / 7, direction: 3 / 14 };
 export const PROFILE = { quality: 0.70, consistency: 0.25, breadth: 0.05 };
 export const MIN_MOVE = 0.25; // a prediction must call at least a quarter of a typical move up or down
 export const MAX_MOVE = 6; // and at most six typical moves, which keeps typos like "$1" out
@@ -36,7 +36,7 @@ export const SCORE_MIN = 300, SCORE_MAX = 900;
 // Calibration, from simulated players on random-walk prices (tests/score.test.mjs re-checks it): CAL.chance is the
 // average raw mix of a random caller (random direction and size) and CAL.perfect that of a perfect predictor. They map
 // to 550 and 900, so 550 means "about chance" and anything below it is worse than guessing.
-export const CAL = { chance: 0.436, perfect: 0.919 };
+export const CAL = { chance: 0.443, perfect: 0.949 };
 export const CHANCE = 550; // where a random caller lands, and where every new profile starts
 export const BANDS = [[800, "Exceptional"], [700, "Very good"], [600, "Good"], [CHANCE, "Fair"], [SCORE_MIN, "Building"]];
 // What people see for each prediction: how close it was, in words, judged in typical moves (so fair across periods).
