@@ -12,6 +12,11 @@ globalThis.fetch = async (url) => {
     { url: "https://www.cnbc.com/a2", title: "Reliance Industries signs $2 billion fuel supply deal with state firm", domain: "cnbc.com", seendate: "20261010T090000Z" },
     { url: "https://www.cnbc.com/a3", title: "Why Reliance could rally?", domain: "cnbc.com", seendate: "20261010T090000Z" },
     { url: "https://www.reuters.com/b1", title: "Bitcoin ETFs log record weekly inflows as BTC climbs", domain: "reuters.com", seendate: new Date(Date.now() - 3600e3).toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z" } ] }));
+  if (url.includes("github.com/bitcoin/bitcoin/releases.atom")) {
+    const d = new Date(Date.now() - 5 * 864e5).toISOString();
+    return new Response(`<feed><entry><title>Bitcoin Core 31.0</title><link href="https://github.com/bitcoin/bitcoin/releases/tag/v31.0"/><updated>${d}</updated></entry>
+      <entry><title>Bitcoin Core 31.1rc1</title><link href="https://github.com/bitcoin/bitcoin/releases/tag/v31.1rc1"/><updated>${d}</updated></entry></feed>`);
+  }
   if (/coindesk|theblock|decrypt|blockworks|dlnews/.test(url)) {
     const d = new Date(Date.now() - 1800e3).toUTCString();
     return new Response(`<rss><channel>

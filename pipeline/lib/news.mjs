@@ -61,7 +61,7 @@ const toks = (t) => new Set(String(t).toLowerCase().replace(/[^a-z0-9₹$.%]+/g,
 
 // items: [{title, url, outlet, date:'YYYY-MM-DD', ts, sym?, scope?}] → stories, newest first.
 export function groupStories(items) {
-  const list = items.filter(keep).map((x) => ({ ...x, t: toks(x.title) }));
+  const list = items.filter((x) => (x.official ? x.title && x.url : keep(x))).map((x) => ({ ...x, t: toks(x.title) }));
   const parent = list.map((_, i) => i);
   const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
   for (let i = 0; i < list.length; i++)
@@ -79,7 +79,8 @@ export function groupStories(items) {
   list.forEach((x, i) => { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(x); });
   const stories = [...groups.values()].map((g) => {
     g.sort((a, b) => (a.ts || "").localeCompare(b.ts || ""));
-    const outlets = [...new Set(g.filter((x) => x.outlet !== "Company release").map((x) => x.outlet))];
+    const outlets = [...new Set(g.filter((x) => x.outlet !== "Company release" && !x.official).map((x) => x.outlet))];
+    const official = g.find((x) => x.official)?.outlet || null;
     const links = [], seen = new Set();
     for (const x of g) if (!seen.has(x.url)) { seen.add(x.url); links.push({ source: x.outlet, url: x.url }); }
     const title = g[0].title;
@@ -87,7 +88,7 @@ export function groupStories(items) {
       key: storyKey(title), title,
       date: g.map((x) => x.date).sort().pop(), ts: g.map((x) => x.ts || "").sort().pop(),
       outlets, company: g.some((x) => x.outlet === "Company release"),
-      status: outlets.length >= 2 ? "confirmed" : outlets.length === 1 ? "single" : "company",
+      status: outlets.length >= 2 ? "confirmed" : outlets.length === 1 ? "single" : official ? "official" : "company", official,
       links: links.slice(0, 6),
       syms: [...new Set(g.map((x) => x.sym).filter(Boolean))],
       scopes: [...new Set(g.map((x) => x.scope).filter(Boolean))],
@@ -107,12 +108,6 @@ export function queryFor(sym) {
     .replace(/[,·]+/g, " ").replace(/\s+/g, " ").trim();
   return `"${name || sym.ticker}"`;
 }
-
-export const GENERAL = [
-  { scope: "IN", q: '(sensex OR nifty OR "Reserve Bank of India" OR SEBI)' },
-  { scope: "US", q: '("S&P 500" OR "Wall Street" OR "Federal Reserve" OR Nasdaq)' },
-  { scope: "CRYPTO", q: "(bitcoin OR ethereum OR cryptocurrency)" },
-];
 
 export async function gdelt(query, { days = 3, max = 50 } = {}) {
   const url = "https://api.gdeltproject.org/api/v2/doc/doc?format=json&mode=ArtList&sort=DateDesc&sourcelang=english" +
@@ -150,15 +145,15 @@ export const FEEDS = [
   ["https://decrypt.co/feed", "Decrypt"], ["https://blockworks.co/feed", "Blockworks"], ["https://www.dlnews.com/arc/outboundfeeds/rss/", "DL News"],
 ];
 const unxml = (x) => String(x || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
-export async function rss(url, outlet, { days = 3 } = {}) {
+export async function rss(url, outlet, { days = 7 } = {}) {
   try {
     const r = await fetch(url, { headers: { "user-agent": "market-feed-pipeline/1.0" } });
     if (!r.ok) throw new Error(r.status);
     const xml = await r.text(), cut = Date.now() - days * 864e5, out = [];
-    for (const m of xml.matchAll(/<item[\s>][\s\S]*?<\/item>/g)) {
+    for (const m of xml.matchAll(/<(item|entry)[\s>][\s\S]*?<\/(item|entry)>/g)) {
       const it = m[0], get = (tag) => unxml((it.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\/${tag}>`)) || [])[1]);
-      const when = Date.parse(get("pubDate") || get("dc:date") || "");
-      const link = get("link") || (it.match(/<guid[^>]*>(https?:[^<]+)</) || [])[1];
+      const when = Date.parse(get("pubDate") || get("dc:date") || get("updated") || get("published") || "");
+      const link = get("link") || (it.match(/<link[^>]*href="([^"]+)"/) || [])[1] || (it.match(/<guid[^>]*>(https?:[^<]+)</) || [])[1];
       if (!link || !isFinite(when) || when < cut) continue;
       const ts = new Date(when).toISOString().slice(0, 19) + "Z";
       out.push({ title: get("title"), url: link.trim(), outlet, date: ts.slice(0, 10), ts });
@@ -167,23 +162,44 @@ export async function rss(url, outlet, { days = 3 } = {}) {
   } catch (e) { console.warn("rss failed:", url, e.message); return []; }
 }
 
+// ---- Official project sources: software releases and foundation blogs, labelled "From the project".
+// Factual and first-hand (a network upgrade, a release), never counted as independent confirmation.
+export const OFFICIAL = {
+  BTC: [["https://github.com/bitcoin/bitcoin/releases.atom", "Bitcoin Core"]],
+  ETH: [["https://blog.ethereum.org/feed.xml", "Ethereum Foundation"], ["https://github.com/ethereum/go-ethereum/releases.atom", "Geth"]],
+  SOL: [["https://github.com/anza-xyz/agave/releases.atom", "Agave (Solana validator)"]],
+  XRP: [["https://github.com/XRPLF/rippled/releases.atom", "rippled (XRP Ledger)"]],
+  BNB: [["https://github.com/bnb-chain/bsc/releases.atom", "BNB Smart Chain"]],
+  TRX: [["https://github.com/tronprotocol/java-tron/releases.atom", "java-tron (TRON)"]],
+  ZEC: [["https://github.com/zcash/zcash/releases.atom", "zcashd"]],
+  DOGE: [["https://github.com/dogecoin/dogecoin/releases.atom", "Dogecoin Core"]],
+  LINK: [["https://github.com/smartcontractkit/chainlink/releases.atom", "Chainlink node"]],
+};
+const PRE = /rc\d*\b|beta|alpha|nightly|pre-?release|\btest/i;
+export async function officialNews(sym) {
+  const out = [];
+  for (const [url, label] of OFFICIAL[sym.t] || []) {
+    const isRelease = url.includes("/releases.atom");
+    for (const x of await rss(url, label, { days: 30 })) {
+      if (isRelease && PRE.test(x.title)) continue; // stable releases only
+      out.push({ ...x, official: true, title: isRelease ? `${/^v?\d/.test(x.title.replace(/^(release|version)\s*/i, "")) ? label + " " : ""}${x.title.replace(/^(release|version)\s*/i, "")} released` : x.title });
+    }
+  }
+  return out.slice(0, 6);
+}
+
 export async function fetchNews(symbols, { log = console.log } = {}) {
   const items = [];
-  for (const g of GENERAL) {
-    (await gdelt(g.q, { days: 2, max: 40 })).forEach((x) => items.push({ ...x, scope: g.scope }));
-    await sleep(5500);
-  }
   const feeds = (await Promise.all(FEEDS.map(([u, o]) => rss(u, o)))).flat();
   log(`rss: ${feeds.length} headlines from ${FEEDS.length} crypto desks`);
   for (const s of symbols) {
     const sym = { ...s, ticker: s.t, name: s.n };
-    const got = (await gdelt(queryFor(sym), { days: 3, max: 25 })).filter((x) => mentions(x.title, sym));
+    const got = (await gdelt(queryFor(sym), { days: 7, max: 40 })).filter((x) => mentions(x.title, sym));
     const fromFeeds = feeds.filter((x) => mentions(x.title, sym));
-    [...got, ...fromFeeds].forEach((x) => items.push({ ...x, sym: s.key }));
-    log(`news ${s.key}: ${got.length} gdelt + ${fromFeeds.length} rss`);
+    const official = await officialNews(sym);
+    [...got, ...fromFeeds, ...official].forEach((x) => items.push({ ...x, sym: s.key }));
+    log(`news ${s.key}: ${got.length} gdelt + ${fromFeeds.length} rss + ${official.length} official`);
     await sleep(5500);
   }
-  // crypto-wide headlines from the desks count as market news
-  feeds.filter((x) => /\b(bitcoin|crypto|ethereum|stablecoin|etf|sec|exchange)\b/i.test(x.title)).forEach((x) => items.push({ ...x, scope: "CRYPTO" }));
   return groupStories(items);
 }

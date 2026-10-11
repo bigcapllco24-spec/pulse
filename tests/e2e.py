@@ -107,6 +107,10 @@ def phone_tests(b):
     right(); before = active(p)
     swipe(200, 650, 200, 300); after = active(p)
     check("phone: scrolling inside news stays on the same symbol", before[0] == after[0] and after[1] == "news", f"{before} -> {after}")
+    nw = p.evaluate("""(() => { const n = document.querySelector('.card.active [data-pane=news]'); return { market: !!n.querySelector('[data-scope=market]'), ev: n.querySelectorAll('.pev').length, txt: (n.querySelector('.pev p')||{}).textContent || '' }; })()""")
+    check("phone: news has no Market tab and always shows price events", not nw["market"] and nw["ev"] >= 1 and len(nw["txt"]) > 10, str(nw))
+    nw = p.evaluate("""(() => { const n = document.querySelector('.card.active [data-pane=news]'); return { market: !!n.querySelector('[data-scope=market]'), ev: n.querySelectorAll('.pev').length, txt: (n.querySelector('.pev p')||{}).textContent || '' }; })()""")
+    check("phone: news has no Market tab and always shows price events", not nw["market"] and nw["ev"] >= 1 and len(nw["txt"]) > 10, str(nw))
     left()
 
     # charts

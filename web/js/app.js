@@ -252,26 +252,66 @@ const addDays = (d, n) => new Date(new Date(d + "T00:00:00Z").getTime() + n * 86
 // ---------- news pane
 function renderNews(c, it, scope) {
   const s = it.sym, pane = c.querySelector('[data-pane="news"]');
-  scope = scope || pane.dataset.scope || "sym";
+  scope = scope === "mine" ? "mine" : pane.dataset.scope === "mine" && !scope ? "mine" : "sym";
   pane.dataset.scope = scope;
   const keys = new Set(APP.syms.map((x) => x.key));
-  let stories = scope === "sym" ? storiesFor(s.key) : scope === "mine" ? (D.news.stories || []).filter((st) => st.syms.some((k) => keys.has(k))) : (D.news.stories || []).filter((st) => st.scopes?.length);
-  // Triangulated first: by default only stories at least two independent outlets reported (plus the company's own
-  // announcements). Single-source stories are one tap away and clearly labelled.
-  const all = ls.get("pl.newsAll", false), single = stories.filter((st) => st.status === "single").length;
-  if (!all) stories = stories.filter((st) => st.status !== "single");
-  stories = stories.slice(0, 40);
+  const stories = (scope === "sym" ? storiesFor(s.key) : (D.news.stories || []).filter((st) => st.syms.some((k) => keys.has(k)))).slice(0, 40);
   const win = view(s.key, chartSettings(s.key))?.win;
   const winDates = new Set((win || []).map((b) => b.t));
-  pane.innerHTML = `<div class="pane-wrap"><h2 class="side">News · ${esc(s.t)}</h2>
-    <div class="seg" role="group" aria-label="Which news">${[["sym", s.t], ["mine", "All my news"], ["market", "Market"]].map(([k, l]) => `<button data-scope="${k}" aria-pressed="${k === scope}">${esc(l)}</button>`).join("")}</div>
-    <div class="nfilter"><span>${all ? "All stories, newest first" : "Confirmed by 2+ independent outlets"}</span>${single || all ? `<button class="btn ghost sm" data-nall>${all ? "Confirmed only" : `+ ${single} single-source`}</button>` : ""}</div>
-    ${stories.length ? stories.map((st) => storyHtml(st, winDates.has(st.date) && scope === "sym")).join("") : `<div class="empty">No ${all ? "" : "confirmed "}news in the last few days${scope === "sym" ? ` for ${esc(s.t)}` : ""}.${!all && single ? ` ${single} single-source ${single === 1 ? "story" : "stories"} hidden.` : " That's information too."}</div>`}
-    <p class="disclaimer">Headlines from Reuters, AP, CNBC, CoinDesk, The Block, Decrypt, Blockworks, DL News and other outlets without political or ownership conflicts, found via <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener">the GDELT Project</a> and the outlets' own feeds, then matched across outlets. Opinion, predictions and promotional posts are left out. Headlines link to their publishers. ${esc(DISCLAIMER)}</p></div>`;
+  const by = (k) => stories.filter((st) => (k === "single" ? st.status === "single" : k === "official" ? st.status === "official" : st.status === "confirmed" || st.status === "company"));
+  // Price events are worked out from our own daily candles, so this pane is never empty. Facts about the past only.
+  const evSyms = scope === "sym" ? [s] : APP.syms;
+  let events = evSyms.flatMap((x) => priceEvents(x).map((e) => ({ ...e, x })));
+  if (scope === "mine" && events.some((e) => e.w)) events = events.filter((e) => e.w); // one summary per coin would crowd the list
+  events = events.sort((p, q) => (q.t > p.t ? 1 : q.t < p.t ? -1 : q.w - p.w)).slice(0, scope === "sym" ? 6 : 10);
+  const sect = (title, note, list) => (list.length ? `<h3 class="nsec">${title}<span>${note}</span></h3>${list.map((st) => storyHtml(st, winDates.has(st.date) && scope === "sym")).join("")}` : "");
+  pane.innerHTML = `<div class="pane-wrap"><h2 class="side">News · ${esc(scope === "sym" ? s.t : "My coins")}</h2>
+    <div class="seg" role="group" aria-label="Which news">${[["sym", s.t], ["mine", "All my coins"]].map(([k, l]) => `<button data-scope="${k}" aria-pressed="${k === scope}">${esc(l)}</button>`).join("")}</div>
+    ${sect("Confirmed", "2+ independent outlets", by("confirmed"))}
+    ${sect("From the project", "official releases and posts", by("official"))}
+    ${sect("Also reported", "one trusted outlet so far", by("single"))}
+    <h3 class="nsec">Price events<span>from the daily chart, last 30 days</span></h3>
+    <div class="pevents">${events.map((e) => `<div class="pev ${e.dir || ""}"><span class="pd">${esc(fmtDay(e.t))}${scope === "mine" ? ` · <b>${esc(e.x.t)}</b>` : ""}</span><p>${esc(e.text)}</p></div>`).join("") || `<div class="empty">${esc(s.t)} prices are still loading.</div>`}</div>
+    <p class="disclaimer">Headlines from Reuters, AP, CNBC, CoinDesk, The Block, Decrypt, Blockworks, DL News and other outlets without political or ownership conflicts, found via <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener">the GDELT Project</a> and the outlets' own feeds, then matched across outlets. “From the project” items come from each project's official release page or blog. Opinion, predictions and promotional posts are left out. Price events are calculated from daily prices and describe the past only. ${esc(DISCLAIMER)}</p></div>`;
   pane.querySelectorAll("[data-scope]").forEach((b) => (b.onclick = () => renderNews(c, it, b.dataset.scope)));
-  pane.querySelector("[data-nall]")?.addEventListener("click", () => { ls.set("pl.newsAll", !all); renderNews(c, it, scope); });
 }
-const STATUS = (st) => (st.status === "confirmed" ? `Confirmed by ${st.outlets.join(" + ")}` : st.status === "company" ? "From the company" : `Single source: ${st.outlets[0]}`);
+// Notable things the price did in the last 30 days, from daily candles: unusually big days (2x the 14-day ATR),
+// unusually heavy volume (2x the 20-day average), new 52-week highs and lows, and crossings of the 200-day average.
+// Always ends with a plain summary of the month, so there's something to read even when it was quiet.
+function priceEvents(sym) {
+  const bars = D.series[sym.key]?.bars;
+  if (!bars || bars.length < 40) return [];
+  const n = bars.length, out = [], from = Math.max(21, n - 30);
+  const d = (i) => ((bars[i].c - bars[i - 1].c) / bars[i - 1].c) * 100;
+  const tr = (i) => Math.max(bars[i].h - bars[i].l, Math.abs(bars[i].h - bars[i - 1].c), Math.abs(bars[i].l - bars[i - 1].c)) / bars[i - 1].c * 100;
+  const avg = (f, a, b) => { let t = 0; for (let j = a; j < b; j++) t += f(j); return t / (b - a); };
+  const sinceBigger = (i, up) => { let k = i - 1; while (k > 0 && (up ? d(k) < d(i) : d(k) > d(i))) k--; return i - k; };
+  const ma200 = (i) => (i >= 200 ? avg((j) => bars[j].c, i - 199, i + 1) : null);
+  for (let i = from; i < n; i++) {
+    const ch = d(i), atr = avg(tr, i - 14, i), t = bars[i].t;
+    if (Math.abs(ch) >= 2 * atr) {
+      const k = sinceBigger(i, ch > 0), span = k > 365 ? "in over a year" : `in ${k} days`;
+      out.push({ t, w: 3, dir: ch > 0 ? "up" : "down", text: `${ch > 0 ? "Rose" : "Fell"} ${Math.abs(ch).toFixed(1)}% in a day, about ${(Math.abs(ch) / atr).toFixed(1)}× its typical daily move. Its biggest one-day ${ch > 0 ? "rise" : "fall"} ${span}.` });
+    }
+    const va = avg((j) => bars[j].v || 0, i - 20, i);
+    if (va > 0 && bars[i].v >= 2 * va) out.push({ t, w: 2, text: `Traded ${(bars[i].v / va).toFixed(1)}× its usual daily volume (20-day average).` });
+    if (i >= 365) {
+      const prev = bars.slice(i - 365, i);
+      if (bars[i].h > Math.max(...prev.map((b) => b.h))) out.push({ t, w: 2, dir: "up", text: `Set a new 52-week high at ${money(bars[i].h, sym.m)}.` });
+      if (bars[i].l < Math.min(...prev.map((b) => b.l))) out.push({ t, w: 2, dir: "down", text: `Set a new 52-week low at ${money(bars[i].l, sym.m)}.` });
+    }
+    const m0 = ma200(i - 1), m1 = ma200(i);
+    if (m0 && m1 && (bars[i - 1].c - m0) * (bars[i].c - m1) < 0) out.push({ t, w: 1, dir: bars[i].c > m1 ? "up" : "down", text: `Closed ${bars[i].c > m1 ? "above" : "below"} its 200-day average (${money(m1, sym.m)}) for the first time in a while.` });
+  }
+  // collapse repeated 52-week highs or lows into the latest one
+  const seen = new Set(), ev = out.reverse().filter((e) => { const k = e.text.slice(0, 22); if (/52-week/.test(k)) { if (seen.has(k)) return false; seen.add(k); } return true; });
+  const a = n - 31, mv = ((bars[n - 1].c - bars[a].c) / bars[a].c) * 100;
+  let big = 0; for (let i = a + 1; i < n; i++) big = Math.max(big, Math.abs(d(i)));
+  const hi = Math.max(...bars.slice(a).map((b) => b.h)), lo = Math.min(...bars.slice(a).map((b) => b.l));
+  ev.push({ t: bars[n - 1].t, w: 0, dir: mv >= 0 ? "up" : "down", text: `Over 30 days: ${mv >= 0 ? "up" : "down"} ${Math.abs(mv).toFixed(1)}%, trading between ${money(lo, sym.m)} and ${money(hi, sym.m)}. ${ev.length ? "" : "A quiet month: "}${ev.length ? "The largest" : "the largest"} single-day move was ${big.toFixed(1)}%.` });
+  return ev;
+}
+const STATUS = (st) => (st.status === "confirmed" ? `Confirmed by ${st.outlets.join(" + ")}` : st.status === "company" ? "From the company" : st.status === "official" ? `From the project: ${st.official || "official"}` : `Single source: ${st.outlets[0]}`);
 function storyHtml(st, pinned) {
   const more = st.links.slice(1).map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.source)} ↗</a>`).join(" ");
   return `<article class="story" id="st-${st.key}"><a class="h" href="${esc(st.links[0].url)}" target="_blank" rel="noopener">${esc(st.title)}</a>

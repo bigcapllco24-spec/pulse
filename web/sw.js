@@ -1,6 +1,6 @@
 // Service worker: makes the app installable and opens instantly from cache; prices and news always come
 // from the network first. Also receives push alerts when Firebase is configured (config arrives in the URL).
-const SHELL = "pulse-shell-v7";
+const SHELL = "pulse-shell-v8";
 const FILES = ["./", "index.html", "styles.css", "config.js", "manifest.webmanifest", "icon.svg", "icon-192.png",
   "js/app.js", "js/pages.js", "js/store.js", "js/data.js", "js/chart.js", "js/indicators.js", "js/describe.js", "js/search.js", "js/interact.js", "js/levels.js", "js/coach.js", "js/full.js", "js/ui.js", "data/indicators.json"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
