@@ -8,6 +8,7 @@ import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
 import { D, view, storiesFor, RANGE_LABEL, resolveInterval } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
+import { startTour, resetTours } from "./coach.js";
 import { APP, buildFeed, showTab, currentSyms, listName, applyTheme, doRefresh } from "./app.js";
 
 const MAX_ACTIVE = 6;
@@ -26,7 +27,7 @@ export function initPages() {
 // ---------- add-stock sheet: search, then choose watchlists
 export function openAddSheet(prefill = "") {
   const curList = store.data?.settings?.list;
-  openSheet("Add coins", "", (body) => mountSearch(body, prefill),
+  openSheet("Add coins", "", (body) => { mountSearch(body, prefill); setTimeout(() => startTour("add"), 350); },
     () => { const added = APP.lastAdded; buildFeed({ keepKey: added || APP.seq[APP.active]?.sym?.key }); APP.lastAdded = null;
       if (added && !D.series[added]) doRefresh(false).then(() => { if (APP.tab === "dash") renderDash(); }); }); // fetch prices for a newly added coin
 
@@ -185,7 +186,7 @@ export function renderDash() {
 // ---------- profile
 const MENU = [["chart", "Chart style", "Window, candles, averages, RSI and MACD"], ["indicators", "Indicators", "What the readings show"],
   ["rules", "Rules", "Get alerted when your levels are hit"], ["alerts", "Alerts", ""], ["lists", "Shared lists", "Track a list with friends"],
-  ["account", "Account", "Recovery code, devices, delete"], ["appearance", "Appearance", "Dark or light"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]];
+  ["account", "Account", "Recovery code, devices, delete"], ["appearance", "Appearance", "Dark or light"], ["tour", "Show the app tour again", "Swipes, charts and watchlists in a minute"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]];
 export function renderProfile(sub, arg) {
   const el = $("profile");
   const back = `<button class="btn ghost sm" id="pBack" style="padding-left:0">‹ Profile</button>`;
@@ -194,7 +195,10 @@ export function renderProfile(sub, arg) {
     el.innerHTML = `<h1>Profile</h1>${store.mode === "demo" ? `<div class="notice warn">Demo mode: saved on this phone only. AI features turn on once Firebase and the AI relay are set up (see README).</div>` : ""}
       <div class="list">${MENU.map(([k, l, d]) => `<button class="row" data-p="${k}"><span class="main"><span class="t">${l}${k === "alerts" && unread ? ` <span class="pill confirmed">${unread} new</span>` : ""}</span>${d ? `<span class="s">${d}</span>` : ""}</span><span class="chev">›</span></button>`).join("")}</div>
       <p class="disclaimer">${esc(DISCLAIMER)}</p>`;
-    el.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => renderProfile(b.dataset.p)));
+    el.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => {
+      if (b.dataset.p === "tour") { resetTours(); showTab("feed"); setTimeout(() => startTour("feed"), 300); return; }
+      renderProfile(b.dataset.p);
+    }));
     return;
   }
   const fn = { watchlists: pWatchlists, chart: pChart, indicators: pIndicators, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal }[sub];
@@ -225,6 +229,7 @@ function pWatchlists(el, back) {
 const RANGE_OPTS = [["1M", "1M"], ["3M", "3M"], ["6M", "6M"], ["1Y", "1Y"], ["2Y", "2Y"]];
 const CANDLE_OPTS = [["auto", "Auto"], ["1D", "Daily"], ["1W", "Weekly"]];
 const TYPE_OPTS = [["candles", "Candles"], ["line", "Line"], ["area", "Area"]];
+const LEVEL_OPTS = [["off", "Off"], ["sr", "Support & resistance"], ["pivots", "Pivot points"]];
 const LOWER_OPTS = [["RSI,MACD", "RSI + MACD"], ["RSI", "RSI"], ["MACD", "MACD"], ["VOL", "Volume"], ["none", "None"]];
 function chartOptsHtml(c) {
   const opt = (key, vals) => `<div class="opts">${vals.map(([v, l]) => `<button class="opt" data-k="${key}" data-v="${v}" aria-pressed="${String(c[key]) === String(v)}">${l}</button>`).join("")}</div>`;
@@ -232,7 +237,8 @@ function chartOptsHtml(c) {
   return `<h2>Time range</h2>${opt("range", RANGE_OPTS)}<p class="hint">${esc(RANGE_LABEL[c.range] || "")} of ${iv === "1W" ? "weekly" : "daily"} candles. Each ${iv === "1W" ? "candle is one week" : "candle is one day"}.</p>
     <h2>Candle size</h2>${opt("interval", CANDLE_OPTS)}<p class="hint">Auto uses daily candles up to 6 months and weekly candles for 1 and 2 years, so the chart never gets crowded.</p>
     <h2>Chart type</h2>${opt("type", TYPE_OPTS)}
-    <h2>Panels under the chart</h2>${opt("lower", LOWER_OPTS)}`;
+    <h2>Panels under the chart</h2>${opt("lower", LOWER_OPTS)}
+    <h2>Lines on the chart</h2>${opt("levels", LEVEL_OPTS)}<p class="hint">Support & resistance: prices where the chart turned at least twice. Pivot points: levels worked out from the previous month (or year). Both describe the past, not the future.</p>`;
 }
 function pChart(el, back) {
   const c = chartSettings(), custom = Object.keys(store.data.settings?.chartBy || {});
@@ -241,8 +247,8 @@ function pChart(el, back) {
     <h2>Moving averages</h2><div class="opts">${[["sma20", "SMA 20"], ["sma50", "SMA 50"], ["sma200", "SMA 200"], ["ema20", "EMA 20"], ["ema50", "EMA 50"]].map(([v, l]) => `<button class="opt" data-ma="${v}" aria-pressed="${(c.mas || []).includes(v)}">${l}</button>`).join("")}</div><p class="hint">Up to 3.</p>
     ${custom.length ? `<h2>Coins with their own chart</h2><p>${custom.map((k) => `<span class="pill">${esc(k.split(":")[1])}</span>`).join(" ")} <button class="btn ghost sm" id="cReset">Reset all to default</button></p>` : ""}`;
   const re = () => { pChart(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
-  const set = async (patch) => { await save({ settings: { ...store.data.settings, chart: { ...store.data.settings.chart, ...patch } } }); APP.needsRebuild = true; re(); };
-  el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => set({ [b.dataset.k]: b.dataset.v })));
+  const set = async ({ _pick, ...patch }) => { await save({ settings: { ...store.data.settings, ...(_pick ? { levelsPick: patch.levels } : {}), chart: { ...store.data.settings.chart, ...patch } } }); APP.needsRebuild = true; re(); };
+  el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => set(b.dataset.k === "levels" && b.dataset.v !== "off" ? { levels: b.dataset.v, _pick: 1 } : { [b.dataset.k]: b.dataset.v })));
   el.querySelectorAll("[data-ma]").forEach((b) => (b.onclick = () => {
     const m = new Set(c.mas || []);
     if (m.has(b.dataset.ma)) m.delete(b.dataset.ma); else { if (m.size >= 3) return toast("Up to 3 averages keep charts readable."); m.add(b.dataset.ma); }
@@ -261,7 +267,10 @@ export function openChartSheet(sym, onChange) {
       ${chartOptsHtml(chartSettings(sym.key))}
       ${own ? `<p style="margin-top:14px"><button class="btn ghost sm" id="csReset">Use my default chart for ${esc(sym.t)}</button></p>` : ""}`;
     body.querySelectorAll("[data-scope]").forEach((b) => (b.onclick = () => { scope = b.dataset.scope; draw(body); }));
-    body.querySelectorAll("[data-k]").forEach((b) => (b.onclick = async () => { await applyChart(sym, scope, w, { [b.dataset.k]: b.dataset.v }); draw(body); onChange?.(); }));
+    body.querySelectorAll("[data-k]").forEach((b) => (b.onclick = async () => {
+      if (b.dataset.k === "levels" && b.dataset.v !== "off") await save({ settings: { ...store.data.settings, levelsPick: b.dataset.v } });
+      await applyChart(sym, scope, w, { [b.dataset.k]: b.dataset.v }); draw(body); onChange?.();
+    }));
     body.querySelector("#csReset")?.addEventListener("click", async () => { const by = { ...(store.data.settings.chartBy || {}) }; delete by[sym.key]; await save({ settings: { ...store.data.settings, chartBy: by } }); scope = "all"; draw(body); onChange?.(); });
   };
   openSheet(`Chart · ${esc(sym.t)}`, "", draw, () => buildFeed({ keepKey: sym.key }));

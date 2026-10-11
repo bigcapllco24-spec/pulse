@@ -36,6 +36,7 @@ def active(p):
 def phone_tests(b):
     ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
     ctx.route("https://api.kraken.com/**", kraken_route)
+    ctx.add_init_script(NOCOACH)  # the guided tour has its own test
     p = ctx.new_page(); errs = []
     p.on("pageerror", lambda e: errs.append(str(e)))
     p.goto(BASE); p.wait_for_timeout(2500)
@@ -147,6 +148,24 @@ def phone_tests(b):
     left(); secs = p.locator(".card.active [data-pane=details] .dsec h3").all_inner_texts(); right()
     want = ["TODAY", "PERFORMANCE", "READINGS", "WHERE THE PRICE SITS", "YOUR ALERTS", "WATCHLISTS", "ABOUT"]
     check("phone: details are in sections: Today, Performance, Readings, Ranges, Alerts, Watchlists, About", all(any(t.upper().startswith(w) for t in secs) for w in want), " | ".join(secs))
+
+    # the day's move sits next to the coin's name
+    hd = p.evaluate("(()=>{const c=document.querySelector('.card.active'); return !!c.querySelector('.tkrow .tk') && !!c.querySelector('.tkrow .chg')})()")
+    check("phone: today's % move sits next to the coin's name", hd)
+    # support & resistance: off by default, one tap on S/R draws them, labels explain themselves, pivots are an option
+    n0 = p.locator(".card.active .chart .lvl").count()
+    p.click(".card.active [data-lv]"); p.wait_for_timeout(500)
+    tags = p.locator(".card.active .lvtag").all_inner_texts(); n1 = p.locator(".card.active .chart .lvl").count()
+    check("phone: S/R button draws support and resistance lines with touch counts", n0 == 0 and n1 >= 1 and any(("Support" in t or "Resistance" in t) and ("×" in t or "recent" in t) for t in tags), f"before={n0} after={n1} {tags}")
+    if tags: p.locator(".card.active .lvtag").first.click(); p.wait_for_timeout(500)
+    sh = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+    check("phone: tapping a line's label explains support and resistance", "Support and resistance" in sh and "predict" in sh, sh[:100].replace("\n", " "))
+    if p.is_visible("#sheet"): p.click("#sheet [data-close]"); p.wait_for_timeout(500)
+    p.click(".card.active [data-tf]"); p.wait_for_timeout(400); p.click("#sheet [data-k=levels][data-v=pivots]"); p.wait_for_timeout(300); p.click("#sheet [data-close]"); p.wait_for_timeout(900)
+    ptags = p.locator(".card.active .lvtag").all_inner_texts(); lvb = p.inner_text(".card.active [data-lv]")
+    check("phone: pivot points (P, R1, S1…) can be chosen instead", any(t.startswith("P ") for t in ptags) and "Pivots" in lvb, f"{ptags} {lvb}")
+    p.click(".card.active [data-lv]"); p.wait_for_timeout(400)
+    check("phone: tapping the button again hides the lines", p.locator(".card.active .chart .lvl").count() == 0)
 
     # hold and slide on the chart reads any day; releasing offers a one-tap alert at that level
     box = p.evaluate("(()=>{const r=document.querySelector('.card.active .chartbox').getBoundingClientRect();return [r.left,r.top,r.width,r.height]})()")
@@ -314,6 +333,43 @@ def phone_tests(b):
     check("phone: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
+NOCOACH = "localStorage.getItem('pl.coach')||localStorage.setItem('pl.coach', JSON.stringify({feed:1,dash:1,profile:1,add:1}))"
+
+def tour_test(b):
+    # A brand-new user: the feed teaches itself step by step, each step finishing when the gesture is done.
+    ctx = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    ctx.route("https://api.kraken.com/**", kraken_route)
+    p = ctx.new_page(); p.goto(BASE); p.wait_for_timeout(2500); cdp = ctx.new_cdp_session(p)
+    def swipe(x0, y0, x1, y1, settle=1100):
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x0, "y": y0}]})
+        for i in range(1, 11):
+            cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x0 + (x1 - x0) * i / 10, "y": y0 + (y1 - y0) * i / 10}]}); time.sleep(0.02)
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(settle)
+    step = lambda: p.inner_text("#coach .cn") if p.locator("#coach").count() else "none"
+    seen = [step()]
+    swipe(200, 620, 200, 200); seen.append(step())            # up → first coin
+    swipe(330, 560, 50, 560); seen.append(step())             # left → details
+    swipe(50, 560, 330, 560); swipe(50, 560, 330, 560); seen.append(step())  # right, right → news
+    swipe(330, 560, 50, 560); seen.append(step())             # left → chart
+    box = p.evaluate("(()=>{const r=document.querySelector('.card.active .chartbox').getBoundingClientRect();return [r.left+r.width/2, r.top+r.height/2]})()")
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": box[0], "y": box[1]}]}); p.wait_for_timeout(450)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": box[0] - 40, "y": box[1]}]}); p.wait_for_timeout(200)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(1900); seen.append(step())
+    p.click(".card.active [data-tf]"); p.wait_for_timeout(900); seen.append(step())
+    want = ["1 / 6", "2 / 6", "3 / 6", "4 / 6", "5 / 6", "6 / 6", "none"]
+    check("tour: the feed tour moves on as each gesture is done (up, left, right, left, hold, tap)", seen == want, str(seen))
+    p.click("#sheet [data-close]"); p.wait_for_timeout(500)
+    p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(900)
+    d = [step()]
+    for _ in range(4):
+        if p.locator("#coach [data-next]").count(): p.click("#coach [data-next]"); p.wait_for_timeout(250)
+    d.append(step())
+    p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(400); p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(900); d.append(step())
+    check("tour: the dashboard explains watchlists once, in 4 steps, and not again", d == ["1 / 4", "none", "none"], str(d))
+    p.reload(); p.wait_for_timeout(2500)
+    check("tour: never shown again after it is finished", step() == "none")
+    ctx.close()
+
 def ios_homescreen_test(b):
     # Simulates the iOS Home Screen bug: the page is laid out 56 px shorter than the screen.
     ctx = b.new_context(viewport={"width": 390, "height": 788}, is_mobile=True, has_touch=True,
@@ -327,7 +383,7 @@ def ios_homescreen_test(b):
 
 def desktop_tests(b):
     p = b.new_page(viewport={"width": 1280, "height": 800}); errs = []
-    p.route("https://api.kraken.com/**", kraken_route)
+    p.route("https://api.kraken.com/**", kraken_route); p.add_init_script(NOCOACH)
     p.on("pageerror", lambda e: errs.append(str(e)))
     p.goto(BASE); p.wait_for_timeout(2500)
     p.mouse.move(640, 450)
@@ -381,6 +437,8 @@ def desktop_tests(b):
 
 with sync_playwright() as pw:
     b = pw.chromium.launch(executable_path=CHROME)
+    try: tour_test(b)
+    except Exception as e: check("tour: test ran", False, repr(e)[:300])
     try: ios_homescreen_test(b)
     except Exception as e: check("iOS Home Screen: test ran", False, repr(e)[:300])
     try: phone_tests(b)

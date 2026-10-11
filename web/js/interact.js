@@ -6,6 +6,7 @@ import { fmt } from "./indicators.js";
 import { esc, money, pct, arrow, fmtDay, toast, openSheet, closeSheet, haptic, DISCLAIMER } from "./ui.js";
 import { APP } from "./app.js";
 import { openIndicator } from "./pages.js";
+import { coachEvent } from "./coach.js";
 
 // Chart geometry (must match chart.js): viewBox 360 x 210, 46 px price gutter on the right, 22 px top, 14 px bottom.
 const W = 360, H = 210, PR = 46, PT = 22, PB = 14;
@@ -49,6 +50,7 @@ function start(feed, id) {
   box.insertAdjacentHTML("beforeend", `<div class="xh"></div><div class="yh"><span></span></div><div class="scrubinfo"></div>`);
   main.querySelectorAll(".lower .lplot").forEach((l) => l.insertAdjacentHTML("beforeend", `<div class="xh"></div>`));
   main.classList.add("scrubbing");
+  coachEvent("scrub");
   haptic();
   move(h.x2 ?? h.x, h.y2 ?? h.y);
 }
@@ -116,10 +118,16 @@ const LEARN = {
   RSI: { id: "rsi", metric: "rsi14", how: "The line moves between 0 and 100. The dotted lines mark 70 and 30, where gains or losses have clearly dominated the last 14 days." },
   MACD: { id: "macd", metric: "macdHist", how: "Blue line: the 12-day average minus the 26-day average. Yellow line: a 9-day average of the blue line. Bars: the gap between the two lines, green when blue is on top." },
   VOL: { id: "volume", metric: "volRatio", how: "Each bar is one day's trading volume, green on days that closed higher than they opened." },
+  SR: { name: "Support and resistance", how: "Each dashed line marks a price where the chart turned more than once in this view: green lines below today's price (support), red lines above it (resistance). The number shows how many times it turned there; “recent high” or “recent low” marks a single clear turn. Lines move when you change the time range. They describe the past and do not predict where the price will go." },
+  PIV: { name: "Pivot points", how: "Worked out from the previous month's high, low and close (the previous year's on weekly charts): P = (high + low + close) ÷ 3, R1 = 2P − low, S1 = 2P − high, R2 = P + (high − low), S2 = P − (high − low). Many traders watch these levels, which is why they are shown. They are arithmetic, not a forecast." },
 };
 export function openLearn(kind, v) {
   const L = LEARN[kind], ind = APP.catalogue.find((x) => x.id === L?.id);
   if (!L || !v) return;
+  if (!L.metric) { // a line on the chart rather than a panel
+    openSheet(esc(L.name), `<h3>How to read the lines</h3><p>${esc(L.how)}</p><p class="disclaimer">${esc(DISCLAIMER)}</p>`);
+    return;
+  }
   const d = v.daily.now, val = d[L.metric];
   openSheet(esc(ind?.name || kind), `
     <div class="learnnow"><span class="label">Right now</span><b>${val == null ? "–" : fmt(val, L.metric === "macdHist" ? 2 : 1)}${L.metric === "volRatio" && val != null ? "x usual" : ""}</b><p>${esc(describe(L.metric, d, v.daily.prev))}</p></div>

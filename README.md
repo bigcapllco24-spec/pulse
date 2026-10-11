@@ -84,6 +84,8 @@ web/                 the app (static files, no build step)
   js/store.js        accounts, watchlists, shared lists, alerts, AI calls, push
   js/search.js       symbol and indicator search; data/symbols.json holds about 15,000 listings
   js/interact.js     hold-to-read chart, alert from chart, tap-to-learn panels, quiz
+  js/levels.js       support/resistance (swing levels) and pivot points
+  js/coach.js        first-time guided tours
   js/describe.js     plain-language meaning of each reading
 pipeline/            data job run by GitHub Actions (no npm packages)
 worker/              AI relay for Cloudflare Workers
@@ -92,4 +94,4 @@ firestore.rules      database security rules
 
 ## Checks
 
-Run `scripts/check.sh` (needs Node 20+, Python 3 with Playwright and Chromium). It runs 70 checks across the app, the data job and the AI relay and prints one line per suite. See `DEVELOPMENT.md` for the process and what is and isn't covered.
+Run `scripts/check.sh` (needs Node 20+, Python 3 with Playwright and Chromium). It runs 83 checks across the app, the data job and the AI relay and prints one line per suite. See `DEVELOPMENT.md` for the process and what is and isn't covered.

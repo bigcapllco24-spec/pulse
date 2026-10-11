@@ -17,6 +17,9 @@ export function mainChart(win, ov, opts) {
   win.forEach((b) => vals.push(opts.closeOnly ? b.c : b.h, opts.closeOnly ? b.c : b.l));
   (opts.maKeys || []).forEach((k) => (ov[k] || []).forEach((x) => x != null && vals.push(x)));
   let lo = Math.min(...vals), hi = Math.max(...vals);
+  // support/resistance or pivot lines: keep those near the visible prices and widen the scale to fit them
+  const span0 = hi - lo || hi * 0.02, lv = (opts.levels || []).filter((l) => l.price >= lo - span0 * 0.25 && l.price <= hi + span0 * 0.25);
+  for (const l of lv) { lo = Math.min(lo, l.price); hi = Math.max(hi, l.price); }
   const pad = (hi - lo) * 0.06 || hi * 0.01 || 1; lo -= pad; hi += pad;
   const Y = (v) => PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB);
   const X = (i) => i * step + step / 2;
@@ -44,13 +47,20 @@ export function mainChart(win, ov, opts) {
   // price labels as HTML so they keep their shape while the drawing stretches to fit the screen
   const ly = Y(last), top = (y) => ((y / H) * 100).toFixed(2) + "%";
   body += `<line x1="0" x2="${pw}" y1="${ly.toFixed(1)}" y2="${ly.toFixed(1)}" class="lastline"/>`;
+  let lvHtml = "";
+  for (const l of lv) {
+    const y = Y(l.price), x0 = Math.max(0, X(l.from || 0) - step / 2), cls = l.kind[0] === "R" ? "r" : l.kind[0] === "S" ? "s" : "p";
+    body += `<line x1="${x0.toFixed(1)}" x2="${pw}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" class="lvl ${cls}"/>`;
+    const tag = l.touches ? `${l.kind === "R" ? "Resistance" : "Support"} ${f(l.price)} · ${l.touches > 1 ? l.touches + "×" : l.kind === "R" ? "recent high" : "recent low"}` : `${l.kind} ${f(l.price)}`;
+    lvHtml += `<button class="lvtag ${cls}" data-learn="${l.touches ? "SR" : "PIV"}" style="top:${((y / H) * 100).toFixed(2)}%;right:${((PR / W) * 100).toFixed(2)}%">${tag}</button>`;
+  }
   // time axis like TradingView: month names (the year at each January), or day numbers on short ranges
   const ticks = timeTicks(win, opts.days || 91);
   for (const t of ticks) body += `<line x1="${X(t.i).toFixed(1)}" x2="${X(t.i).toFixed(1)}" y1="${PT}" y2="${H - PB}" class="grid vgrid"/>`;
   const xaxis = `<div class="xaxis" aria-hidden="true">${ticks.map((t) => `<span class="${t.major ? "maj" : ""}" style="left:${((X(t.i) / W) * 100).toFixed(2)}%">${t.label}</span>`).join("")}</div>`;
   const labels = `<span class="ax" style="top:${top(PT)}">${f(hi - pad)}</span><span class="ax" style="top:${top(H - PB)}">${f(lo + pad)}</span>` +
     `<span class="axlast ${up ? "pu" : "pd"}" style="top:${top(ly)}">${f(last)}</span>`;
-  return `<div class="plot"><svg class="chart" data-lo="${lo}" data-hi="${hi}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${n} ${opts.interval === "1W" ? "weeks" : "days"}, ${up ? "up" : "down"} ${Math.abs(((last - first) / first) * 100).toFixed(1)}%, last ${f(last)}, from ${win[0].t} to ${win[n - 1].t}">${body}</svg>${labels}</div>${xaxis}`;
+  return `<div class="plot"><svg class="chart" data-lo="${lo}" data-hi="${hi}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${n} ${opts.interval === "1W" ? "weeks" : "days"}, ${up ? "up" : "down"} ${Math.abs(((last - first) / first) * 100).toFixed(1)}%, last ${f(last)}, from ${win[0].t} to ${win[n - 1].t}">${body}</svg>${labels}${lvHtml}</div>${xaxis}`;
 }
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

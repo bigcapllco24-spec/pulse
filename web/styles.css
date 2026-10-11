@@ -310,3 +310,37 @@ button.row, a.row { width: 100%; background: none; border-left: 0; border-right:
 .perf span { display: block; font-size: 11px; color: var(--muted); font-weight: 700; } .perf b { font-size: 14px; }
 .perf b.up { color: var(--up); } .perf b.down { color: var(--down); }
 .dline .pill { background: var(--surface2); font-size: 13px; padding: 3px 10px; display: inline-block; margin: 0 4px 4px 0; }
+/* support/resistance and pivot lines */
+.chart .lvl { stroke-width: 1.2; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+.chart .lvl.r { stroke: var(--down); } .chart .lvl.s { stroke: var(--up); } .chart .lvl.p { stroke: var(--muted); }
+.lvtag { position: absolute; transform: translateY(-115%); border: 0; background: color-mix(in srgb, var(--bg) 82%, transparent); border-radius: 5px; padding: 1px 5px; font-size: 10.5px; font-weight: 800; cursor: pointer; white-space: nowrap; pointer-events: auto; }
+.lvtag.r { color: var(--down); } .lvtag.s { color: var(--up); } .lvtag.p { color: var(--muted); }
+.head .hr { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
+.lvbtn { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.lvbtn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-dasharray: 3 2; }
+.lvbtn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.tkrow { display: flex; align-items: center; gap: 8px; }
+.tkrow .chg { font-size: 12.5px; padding: 2px 7px; border-radius: 7px; }
+/* first-time guided tour */
+.coach { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
+.coach .ring { position: fixed; border-radius: 16px; box-shadow: 0 0 0 3px var(--accent), 0 0 0 9999px rgba(0,0,0,.45); transition: all .3s ease; }
+.coach .bubble { position: fixed; left: 16px; right: 16px; max-width: 420px; margin: 0 auto; background: var(--text); color: var(--bg); border-radius: 16px; padding: 14px 16px 10px; box-shadow: 0 12px 30px rgba(0,0,0,.45); opacity: 0; transform: translateY(8px); transition: opacity .25s, transform .25s; }
+.coach .bubble.in { opacity: 1; transform: none; }
+.coach .bubble.bottom { top: auto; bottom: calc(var(--tab) + 18px + var(--safe-b) - var(--gapb)); }
+.coach .bubble p { margin: 0 0 8px; font-size: 15px; font-weight: 700; line-height: 1.35; }
+.coach .cb { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.coach .cb button { pointer-events: auto; border: 0; background: transparent; color: inherit; opacity: .7; font-weight: 700; font-size: 13px; padding: 8px 4px; cursor: pointer; }
+.coach .cb button.primary { opacity: 1; background: var(--bg); color: var(--text); border-radius: 999px; padding: 7px 14px; }
+.coach .cn { font-size: 12px; opacity: .6; font-weight: 700; }
+.coach .hand { position: fixed; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; background: rgba(255,255,255,.92); box-shadow: 0 0 0 8px rgba(255,255,255,.22), 0 6px 16px rgba(0,0,0,.4); }
+.coach .hand.h-up { animation: c-up 1.7s ease-in-out infinite; }
+.coach .hand.h-left { animation: c-left 1.7s ease-in-out infinite; }
+.coach .hand.h-right { animation: c-right 1.7s ease-in-out infinite; }
+.coach .hand.h-hold { animation: c-hold 2.4s ease-in-out infinite; }
+.coach .hand.h-tap { animation: c-tap 1.4s ease-in-out infinite; }
+@keyframes c-up { 0% { transform: translateY(90px); opacity: 0; } 15% { opacity: 1; } 70% { transform: translateY(-90px); opacity: 1; } 100% { transform: translateY(-90px); opacity: 0; } }
+@keyframes c-left { 0% { transform: translateX(90px); opacity: 0; } 15% { opacity: 1; } 70% { transform: translateX(-90px); opacity: 1; } 100% { transform: translateX(-90px); opacity: 0; } }
+@keyframes c-right { 0% { transform: translateX(-90px); opacity: 0; } 15% { opacity: 1; } 70% { transform: translateX(90px); opacity: 1; } 100% { transform: translateX(90px); opacity: 0; } }
+@keyframes c-hold { 0% { transform: translateX(60px) scale(1); opacity: 0; } 10% { opacity: 1; } 30% { transform: translateX(60px) scale(.75); } 80% { transform: translateX(-70px) scale(.75); opacity: 1; } 100% { transform: translateX(-70px) scale(1); opacity: 0; } }
+@keyframes c-tap { 0%, 100% { transform: scale(1); } 40% { transform: scale(.7); } 60% { transform: scale(1.05); } }
+@media (prefers-reduced-motion: reduce) { .coach .hand { animation: none !important; } .coach .bubble { transition: none; } }

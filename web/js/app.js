@@ -6,6 +6,8 @@ import { loadSymbols, TYLABEL, findSymbol } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { describe } from "./describe.js";
 import { mainChart, lowerChart } from "./chart.js";
+import { levelsFor } from "./levels.js";
+import { startTour, coachEvent } from "./coach.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
@@ -186,6 +188,7 @@ function setActive(i) {
   cards.forEach((c, k) => c.classList.toggle("active", k === i));
   const it = APP.seq[i];
   if (it.type === "sym") markSeen(it.sym.key);
+  if (prevActive >= 0) coachEvent("card", { sym: it.type === "sym" });
   progress();
   whenIdle("sync", syncCards);
 }
@@ -227,15 +230,17 @@ function renderMain(c, it) {
   const main = c.querySelector('[data-pane="main"]');
   c._v = v;
   // Only what matters while scrolling: the name, today's price and move, and the chart. News and details are a swipe away.
-  const dots = `<div class="dots" aria-hidden="true"><i></i><i class="on"></i><i></i></div>` + (ls.get("pl.hinted") ? "" : `<div class="swipehint">Swipe ← details · → news</div>`);
+  const dots = `<div class="dots" aria-hidden="true"><i></i><i class="on"></i><i></i></div>`;
   if (v) {
     const chg = v.daily.now.changePct;
     // The chip at the top right says what the chart covers and opens the chart settings for this coin.
     const own = !!store.data?.settings?.chartBy?.[s.key];
-    main.innerHTML = `<div class="head"><div class="hl"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span>
-      <span class="chg ${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span></div></div>
-      <button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${v.interval === "1W" ? "weekly" : "daily"} candles"><b>${esc(v.range)}</b><span>${v.interval === "1W" ? "Weekly" : "Daily"}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button></div>
-      <div class="chartbox">${mainChart(v.win, v.ov, { type: cs.type, closeOnly: v.closeOnly, maKeys: cs.mas, interval: v.interval, days: RANGES[v.range] })}</div>
+    const lvMode = cs.levels || "off";
+    main.innerHTML = `<div class="head"><div class="hl"><div class="tkrow"><span class="tk">${esc(s.t)}</span><span class="chg ${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span></div>
+      <div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span></div></div>
+      <div class="hr"><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${v.interval === "1W" ? "weekly" : "daily"} candles"><b>${esc(v.range)}</b><span>${v.interval === "1W" ? "Weekly" : "Daily"}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
+      <button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div>
+      <div class="chartbox">${mainChart(v.win, v.ov, { type: cs.type, closeOnly: v.closeOnly, maKeys: cs.mas, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
       ${String(cs.lower || "none").split(",").filter((k) => k !== "none").map((k) => lowerChart(v.win, v.ov, k)).join("")}${dots}`;
   } else {
     main.innerHTML = `<div class="head"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div>
@@ -381,12 +386,9 @@ function catchupHtml() {
   const since = ls.get("pl.prevOpen");
   const facts = [];
   if (first) {
-    return `<div class="special"><div class="label">Welcome to ${esc(CONFIG.appName)}</div><h1>Your watchlist,<br>one chart at a time.</h1>
-      <div class="fact"><span class="ic acc">↕</span><div><b>Scroll</b> for the next chart. Every chart is drawn the same way, so moves are easy to compare.</div></div>
-      <div class="fact"><span class="ic acc">→</span><div><b>Swipe right</b> for the news behind the chart, with what it means for the company.</div></div>
-      <div class="fact"><span class="ic acc">←</span><div><b>Swipe left</b> for the details: readings in plain words, ranges and your rules.</div></div>
-      <div class="fact"><span class="ic acc">+</span><div><b>Add coins</b> and sort them into watchlists like “Semiconductors”.</div></div>
-      <p class="hint">Information only, never advice. Swipe up to start.</p></div>`;
+    return `<div class="special"><div class="label">Welcome to ${esc(CONFIG.appName)}</div><h1>Your coins,<br>one chart at a time.</h1>
+      <p>Swipe through your watchlist like a feed. Every chart is drawn the same way, so moves are easy to compare.</p>
+      <p class="hint">Information only, never advice.</p></div>`;
   }
   // Daily recap: today's moves across the list, then what is new since the last visit.
   const cs = chartSettings();
@@ -433,7 +435,7 @@ function setupSwipe(c, it) {
     if (idx !== 1) ensureSides();
     c.dataset.view = ["news", "main", "details"][idx];
     c.querySelectorAll(".dots i").forEach((d, k) => d.classList.toggle("on", k === idx));
-    if (idx !== 1 && !ls.get("pl.hinted")) { ls.set("pl.hinted", 1); feed.querySelectorAll(".swipehint").forEach((h) => h.remove()); }
+    coachEvent("pane", { view: c.dataset.view });
   };
   track.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -492,9 +494,19 @@ function wire(c, it) {
   if (it.type === "done") wireQuiz(c);
   if (it.type !== "sym") return;
   const justScrubbed = () => Date.now() - (APP.scrubEndAt || 0) < 400;
-  c.querySelectorAll("[data-learn]").forEach((p) => p.addEventListener("click", () => { if (!justScrubbed()) openLearn(p.dataset.learn, c._v); }));
+  c.querySelectorAll("[data-learn]").forEach((p) => p.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) openLearn(p.dataset.learn, c._v); }));
+  // S/R chip: one tap shows or hides the lines (the last style picked, support & resistance by default)
+  c.querySelector("[data-lv]")?.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const cs = chartSettings(it.sym.key), on = (cs.levels || "off") !== "off", st = store.data.settings;
+    const next = on ? "off" : st.levelsPick || "sr", by = { ...(st.chartBy || {}) };
+    for (const k of Object.keys(by)) { const o = { ...by[k] }; delete o.levels; if (Object.keys(o).length) by[k] = o; else delete by[k]; }
+    await save({ settings: { ...st, chart: { ...(st.chart || {}), levels: next }, chartBy: by } });
+    haptic(); renderMain(c, it); wire(c, it); APP.needsRebuild = true;
+    if (next !== "off" && !ls.get("pl.lvTip")) { ls.set("pl.lvTip", 1); toast("Dashed lines mark prices where the chart turned before. Tap a label to learn more."); }
+  });
   c.querySelector(".chartbox:not(.nodata)")?.addEventListener("click", () => { if (!justScrubbed()) chartTapHint(); });
-  c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); openChartSheet(it.sym, () => { renderMain(c, it); wire(c, it); }); });
+  c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); coachEvent("tf"); openChartSheet(it.sym, () => { renderMain(c, it); wire(c, it); }); });
 }
 
 // ---------- tabs and refresh
@@ -502,8 +514,8 @@ export function showTab(tab, sub, arg) {
   APP.tab = tab;
   $("sFeed").hidden = tab !== "feed"; $("sDash").hidden = tab !== "dash"; $("sProfile").hidden = tab !== "profile";
   document.querySelectorAll(".tabbar button").forEach((b) => b.setAttribute("aria-current", b.dataset.tab === tab ? "page" : "false"));
-  if (tab === "dash") renderDash();
-  if (tab === "profile") renderProfile(sub, arg);
+  if (tab === "dash") { renderDash(); setTimeout(() => APP.tab === "dash" && startTour("dash"), 350); }
+  if (tab === "profile") { renderProfile(sub, arg); if (!sub) setTimeout(() => APP.tab === "profile" && startTour("profile"), 350); }
   if (tab === "feed" && APP.needsRebuild) { APP.needsRebuild = false; buildFeed({ keepKey: APP.seq[APP.active]?.sym?.key }); }
 }
 document.querySelectorAll(".tabbar button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
@@ -588,6 +600,7 @@ export function applyTheme() {
   $("alertDot").hidden = !store.alerts.some((a) => !a.read);
   buildFeed();
   await doRefresh(false);
+  setTimeout(() => APP.tab === "feed" && startTour("feed"), 700);
   setTimeout(() => ls.set("pl.lastOpen", new Date().toISOString()), 4000);
   loadSymbols().catch(() => {});
 })();
