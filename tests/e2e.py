@@ -401,17 +401,35 @@ def phone_tests(b):
     tf = p.inner_text(".card.active [data-tf]").replace("\n", " ")
     check("phone: chart style (1 month, line) applies to cards", line == 1 and "RSI" in low and tf.startswith("1M"), f"line={line} / {low} / {tf}")
 
-    # indicators are added and removed on the full-screen chart, and reach the feed and the details
-    p.click(".card.active [data-full]"); p.wait_for_timeout(1200)
-    p.click("#full [data-find]"); p.wait_for_timeout(400)
+    # indicators are added and removed from the ƒx chip on the feed card, and show on the full-screen chart too
+    p.click(".card.active [data-ind]"); p.wait_for_timeout(400)
     p.click("#sheet [data-stog=BB]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=MACD]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=STOCH]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=MFI]"); p.wait_for_timeout(200)
     p.click("#sheet [data-close]"); p.wait_for_timeout(600)
-    fi = p.evaluate("""(()=>{const f=document.getElementById('full'); return {leg: f.querySelector('.olegend')?.innerText||'', fill: f.querySelectorAll('.chartbox .ofill').length, panels: [...f.querySelectorAll('.flowers .lower')].map(l=>l.dataset.learn).join(','), btn: f.querySelector('[data-find]').innerText}})()""")
-    check("phone: full-screen Indicators adds Bollinger Bands to the price chart and swaps MACD for Stochastic and MFI", "BB" in fi["leg"] and fi["fill"] == 1 and fi["panels"] == "RSI,STOCH,MFI" and "4" in fi["btn"], str(fi))
+    chip = p.inner_text(".card.active [data-ind]")
+    p.click(".card.active [data-full]"); p.wait_for_timeout(1200)
+    fi = p.evaluate("""(()=>{const f=document.getElementById('full'); return {leg: f.querySelector('.olegend')?.innerText||'', fill: f.querySelectorAll('.chartbox .ofill').length, panels: [...f.querySelectorAll('.flowers .lower')].map(l=>l.dataset.learn).join(','), find: !!f.querySelector('[data-find]')}})()""")
+    check("phone: the ƒx chip on the card adds Bollinger Bands and swaps MACD for Stochastic and MFI (full screen shows all, no button there)", "BB" in fi["leg"] and fi["fill"] == 1 and fi["panels"] == "RSI,STOCH,MFI" and not fi["find"] and "4" in chip, f"{fi} chip={chip}")
     p.click("#full .flowers [data-rmstudy=MFI]"); p.wait_for_timeout(300)
     fp = p.evaluate("[...document.querySelectorAll('#full .flowers .lower')].map(l=>l.dataset.learn).join(',')")
-    check("phone: ✕ on a panel removes that indicator", fp == "RSI,STOCH", fp)
+    check("phone: ✕ on a full-screen panel removes that indicator", fp == "RSI,STOCH", fp)
+    # a plain fact under each panel, and a one-tap alert at its own level from the panel guide
+    fact = p.evaluate("document.querySelector('#full .flowers .lower[data-learn=RSI] .lfact')?.textContent || ''")
+    nrules = p.evaluate("(JSON.parse(localStorage.getItem('pl.demoAccount')).rules||[]).length")
+    p.click("#full .flowers .lower[data-learn=RSI] .lower-label"); p.wait_for_timeout(500)
+    lsheet = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+    p.click("#sheet [data-ra='0']"); p.wait_for_timeout(500)
+    rules2 = p.evaluate("(JSON.parse(localStorage.getItem('pl.demoAccount')).rules||[]).map(r=>r.metric+' '+r.op+' '+r.value)")
+    check("phone: panels state a plain fact and the RSI guide sets an alert at 70 in one tap",
+          ("30 and 70" in fact or "Above 70" in fact or "Below 30" in fact) and "In this view" in lsheet and len(rules2) == nrules + 1 and rules2[-1] == "rsi14 crossAbove 70", f"{fact} / {rules2[-1:]}")
     p.click("#full [data-fclose]"); p.wait_for_timeout(900)
+    # quick sets replace the picks in one tap
+    p.click(".card.active [data-ind]"); p.wait_for_timeout(400); p.click("#sheet [data-sset=momentum]"); p.wait_for_timeout(300); p.click("#sheet [data-close]"); p.wait_for_timeout(600)
+    ms = p.evaluate("[...document.querySelectorAll('.card.active .lower')].map(l=>l.dataset.learn).join(',') + '|' + (document.querySelector('.card.active .olegend')?.innerText||'')")
+    check("phone: the Momentum quick set shows RSI and MACD on the card (Stochastic in full screen) and clears the price-chart lines", ms == "RSI,MACD|", ms)
+    p.click(".card.active [data-ind]"); p.wait_for_timeout(400)
+    p.click("#sheet [data-sset=none]"); p.wait_for_timeout(200)
+    for c in ["BB", "RSI", "STOCH"]: p.click(f"#sheet [data-stog={c}]"); p.wait_for_timeout(150)
+    p.click("#sheet [data-close]"); p.wait_for_timeout(700)
     fd = p.evaluate("""(()=>{const c=document.querySelector('.card.active'); return {leg: c.querySelector('.olegend')?.innerText||'', panels: [...c.querySelectorAll('.lower')].map(l=>l.dataset.learn).join(',')}})()""")
     left(); txt = p.inner_text(".card.active [data-pane=details]")
     check("phone: the feed card shows the same indicators, and details read them in plain words", "BB" in fd["leg"] and fd["panels"] == "RSI,STOCH" and "Bollinger" in txt and "Stochastic" in txt, f"{fd} / {'Bollinger' in txt} {'Stochastic' in txt}")

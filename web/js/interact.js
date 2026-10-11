@@ -3,7 +3,7 @@
 import { store, save, ls } from "./store.js";
 import { describe } from "./describe.js";
 import { fmt, METRICS } from "./indicators.js";
-import { PANELS, OVERLAYS } from "./studies.js";
+import { PANELS, OVERLAYS, valueAt, tagOf, panelFact } from "./studies.js";
 import { esc, money, pct, arrow, fmtDay, toast, openSheet, closeSheet, haptic, DISCLAIMER } from "./ui.js";
 import { APP } from "./app.js";
 import { openIndicator } from "./pages.js";
@@ -78,11 +78,13 @@ function move(cx, cy) {
   s.head.price.textContent = money(b.c, "CRYPTO");
   const chgEl = s.head.chg;
   chgEl.className = `chg ${chg == null || chg >= 0 ? "up" : "down"}`; chgEl.textContent = chg == null ? "–" : `${arrow(chg)} ${pct(chg)}`;
-  const rsi = s.v.ov.rsi14?.[i], mh = s.v.ov.macdHist?.[i];
+  // every indicator on the chart, read on that candle
+  const codes = s.v.picks ? [...s.v.picks.over, ...s.v.picks.lower] : ["RSI", "MACD"];
+  const vals = codes.map((k) => [k, valueAt(k, s.v.ov, i)]).filter(([, x]) => x != null).slice(0, 6);
   const card = s.box.querySelector(".scrubcard");
   card.innerHTML = `<div class="sc-d"><b>${esc(fmtDay(b.t))}</b>${chg == null ? "" : `<span class="${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span>`}</div>
     <div class="sc-g"><span>Open</span><b>${fmtPrice(b.o)}</b><span>High</span><b>${fmtPrice(b.h)}</b><span>Low</span><b>${fmtPrice(b.l)}</b><span>Close</span><b>${fmtPrice(b.c)}</b></div>
-    ${rsi != null || mh != null ? `<div class="sc-i">${rsi != null ? `RSI <b>${rsi.toFixed(0)}</b>` : ""}${mh != null ? `<i></i>MACD <b>${fmt(mh, 2)}</b>` : ""}</div>` : ""}`;
+    ${vals.length ? `<div class="sc-i">${vals.map(([k, x], j) => `${j ? "<i></i>" : ""}${esc(tagOf(k))} <b>${OVERLAYS[k] ? fmtPrice(x) : Math.abs(x) >= 100 ? x.toFixed(0) : Math.abs(x) >= 1 ? x.toFixed(1) : Math.abs(x) >= 0.01 ? x.toFixed(2) : x.toPrecision(2)}</b>`).join("")}</div>` : ""}`;
   card.classList.toggle("right", xPct < 50); // keep the card away from the finger
   if (navigator.vibrate && i % 5 === 0) haptic();
 }
@@ -121,6 +123,7 @@ export function chartTapHint() {
 }
 
 // ---------- tap a panel to learn what it shows
+const OPS_TXT = { crossAbove: "crosses above", crossBelow: "crosses below" };
 const LEARN = {
   RSI: { id: "rsi", metric: "rsi14", how: "The line moves between 0 and 100. The dotted lines mark 70 and 30, where gains or losses have clearly dominated the last 14 days." },
   MACD: { id: "macd", metric: "macdHist", how: "Blue line: the 12-day average minus the 26-day average. Yellow line: a 9-day average of the blue line. Bars: the gap between the two lines, green when blue is on top." },
@@ -139,13 +142,26 @@ export function openLearn(kind, v) {
     return;
   }
   const d = v.daily.now, val = d[L.metric];
+  // a plain fact about this view, and one-tap alerts at the panel's own reference levels (crossings, not advice)
+  const fact = PANELS[kind] && v.ov ? panelFact(kind, v.ov, v.win) : "";
+  const P = PANELS[kind], tk = (v.key || "").split(":")[1] || "";
+  const lv = P?.metric === L.metric ? (P.refs?.length ? [...P.refs].sort((a, b) => b - a) : P.zero ? [0] : []) : [];
+  const alerts = v.key ? lv.flatMap((x) => (lv.length === 1 ? [["crossAbove", x], ["crossBelow", x]] : x === Math.max(...lv) ? [["crossAbove", x]] : [["crossBelow", x]])) : [];
   openSheet(esc(stu?.name || ind?.name || kind), `
     <div class="learnnow"><span class="label">Right now</span><b>${val == null ? "–" : fmt(val, L.metric === "macdHist" ? 2 : METRICS[L.metric]?.digits ?? 1)}${L.metric === "volRatio" && val != null ? "x usual" : METRICS[L.metric]?.unit && val != null ? METRICS[L.metric].unit : ""}</b><p>${esc(describe(L.metric, d, v.daily.prev))}</p></div>
     ${ind?.short ? `<h3>What it measures</h3><p>${esc(ind.short)}</p>` : ""}
+    ${fact ? `<h3>In this view</h3><p>${esc(fact)}</p>` : ""}
     <h3>How to read ${OVERLAYS[kind] ? "the lines" : "the panel"}</h3><p>${esc(L.how)}</p>
+    ${alerts.length ? `<h3>Alert me</h3><div class="opts">${alerts.map(([op, x], j) => `<button class="opt" data-ra="${j}">🔔 ${esc(OPS_TXT[op])} ${esc(String(x))}</button>`).join("")}</div><p class="hint">For ${esc(tk)}. Checked after every data refresh; you'll find it in Profile → Alert rules.</p>` : ""}
     <button class="btn block" data-guide="${esc(L.id)}">Open the full guide</button>
     <p class="disclaimer">${esc(DISCLAIMER)}</p>`, (body) => {
     body.querySelector("[data-guide]").onclick = () => { closeSheet(); openIndicator(L.id); };
+    body.querySelectorAll("[data-ra]").forEach((b) => (b.onclick = async () => {
+      const [op, x] = alerts[+b.dataset.ra];
+      const rule = { id: Math.random().toString(36).slice(2, 10), sym: v.key, metric: L.metric, op, value: x, note: "Set from the chart", active: true, createdAt: new Date().toISOString() };
+      await save({ rules: [...(store.data.rules || []), rule] }); closeSheet(); haptic();
+      toast(`Alert set: ${tk} ${METRICS[L.metric]?.label || kind} ${OPS_TXT[op]} ${x}`, { action: "Undo", onAction: () => save({ rules: (store.data.rules || []).filter((r) => r.id !== rule.id) }) });
+    }));
   });
 }
 

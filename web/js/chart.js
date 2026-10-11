@@ -6,7 +6,7 @@ const LH = 64;
 const f = (x) => (Math.abs(x) >= 1000 ? x.toFixed(0) : Math.abs(x) >= 100 ? x.toFixed(1) : Math.abs(x) >= 1 ? x.toFixed(2) : x.toPrecision(3));
 const path = (pts) => pts.reduce((s, p, i) => (p == null ? s : s + (s && pts[i - 1] != null ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)), "");
 
-import { OVERLAYS, PANELS, keysOf } from "./studies.js";
+import { OVERLAYS, PANELS, keysOf, panelFact } from "./studies.js";
 export const MA_COLORS = ["var(--ma1)", "var(--ma2)", "var(--ma3)"];
 
 // win: bars in the window [{t,o,h,l,c,v}], ov: {key: values[] aligned to win}, opts: {type, closeOnly, maKeys:[...]}
@@ -171,7 +171,8 @@ export function lowerChart(win, s, kind, opts = {}) {
     axes = ticks.map((g) => `<span class="ax" style="top:${at(Y(g))}">${Number.isInteger(g) ? g : nf(g)}</span>`).join("");
   }
   if (sh || opts.count) body = `<clipPath id="lclip"><rect x="0" y="0" width="${pw}" height="${LHf}"/></clipPath><g clip-path="url(#lclip)">${body}</g>`;
-  return `<div class="lower${full ? " lfull" : ""}" data-learn="${kind}" role="button" aria-label="What ${esc(P.name)} shows"><span class="lower-label">${label}</span><div class="lplot">${axes}<svg class="chart" viewBox="0 0 ${W} ${LHf}" preserveAspectRatio="none" aria-hidden="true">${body}</svg></div>${full ? rm(kind) : ""}</div>`;
+  const fact = full ? panelFact(kind, s, win) : "";
+  return `<div class="lower${full ? " lfull" : ""}" data-learn="${kind}" role="button" aria-label="What ${esc(P.name)} shows"><span class="lower-label">${label}</span><div class="lplot">${axes}<svg class="chart" viewBox="0 0 ${W} ${LHf}" preserveAspectRatio="none" aria-hidden="true">${body}</svg></div>${fact ? `<p class="lfact">${esc(fact)}</p>` : ""}${full ? rm(kind) : ""}</div>`;
 }
 const nf = (x) => (Math.abs(x) >= 1000 ? f(x) : Math.abs(x) >= 10 ? x.toFixed(1) : Math.abs(x) >= 0.1 ? x.toFixed(2) : x.toPrecision(2));
 const LEG = { macd: "MACD", macdSignal: "signal", stochK: "%K", stochD: "%D", adx14: "ADX", plusDI: "+DI", minusDI: "−DI", aroonUp: "up", aroonDown: "down" };

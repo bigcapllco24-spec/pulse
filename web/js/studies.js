@@ -64,3 +64,54 @@ export function picks(chart) {
   const lower = String(chart?.lower ?? "RSI,MACD").split(",").filter((k) => PANELS[k]);
   return { over: over.filter((k) => OVERLAYS[k]), lower };
 }
+
+// Ready-made ways to look at a chart. Learning sets, not strategies: each groups indicators that answer one question.
+export const SETS = [
+  { id: "trend", name: "Trend", q: "Which way has it been heading?", over: ["MA50", "MA200"], lower: ["ADX"] },
+  { id: "momentum", name: "Momentum", q: "How strong have recent moves been?", over: [], lower: ["RSI", "MACD", "STOCH"] },
+  { id: "volatility", name: "Volatility", q: "How big have the swings been?", over: ["BB"], lower: ["ATR"] },
+  { id: "volume", name: "Volume", q: "Has trading backed the moves?", over: [], lower: ["VOL", "OBV", "MFI"] },
+];
+
+// The value an indicator shows at candle i of a window (for the hold-to-read card and the legend).
+export function valueAt(code, ov, i) {
+  const st = OVERLAYS[code] || PANELS[code]; if (!st) return null;
+  const k = st.fill ? st.lines[1][0] : st.hist || st.lines?.[0]?.[0] || st.dots || st.trend || (st.vol ? "volRatio" : null);
+  const v = k ? ov[k]?.[i] : null;
+  return v == null || !isFinite(v) ? null : v;
+}
+export const tagOf = (code) => OVERLAYS[code]?.tag || PANELS[code]?.label?.replace(/ %$| % of price$| \(yearly %\)$/, "") || code;
+
+// One plain fact about what a panel has done in this view: how long it has been above or below a level, or
+// above or below its partner line. Past only, never a signal.
+const LINE_NAME = { macd: "the MACD line", macdSignal: "its signal line", stochK: "%K", stochD: "%D", plusDI: "+DI", minusDI: "−DI", aroonUp: "Aroon up", aroonDown: "Aroon down" };
+export function panelFact(code, ov, win) {
+  const P = PANELS[code], n = win.length; if (!P || n < 3) return "";
+  const gap = n > 1 ? (Date.parse(win[n - 1].t.slice(0, 10)) - Date.parse(win[n - 2].t.slice(0, 10))) / 864e5 : 1;
+  const unit = win[0].t.length > 10 ? "candles" : gap >= 6 ? "weeks" : "days";
+  const run = (test) => { let k = 0; for (let i = n - 1; i >= 0 && test(i); i--) k++; return k; };
+  const span = (k) => (k >= n ? "for this whole view" : `for the last ${k} ${k === 1 ? unit.replace(/s$/, "") : unit}`);
+  if (P.vol) { const v = ov.volRatio?.[n - 1]; let mx = 0, mi = 0; win.forEach((b, i) => { if ((b.v || 0) > (win[mx].v || 0)) mx = i; }); return `Busiest candle in this view: ${win[mx].t.slice(0, 10)}${v != null ? `. The latest is ${v.toFixed(1)}× the usual volume.` : "."}`; }
+  if ((P.lines || []).length >= 2 && !P.refs?.length || code === "MACD" || code === "STOCH" || code === "ADX" || code === "AROON") {
+    const [a, b] = code === "ADX" ? ["plusDI", "minusDI"] : [P.lines[0][0], P.lines[1][0]];
+    const A = ov[a], B = ov[b];
+    if (A?.[n - 1] != null && B?.[n - 1] != null) {
+      const above = A[n - 1] >= B[n - 1], k = run((i) => A[i] != null && B[i] != null && (A[i] >= B[i]) === above);
+      return `${cap(LINE_NAME[a] || a)} has been ${above ? "above" : "below"} ${LINE_NAME[b] || b} ${span(k)}.`;
+    }
+  }
+  const key = P.hist || P.lines[0][0], s = ov[key] || [], last = s[n - 1];
+  if (last == null) return "";
+  if (P.refs?.length >= 2) {
+    const [lo, hi] = [Math.min(...P.refs), Math.max(...P.refs)], zone = (x) => (x > hi ? 1 : x < lo ? -1 : 0), z = zone(last);
+    const k = run((i) => s[i] != null && zone(s[i]) === z);
+    return `${z === 1 ? `Above ${hi}` : z === -1 ? `Below ${lo}` : `Between ${lo} and ${hi}`} ${span(k)}.`;
+  }
+  if (P.zero) { const pos = last >= 0, k = run((i) => s[i] != null && (s[i] >= 0) === pos); return `${pos ? "Above" : "Below"} zero ${span(k)}.`; }
+  if (P.refs?.length === 1) { const r = P.refs[0], pos = last >= r, k = run((i) => s[i] != null && (s[i] >= r) === pos); return `${pos ? "Above" : "Below"} ${r} ${span(k)}.`; }
+  const vals = s.filter((x) => x != null), mx = Math.max(...vals), mn = Math.min(...vals), avg = vals.reduce((x, y) => x + y, 0) / vals.length;
+  if (last >= mx) return "At its highest in this view.";
+  if (last <= mn) return "At its lowest in this view.";
+  return `${Math.abs(((last - avg) / (Math.abs(avg) || 1)) * 100).toFixed(0)}% ${last >= avg ? "above" : "below"} its average in this view.`;
+}
+const cap = (x) => x[0].toUpperCase() + x.slice(1);

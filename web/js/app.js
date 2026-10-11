@@ -13,7 +13,7 @@ import { openFull, krakenBars } from "./full.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, demoRules } from "./pages.js";
+import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, openIndicatorsSheet, demoRules } from "./pages.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
 const LOWER_KEY = { RSI: "rsi14", MACD: "macdHist", VOL: "volRatio" };
@@ -230,7 +230,6 @@ function fillCard(c, it) {
 function renderMain(c, it) {
   const s = it.sym, cs = chartSettings(s.key), v = view(s.key, cs);
   const main = c.querySelector('[data-pane="main"]');
-  c._v = v;
   // Only what matters while scrolling: the name, today's price and move, and the chart. News and details are a swipe away.
   const dots = `<div class="dots" aria-hidden="true"><i></i><i class="on"></i><i></i></div>`;
   if (v) {
@@ -240,13 +239,15 @@ function renderMain(c, it) {
     const lvMode = cs.levels || "off";
     // indicators are one shared choice (picked on the full-screen chart); the feed shows the first two panels
     const pk = picks(store.data?.settings?.chart), ov = studyWindow(v.bars, v.ov, v.bars.length - v.win.length, v.bars.length, [...pk.over, ...pk.lower.slice(0, FEED_PANELS)]);
+    c._v = { ...v, ov, picks: { over: pk.over, lower: pk.lower.slice(0, FEED_PANELS) } }; // what hold-to-read and the panel guides read from
     main.innerHTML = `<div class="head"><div class="hl"><div class="tkrow"><span class="tk">${esc(s.t)}</span><span class="chg ${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span></div>
       <div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span></div></div>
       <div class="hr"><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${v.interval === "1W" ? "weekly" : "daily"} candles"><b>${esc(v.range)}</b><span>${v.interval === "1W" ? "Weekly" : "Daily"}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
-      <button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div>
+      <div class="hr2"><button class="lvbtn fxchip" data-ind aria-label="Indicators: ${pk.over.length + pk.lower.length} on"><i>ƒx</i>${pk.over.length + pk.lower.length || "Add"}</button><button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div></div>
       <div class="chartbox"><button class="fxbtn" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: pk.over, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
       ${pk.lower.slice(0, FEED_PANELS).map((k) => lowerChart(v.win, ov, k)).join("")}${dots}`;
   } else {
+    c._v = null;
     main.innerHTML = `<div class="head"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div>
       <div class="chartbox nodata"><p>${D.status === "refreshing" ? `Loading ${esc(s.t)} prices…` : `${esc(s.t)} prices couldn't load. Pull to refresh or tap “Updated” at the top.`}</p></div>${dots}`;
   }
@@ -547,6 +548,11 @@ function wire(c, it) {
   if (it.type !== "sym") return;
   const justScrubbed = () => Date.now() - (APP.scrubEndAt || 0) < 400;
   c.querySelectorAll("[data-learn]").forEach((p) => p.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) openLearn(p.dataset.learn, c._v); }));
+  // ƒx chip: add or remove indicators; every card in view redraws as you pick
+  c.querySelector("[data-ind]")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openIndicatorsSheet(() => feed.querySelectorAll(".card").forEach((x) => { if (x._v !== undefined && x.dataset.filled && APP.seq[+x.dataset.i]?.type === "sym") { renderMain(x, APP.seq[+x.dataset.i]); wire(x, APP.seq[+x.dataset.i]); } }));
+  });
   // S/R chip: one tap shows or hides the lines (the last style picked, support & resistance by default)
   c.querySelector("[data-lv]")?.addEventListener("click", async (e) => {
     e.stopPropagation();

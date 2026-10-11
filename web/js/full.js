@@ -5,14 +5,13 @@
 // mirror and are joined on before the app's own Kraken history, so you can keep dragging back in time.
 import { D } from "./data.js";
 import { buildSeries, compute, toWeekly, extendedSeries } from "./indicators.js";
-import { OVERLAYS, PANELS, MAX_OVERLAYS, MAX_PANELS, FEED_PANELS, picks, keysOf } from "./studies.js";
+import { OVERLAYS, PANELS, MAX_OVERLAYS, MAX_PANELS, picks, keysOf } from "./studies.js";
 import { mainChart, lowerChart } from "./chart.js";
 import { levelsFor } from "./levels.js";
 import { chartSettings, store, save } from "./store.js";
 import { initInteract, openLearn, cancelPendingHold } from "./interact.js";
 import { APP, buildFeed } from "./app.js";
-import { openIndicator } from "./pages.js";
-import { esc, money, pct, arrow, haptic, fmtDay, openSheet, toast } from "./ui.js";
+import { esc, money, pct, arrow, haptic, fmtDay, toast } from "./ui.js";
 
 const KRAKEN = { BTC: "XBTUSD", DOGE: "XDGUSD", RNDR: "RENDERUSD" };
 // range → candle size (Kraken minutes, or "d" for the app's daily candles) and how much time to show first
@@ -138,7 +137,7 @@ function draw() {
   const chg = ((v.win[v.win.length - 1].c - v.win[0].c) / v.win[0].c) * 100, older = Math.floor(s.end - s.count);
   const when = (t) => (t.length > 10 ? fmtDay(t) : new Date(t + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }));
   el.querySelector(".fnote").innerHTML = `${IVLABEL[s.iv]} candles · ${esc(when(v.win[0].t))} – ${esc(when(v.win[v.win.length - 1].t))} · <span class="${chg >= 0 ? "up" : "down"}">${pct(chg, 1)}</span>${s.note ? " · " + esc(s.note) : ""}<br><span class="hint">${older > 0 ? "Drag right for older prices" : "Start of the history"} · pinch or scroll to zoom · double-tap to reset · hold still to read</span>`;
-  const card = el.querySelector(".card"); card._v = v; card._sym = s.sym;
+  const card = el.querySelector(".card"); card._v = { ...v, picks: { over: s.over, lower: s.lower } }; card._sym = s.sym;
   el.querySelectorAll(".flowers [data-learn]").forEach((p) => (p.onclick = (e) => { e.stopPropagation(); openLearn(p.dataset.learn, v); }));
   el.querySelectorAll("[data-learn-ov]").forEach((p) => (p.onclick = (e) => { e.stopPropagation(); openLearn(p.dataset.learnOv, v); }));
   el.querySelectorAll("[data-rmstudy]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); toggleStudy(b.dataset.rmstudy); }));
@@ -158,7 +157,6 @@ function wireGestures(root) {
   root.addEventListener("pointerdown", (e) => {
     if (!st?.bars || !e.target.closest(".fcard") || e.target.closest("button")) return;
     stopFling();
-    try { root.setPointerCapture(e.pointerId); } catch {}
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pts.size === 2) { cancelPendingHold(); const [a, b] = [...pts.values()]; g = { kind: "pinch", d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, count0: st.count, end0: st.end, cx: (a.x + b.x) / 2 }; }
     else g = { kind: "maybe", x0: e.clientX, y0: e.clientY, end0: st.end, vx: 0, lx: e.clientX, lt: e.timeStamp };
@@ -173,7 +171,7 @@ function wireGestures(root) {
       st.moving = true; st.count = count; st.end = anchor + count * (1 - f); clampView(st); redraw();
     } else if (g && pts.size === 1) {
       const dx = e.clientX - g.x0;
-      if (g.kind === "maybe" && Math.abs(dx) > 4) { g.kind = "pan"; g.x0 = e.clientX; g.end0 = st.end; cancelPendingHold(); }
+      if (g.kind === "maybe" && Math.abs(dx) > 4) { g.kind = "pan"; g.x0 = e.clientX; g.end0 = st.end; cancelPendingHold(); try { root.setPointerCapture(e.pointerId); } catch {} } // capture only once dragging, so taps still reach panels
       if (g.kind === "pan") {
         const dt = Math.max(1, e.timeStamp - g.lt); g.vx = 0.8 * ((e.clientX - g.lx) / dt) + 0.2 * g.vx; g.lx = e.clientX; g.lt = e.timeStamp;
         st.moving = true; st.end = g.end0 - (e.clientX - g.x0) / (plotW() / st.count); clampView(st); redraw();
@@ -221,15 +219,13 @@ function shell(body) {
   const last = bars?.[bars.length - 1]?.c ?? D.series[sym.key]?.bars?.at(-1)?.c;
   return `<div class="fbar"><button class="fclose" data-fclose aria-label="Close full-screen chart">✕</button>
       <div class="fhead"><span class="row1"><span class="tk">${esc(sym.t)}</span>${chg != null ? `<span class="chg ${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span>` : `<span class="chg"></span>`}</span>
-        <span class="price">${last != null ? esc(money(last, sym.m)) : ""}</span></div>
-      <button class="findbtn" data-find aria-label="Indicators"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 12l4-5 3 3 3-5 4 6"/></svg>Indicators${st.over.length + st.lower.length ? ` <b>${st.over.length + st.lower.length}</b>` : ""}</button></div>
+        <span class="price">${last != null ? esc(money(last, sym.m)) : ""}</span></div></div>
     <div class="franges" role="group" aria-label="Time range">${OPTS.map((r) => `<button class="opt" data-fr="${r}" aria-pressed="${r === range}">${r}</button>`).join("")}
       <button class="lvbtn" data-flv aria-pressed="${levels !== "off"}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${levels === "pivots" ? "Pivots" : "S/R"}</button></div>
     <div class="card fcard"><div class="pane main" data-pane="main">${body}</div></div>`;
 }
 function wireBar() {
   el.querySelector("[data-fclose]").onclick = closeFull;
-  el.querySelector("[data-find]").onclick = openStudies;
   el.querySelectorAll("[data-fr]").forEach((b) => (b.onclick = () => { stopFling(); st.range = b.dataset.fr; load(); }));
   el.querySelector("[data-flv]").onclick = (e) => {
     const pick = chartSettings(st.sym.key).levels; st.levels = st.levels === "off" ? (pick && pick !== "off" ? pick : "sr") : "off";
@@ -244,32 +240,12 @@ function toggleStudy(code) {
   if (i >= 0) list.splice(i, 1);
   else if (list.length >= (isOver ? MAX_OVERLAYS : MAX_PANELS)) { toast(`Up to ${isOver ? MAX_OVERLAYS : MAX_PANELS} ${isOver ? "on the price chart" : "panels"} at a time. Remove one first.`); return false; }
   else list.push(code);
+  saveStudies(); return true;
+}
+function saveStudies() {
   st.changed = true; haptic();
   const ch = store.data?.settings?.chart || {};
   save({ settings: { ...store.data.settings, chart: { ...ch, over: [...st.over], lower: st.lower.join(",") || "none", mas: [] } } }).catch(() => {});
   APP.needsRebuild = true;
-  const n = st.over.length + st.lower.length, b = el.querySelector("[data-find]");
-  if (b) b.innerHTML = b.innerHTML.replace(/Indicators.*$/, `Indicators${n ? ` <b>${n}</b>` : ""}`);
   if (st.bars) redraw();
-  return true;
-}
-function studyRows(reg, chosen) {
-  const groups = {};
-  for (const [code, x] of Object.entries(reg)) (groups[x.group] ||= []).push([code, x]);
-  return Object.entries(groups).map(([g, items]) => `<div class="sgroup">${esc(g)}</div>` + items.map(([code, x]) => {
-    const on = chosen.includes(code);
-    return `<div class="srow"><button class="sinfo" data-sguide="${esc(x.guide)}" aria-label="About ${esc(x.name)}"><span class="t">${esc(x.name)}</span><span class="s">${esc(x.short)}</span></button>
-      <button class="stog" data-stog="${code}" aria-pressed="${on}">${on ? "On" : "Add"}</button></div>`;
-  }).join("")).join("");
-}
-function openStudies() {
-  const body = () => `<p class="hint">Your picks show on every coin's chart. The feed shows the lines and the first ${FEED_PANELS} panels; the full-screen chart shows them all. Tap a name to learn how it works.</p>
-    <h3 class="shd">On the price chart <span>${st.over.length}/${MAX_OVERLAYS}</span></h3>${studyRows(OVERLAYS, st.over)}
-    <h3 class="shd">Panels below <span>${st.lower.length}/${MAX_PANELS}</span></h3>${studyRows(PANELS, st.lower)}
-    <p class="disclaimer">Indicators are arithmetic on past prices and volume. They describe what happened, not what will happen.</p>`;
-  const wire = (root) => {
-    root.querySelectorAll("[data-stog]").forEach((b) => (b.onclick = () => { if (toggleStudy(b.dataset.stog) !== false) { const top = root.scrollTop; root.innerHTML = body(); wire(root); root.scrollTop = top; } }));
-    root.querySelectorAll("[data-sguide]").forEach((b) => (b.onclick = () => openIndicator(b.dataset.sguide)));
-  };
-  openSheet("Indicators", body(), wire);
 }

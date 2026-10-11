@@ -6,6 +6,7 @@ import { store, save, chartSettings, setUsername, checkUsername, usernameChanges
 import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
+import { OVERLAYS, PANELS, MAX_OVERLAYS, MAX_PANELS, FEED_PANELS, SETS, picks } from "./studies.js";
 import { D, view, storiesFor, RANGE_LABEL, resolveInterval } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
 import { startTour, resetTours } from "./coach.js";
@@ -317,7 +318,7 @@ export async function openIndicator(id) {
     ${srcs ? `<div class="label" style="margin-top:12px">Sources</div><ul>${srcs}</ul>` : ""}` : `<p>${esc(i.short || "No explainer yet.")}</p>`);
 }
 
-const RULE_METRICS = ["price", "changePct", "rsi14", "distSma20Pct", "distSma50Pct", "macdHist", "pctB", "distHigh50Pct", "volRatio", "atrPct", "stochK", "willR", "cci20", "adx14", "roc12"];
+const RULE_METRICS = ["price", "changePct", "rsi14", "stochRsi", "mfi14", "cmo14", "uo", "cmf20", "aroonOsc", "hv20", "distSma20Pct", "distSma50Pct", "macdHist", "pctB", "distHigh50Pct", "volRatio", "atrPct", "stochK", "willR", "cci20", "adx14", "roc12"];
 function pRules(el, back, preKey) {
   const coins = allSyms().filter((s) => s.m === "CRYPTO"), rules = store.data.rules || [];
   const label = (r) => `${r.sym === "*" ? "Any coin" : esc(r.sym.split(":")[1])}: ${esc(METRICS[r.metric]?.label || r.metric)} ${esc(OPS[r.op])} ${esc(r.value)}${esc(METRICS[r.metric]?.unit || "")}`;
@@ -425,3 +426,41 @@ function pLegal(el, back) {
 }
 
 // ---------- onboarding (live mode, no account on this phone)
+
+// ---------- indicators: add or remove from the feed card's ƒx button. One shared choice for every coin.
+export function openIndicatorsSheet(onChange) {
+  const pk = picks(store.data?.settings?.chart);
+  const persist = () => {
+    const ch = store.data?.settings?.chart || {};
+    save({ settings: { ...store.data.settings, chart: { ...ch, over: [...pk.over], lower: pk.lower.join(",") || "none", mas: [] } } }).catch(() => {});
+    APP.needsRebuild = true; onChange?.();
+  };
+  const rows = (reg, chosen) => {
+    const groups = {};
+    for (const [code, x] of Object.entries(reg)) (groups[x.group] ||= []).push([code, x]);
+    return Object.entries(groups).map(([g, items]) => `<div class="sgroup">${esc(g)}</div>` + items.map(([code, x]) => {
+      const on = chosen.includes(code);
+      return `<div class="srow"><button class="sinfo" data-sguide="${esc(x.guide)}" aria-label="About ${esc(x.name)}"><span class="t">${esc(x.name)}</span><span class="s">${esc(x.short)}</span></button>
+        <button class="stog" data-stog="${code}" aria-pressed="${on}">${on ? "On" : "Add"}</button></div>`;
+    }).join("")).join("");
+  };
+  const body = () => `<p class="hint">Your picks show on every coin. Cards show the lines and the first ${FEED_PANELS} panels; open a chart full screen (⤢) to see them all. Tap a name to learn how it works.</p>
+    <h3 class="shd">Quick sets <span>ways to look at a chart, not strategies</span></h3>
+    <div class="ssets">${SETS.map((x) => `<button class="sset" data-sset="${x.id}" aria-pressed="${x.over.join() === pk.over.join() && x.lower.join() === pk.lower.join()}"><b>${esc(x.name)}</b><span>${esc(x.q)}</span></button>`).join("")}<button class="sset clear" data-sset="none"><b>Clear all</b><span>Just the price</span></button></div>
+    <h3 class="shd">On the price chart <span>${pk.over.length}/${MAX_OVERLAYS}</span></h3>${rows(OVERLAYS, pk.over)}
+    <h3 class="shd">Panels below <span>${pk.lower.length}/${MAX_PANELS}</span></h3>${rows(PANELS, pk.lower)}
+    <p class="disclaimer">Indicators are arithmetic on past prices and volume. They describe what happened, not what will happen.</p>`;
+  const wire = (root) => {
+    const redo = () => { const top = root.scrollTop; root.innerHTML = body(); wire(root); root.scrollTop = top; };
+    root.querySelectorAll("[data-stog]").forEach((b) => (b.onclick = () => {
+      const code = b.dataset.stog, isOver = !!OVERLAYS[code], list = isOver ? pk.over : pk.lower, i = list.indexOf(code);
+      if (i >= 0) list.splice(i, 1);
+      else if (list.length >= (isOver ? MAX_OVERLAYS : MAX_PANELS)) return toast(`Up to ${isOver ? MAX_OVERLAYS : MAX_PANELS} ${isOver ? "on the price chart" : "panels"} at a time. Remove one first.`);
+      else list.push(code);
+      persist(); redo();
+    }));
+    root.querySelectorAll("[data-sset]").forEach((b) => (b.onclick = () => { const x = SETS.find((y) => y.id === b.dataset.sset) || { over: [], lower: [] }; pk.over.splice(0, 99, ...x.over); pk.lower.splice(0, 99, ...x.lower); persist(); redo(); }));
+    root.querySelectorAll("[data-sguide]").forEach((b) => (b.onclick = () => openIndicator(b.dataset.sguide)));
+  };
+  openSheet("Indicators", body(), wire);
+}
