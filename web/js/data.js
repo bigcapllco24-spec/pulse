@@ -133,7 +133,7 @@ function computeView(key, s, chart, intraBars) {
   const r = compute(bars, series);
   const daily = interval === "1D" ? r : compute(s.bars); // the details pane always reads daily candles
   return { key, range: chart.range, interval, ivLabel: intraBars ? IV_LABEL[resolveInterval(chart)] : IV_LABEL[interval], source: s.source, closeOnly: !!s.closeOnly, live: !!s.live, bars, win, ov, now: r.now, prev: r.prev, daily, lastBar: bars[n - 1], prevBar: bars[n - 2],
-    windowChange: ((win[w - 1].c - win[0].c) / win[0].c) * 100 };
+    windowChange: ((win[w - 1].c - win[0].o) / win[0].o) * 100 }; // from the first candle's open to now
 }
 
 // Was today's move unusually large? (more than twice the typical daily move)

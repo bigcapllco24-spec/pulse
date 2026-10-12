@@ -607,6 +607,9 @@ function pHow(el, back) {
 // ---------- onboarding (live mode, no account on this phone)
 
 // ---------- indicators: add or remove from the feed card's ƒx button. One shared choice for every coin.
+// The ƒx sheet, built to scan fast: what's on now (tap ✕ to remove), one row of quick sets, then one list at a
+// time (lines on the price chart, or panels below it) as compact rows grouped by what they measure.
+let fxTab = "lower";
 export function openIndicatorsSheet(onChange) {
   const pk = picks(store.data?.settings?.chart);
   const persist = () => {
@@ -614,30 +617,34 @@ export function openIndicatorsSheet(onChange) {
     save({ settings: { ...store.data.settings, chart: { ...ch, over: [...pk.over], lower: pk.lower.join(",") || "none", mas: [] } } }).catch(() => {});
     APP.needsRebuild = true; onChange?.();
   };
-  const rows = (reg, chosen) => {
+  const reg = () => (fxTab === "over" ? OVERLAYS : PANELS), mine = () => (fxTab === "over" ? pk.over : pk.lower);
+  const cap = () => (fxTab === "over" ? MAX_OVERLAYS : maxPanels());
+  const nameOf = (c) => (OVERLAYS[c] || PANELS[c]).name.replace(/ \(.*\)$/, "");
+  const chips = () => [...pk.over, ...pk.lower].map((c) => `<span class="fxon">${esc(nameOf(c))}<button data-stog="${c}" aria-label="Remove ${esc(nameOf(c))}">✕</button></span>`).join("") || `<span class="hint">Nothing yet: just the price.</span>`;
+  const list = () => {
     const groups = {};
-    for (const [code, x] of Object.entries(reg)) (groups[x.group] ||= []).push([code, x]);
-    return Object.entries(groups).map(([g, items]) => `<div class="sgroup">${esc(g)}</div>` + items.map(([code, x]) => {
-      const on = chosen.includes(code);
-      return `<div class="srow"><button class="sinfo" data-sguide="${code}" aria-label="About ${esc(x.name)}"><span class="t">${esc(x.name)}</span><span class="s">${esc(x.short)}</span></button>
-        <button class="stog" data-stog="${code}" aria-pressed="${on}">${on ? "On" : "Add"}</button></div>`;
-    }).join("")).join("");
+    for (const [code, x] of Object.entries(reg())) (groups[x.group] ||= []).push([code, x]);
+    return Object.entries(groups).map(([g, items]) => `<div class="fxgrp"><div class="sgroup">${esc(g)}</div>${items.map(([code, x]) => {
+      const on = mine().includes(code);
+      return `<div class="fxrow${on ? " on" : ""}"><button class="fxname" data-sguide="${code}"><b>${esc(x.name)}</b><span>${esc(x.short)}</span></button>
+        <button class="fxtog" data-stog="${code}" aria-pressed="${on}" aria-label="${on ? "Remove" : "Add"} ${esc(x.name)}">${on ? "✓" : "+"}</button></div>`;
+    }).join("")}</div>`).join("");
   };
-  const body = () => `<p class="hint">Your picks show on every coin. ${maxPanels() > 2 ? "Up to 4 panels fit under each card, two by two." : "This screen fits 2 panels under each card; wider phones fit 4."} Tap a name to learn how it works.</p>
-    <h3 class="shd">Quick sets <span>ways to look at a chart, not strategies</span></h3>
-    <div class="ssets">${SETS.map((x) => `<button class="sset" data-sset="${x.id}" aria-pressed="${x.over.join() === pk.over.join() && x.lower.slice(0, maxPanels()).join() === pk.lower.join()}"><b>${esc(x.name)}</b><span>${esc(x.q)}</span></button>`).join("")}<button class="sset clear" data-sset="none"><b>Clear all</b><span>Just the price</span></button></div>
-    <h3 class="shd">On the price chart <span>${pk.over.length}/${MAX_OVERLAYS}</span></h3>${rows(OVERLAYS, pk.over)}
-    <h3 class="shd">Panels below <span>${pk.lower.length}/${maxPanels()}</span></h3>${rows(PANELS, pk.lower)}
-    <p class="disclaimer">Indicators are arithmetic on past prices and volume. They describe what happened, not what will happen.</p>`;
+  const body = () => `<div class="fxnow"><div class="cap">On your charts · ${pk.over.length + pk.lower.length}</div><div class="fxchips">${chips()}</div></div>
+    <div class="fxsets">${SETS.map((x) => `<button class="opt" data-sset="${x.id}" aria-pressed="${x.over.join() === pk.over.join() && x.lower.slice(0, maxPanels()).join() === pk.lower.join()}">${esc(x.name)}</button>`).join("")}<button class="opt" data-sset="none">Clear</button></div>
+    <div class="seg fxseg" role="tablist">${[["lower", "Panels below", pk.lower.length, maxPanels()], ["over", "On the price", pk.over.length, MAX_OVERLAYS]].map(([k, l, n, m]) => `<button data-fxtab="${k}" aria-pressed="${fxTab === k}">${l} <small>${n}/${m}</small></button>`).join("")}</div>
+    ${list()}
+    <p class="disclaimer">Indicators are arithmetic on past prices and volume. They describe what happened, not what will happen. Tap a name for its guide.</p>`;
   const wire = (root) => {
     const redo = () => { const top = root.scrollTop; root.innerHTML = body(); wire(root); root.scrollTop = top; };
     root.querySelectorAll("[data-stog]").forEach((b) => (b.onclick = () => {
-      const code = b.dataset.stog, isOver = !!OVERLAYS[code], list = isOver ? pk.over : pk.lower, i = list.indexOf(code);
-      if (i >= 0) list.splice(i, 1);
-      else if (list.length >= (isOver ? MAX_OVERLAYS : maxPanels())) return toast(`Up to ${isOver ? MAX_OVERLAYS : maxPanels()} ${isOver ? "on the price chart" : "panels"} at a time. Remove one first.`);
-      else list.push(code);
+      const code = b.dataset.stog, isOver = !!OVERLAYS[code], l = isOver ? pk.over : pk.lower, i = l.indexOf(code), max = isOver ? MAX_OVERLAYS : maxPanels();
+      if (i >= 0) l.splice(i, 1);
+      else if (l.length >= max) return toast(`Up to ${max} ${isOver ? "on the price chart" : "panels"} at a time. Remove one first.`);
+      else l.push(code);
       persist(); redo();
     }));
+    root.querySelectorAll("[data-fxtab]").forEach((b) => (b.onclick = () => { fxTab = b.dataset.fxtab; root.innerHTML = body(); wire(root); }));
     root.querySelectorAll("[data-sset]").forEach((b) => (b.onclick = () => { const x = SETS.find((y) => y.id === b.dataset.sset) || { over: [], lower: [] }; pk.over.splice(0, 99, ...x.over); pk.lower.splice(0, 99, ...x.lower.slice(0, maxPanels())); persist(); redo(); }));
     root.querySelectorAll("[data-sguide]").forEach((b) => (b.onclick = () => openIndicator(b.dataset.sguide)));
   };

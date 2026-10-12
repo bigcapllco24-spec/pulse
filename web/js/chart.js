@@ -84,7 +84,7 @@ export function mainChart(win, ov, opts) {
   for (const l of lv) {
     const y = Y(l.price), x0 = Math.max(0, X(l.from || 0) - step / 2), cls = l.kind[0] === "R" ? "r" : l.kind[0] === "S" ? "s" : "p";
     body += `<line x1="${x0.toFixed(1)}" x2="${pw}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" class="lvl ${cls}"/>`;
-    const tag = l.touches ? `${l.kind === "R" ? "Resistance" : "Support"} ${f(l.price)} · ${l.touches > 1 ? l.touches + "×" : l.kind === "R" ? "recent high" : "recent low"}` : `${l.kind} ${f(l.price)}`;
+    const tag = l.touches ? `${l.kind} ${f(l.price)} · ${l.touches > 1 ? l.touches + "×" : l.kind === "R" ? "high" : "low"}` : `${l.kind} ${f(l.price)}`; // S = support, R = resistance
     lvHtml += `<button class="lvtag ${cls}" data-learn="${l.touches ? "SR" : "PIV"}" style="top:${((y / H) * 100).toFixed(2)}%;right:${((PR / W) * 100).toFixed(2)}%">${tag}</button>`;
   }
   // time axis like TradingView: month names (the year at each January), or day numbers on short ranges

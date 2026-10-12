@@ -13,8 +13,8 @@ import { startTour, coachEvent } from "./coach.js";
 import { openFull } from "./full.js";
 import { initFeedback } from "./feedback.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
-import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, krakenBars, INTRA, intraState, IV_LABEL, resolveInterval, dailyOf } from "./data.js";
-import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
+import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, krakenBars, INTRA, intraState, IV_LABEL, resolveInterval, dailyOf, RANGE_LABEL } from "./data.js";
+import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, openSheet, DISCLAIMER } from "./ui.js";
 import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, openPredictSheet, nameGate } from "./pages.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
@@ -235,14 +235,14 @@ function renderMain(c, it) {
   // Only what matters while scrolling: the name, today's price and move, and the chart. News and details are a swipe away.
   const dots = `<div class="dots" aria-hidden="true"><i></i><i class="on"></i><i></i></div>`;
   if (v) {
-    const chg = v.daily.now.changePct;
+    const chg = v.windowChange; // the move over the time range on screen (1D: the last 24 hours), not the calendar day
     // The chip at the top right says what the chart covers and opens the chart settings for this coin.
     const own = !!store.data?.settings?.chartBy?.[s.key];
     const lvMode = cs.levels || "off";
     // indicators are one shared choice (the ƒx button); cards show as many panels as the screen fits
     const pk = picks(store.data?.settings?.chart), shown = pk.lower.slice(0, maxPanels()), ov = studyWindow(v.bars, v.ov, v.bars.length - v.win.length, v.bars.length, [...pk.over, ...shown]);
     c._v = { ...v, ov, picks: { over: pk.over, lower: shown } }; // what hold-to-read and the panel guides read from
-    main.innerHTML = `<div class="head"><div class="hl"><div class="tkrow"><span class="tk">${esc(s.t)}</span><span class="chg ${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span></div>
+    main.innerHTML = `<div class="head"><div class="hl"><div class="tkrow"><span class="tk">${esc(s.t)}</span><span class="chg ${chg >= 0 ? "up" : "down"}" title="Change over ${esc(RANGE_LABEL[v.range] || v.range)}">${arrow(chg)} ${pct(chg)}<small>${esc(v.range)}</small></span></div>
       <div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span></div></div>
       <div class="hr"><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${esc(v.ivLabel.toLowerCase())} candles"><b>${esc(v.range)}</b><span>${esc(v.ivLabel)}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
       <div class="hr2"><button class="lvbtn fxchip" data-fx aria-label="Indicators: ${pk.over.length + pk.lower.length} on"><i>ƒx</i>${pk.over.length + pk.lower.length || "Add"}</button><button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div></div>
@@ -274,12 +274,13 @@ function renderNews(c, it, scope) {
   pane.innerHTML = `<div class="pane-wrap"><h2 class="side">News · ${esc(scope === "sym" ? s.t : "My coins")}</h2>
     <div class="seg" role="group" aria-label="Which news">${[["sym", s.t], ["mine", "All my coins"]].map(([k, l]) => `<button data-scope="${k}" aria-pressed="${k === scope}">${esc(l)}</button>`).join("")}</div>
     ${sect("Confirmed", "2+ independent outlets", by("confirmed"))}
-    ${sect("From the project", "official releases and posts", by("official"))}
+    ${sect("Official sources", "projects, exchanges, regulators", by("official"))}
     ${sect("Also reported", "one trusted outlet so far", by("single"))}
     <h3 class="nsec">Price events<span>from the daily chart, last 30 days</span></h3>
     <div class="pevents">${events.map((e) => `<div class="pev ${e.dir || ""}"><span class="pd">${esc(fmtDay(e.t))}${scope === "mine" ? ` · <b>${esc(e.x.t)}</b>` : ""}</span><p>${esc(e.text)}</p></div>`).join("") || `<div class="empty">${esc(s.t)} prices are still loading.</div>`}</div>
-    <p class="disclaimer">Headlines from Reuters, AP, CNBC, CoinDesk, The Block, Decrypt, Blockworks, DL News and other outlets without political or ownership conflicts, found via <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener">the GDELT Project</a> and the outlets' own feeds, then matched across outlets. “From the project” items come from each project's official release page or blog. Opinion, predictions and promotional posts are left out. Price events are calculated from daily prices and describe the past only. ${esc(DISCLAIMER)}</p></div>`;
+    <p class="disclaimer">Headlines from Reuters, AP, CNBC, CoinDesk, The Block, Decrypt, Blockworks, DL News, Cointelegraph, Unchained, CryptoSlate, Fortune and other outlets, found via <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener">the GDELT Project</a> and the outlets' own feeds, then matched across outlets. “Official sources” are the projects' own release pages and blogs, exchange announcements (Kraken) and regulators (SEC). Opinion, predictions and promotional posts are left out. Price events are calculated from daily prices and describe the past only. ${esc(DISCLAIMER)}</p></div>`;
   pane.querySelectorAll("[data-scope]").forEach((b) => (b.onclick = () => renderNews(c, it, b.dataset.scope)));
+  pane.querySelectorAll("[data-story]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const st = stories.find((x) => x.key === b.dataset.story); if (st) openStory(st); }));
 }
 // Notable things the price did in the last 30 days, from daily candles: unusually big days (2x the 14-day ATR),
 // unusually heavy volume (2x the 20-day average), new 52-week highs and lows, and crossings of the 200-day average.
@@ -317,12 +318,22 @@ function priceEvents(sym) {
   ev.push({ t: bars[n - 1].t, w: 0, dir: mv >= 0 ? "up" : "down", text: `Over 30 days: ${mv >= 0 ? "up" : "down"} ${Math.abs(mv).toFixed(1)}%, trading between ${money(lo, sym.m)} and ${money(hi, sym.m)}. ${ev.length ? "" : "A quiet month: "}${ev.length ? "The largest" : "the largest"} single-day move was ${big.toFixed(1)}%.` });
   return ev;
 }
-const STATUS = (st) => (st.status === "confirmed" ? `Confirmed by ${st.outlets.join(" + ")}` : st.status === "company" ? "From the company" : st.status === "official" ? `From the project: ${st.official || "official"}` : `Single source: ${st.outlets[0]}`);
+const STATUS = (st) => (st.status === "confirmed" ? `Confirmed by ${st.outlets.join(" + ")}` : st.status === "company" ? "From the company" : st.status === "official" ? `Official: ${st.official || "source"}` : `Single source: ${st.outlets[0]}`);
 function storyHtml(st, pinned) {
   const more = st.links.slice(1).map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.source)} ↗</a>`).join(" ");
-  return `<article class="story" id="st-${st.key}"><a class="h" href="${esc(st.links[0].url)}" target="_blank" rel="noopener">${esc(st.title)}</a>
+  return `<article class="story" id="st-${st.key}"><div class="srow2"><a class="h" href="${esc(st.links[0].url)}" target="_blank" rel="noopener">${esc(st.title)}</a>
+    <button class="sgo" data-story="${esc(st.key)}" aria-label="More about this story"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2l4 4-4 4"/></svg></button></div>
     <div class="meta">${pinned ? `<span class="dotpin" title="Pinned on the chart"></span>` : ""}<span>${esc(fmtDay(st.date))}</span><span class="pill ${st.status}">${esc(STATUS(st))}</span>${more}</div>
 </article>`;
+}
+// The › on a story: the publisher's own short summary (from its feed, never written by us) and every source.
+function openStory(st) {
+  openSheet("Story", `<p class="sttl">${esc(st.title)}</p>
+    <div class="meta"><span>${esc(fmtDay(st.date))}</span><span class="pill ${st.status}">${esc(STATUS(st))}</span></div>
+    ${st.intro ? `<section class="gsec"><h3>In brief</h3><p>${esc(st.intro)}</p><p class="hint">Summary from ${esc(st.introBy)}'s own feed.</p></section>` : `<section class="gsec"><h3>In brief</h3><p class="hint">The publisher didn't include a summary. Open a source below to read the story.</p></section>`}
+    <section class="gsec"><h3>Read it at the source${st.links.length > 1 ? `s (${st.links.length})` : ""}</h3>
+      <div class="list">${st.links.map((l) => `<a class="row" href="${esc(l.url)}" target="_blank" rel="noopener"><span class="main"><span class="t">${esc(l.source)}</span><span class="s">${esc(l.url.replace(/^https?:\/\/(www\.)?/, "").split("/")[0])}</span></span><span class="chev">↗</span></a>`).join("")}</div></section>
+    <p class="disclaimer">Headlines and summaries belong to their publishers. ${esc(DISCLAIMER)}</p>`);
 }
 // ---------- details pane
 // How to use each part of the details pane, shown behind a small ⓘ. Educational only: what the number
@@ -661,6 +672,8 @@ export function applyTheme() {
   }
   // v5: windows in bars (20/50/100/200) become time ranges (1M/3M/3M/6M); candle size picks itself unless set.
   if (ch && "window" in ch) { const { window: w, ...rest } = store.data.settings.chart; save({ settings: { ...store.data.settings, chart: { ...rest, range: { 20: "1M", 50: "3M", 100: "3M", 200: "6M" }[w] || "3M", interval: rest.interval === "1W" ? "1W" : "auto" } } }).catch(() => {}); }
+  // v6: cards open on 1 day (15-minute candles), and the move next to the name follows the time range shown.
+  if (ch && !ch.v6) save({ settings: { ...store.data.settings, chart: { ...ch, range: "1D", v6: 1 } } }).catch(() => {});
   // v4: RSI and MACD panels under every chart by default.
   if (ch && ch.v2 && !ch.v4) save({ settings: { ...store.data.settings, chart: { ...ch, lower: "RSI,MACD", v4: 1 } } }).catch(() => {});
   if (ch && !ch.v2) save({ settings: { ...store.data.settings, chart: { ...ch, type: "candles", mas: [], lower: "RSI,MACD", v2: 1, v4: 1 } } }).catch(() => {});

@@ -11,7 +11,7 @@ export const OUTLETS = {
   "reuters.com": "Reuters", "apnews.com": "AP", "cnbc.com": "CNBC", "asia.nikkei.com": "Nikkei Asia",
   "axios.com": "Axios", "business-standard.com": "Business Standard", "economictimes.indiatimes.com": "Economic Times",
   "thehindubusinessline.com": "BusinessLine", "ptinews.com": "PTI", "coindesk.com": "CoinDesk",
-  "theblock.co": "The Block", "decrypt.co": "Decrypt", "blockworks.co": "Blockworks", "dlnews.com": "DL News", "fortune.com": "Fortune", "cointelegraph.com": "Cointelegraph",
+  "theblock.co": "The Block", "decrypt.co": "Decrypt", "blockworks.co": "Blockworks", "dlnews.com": "DL News", "fortune.com": "Fortune", "cointelegraph.com": "Cointelegraph", "unchainedcrypto.com": "Unchained", "cryptoslate.com": "CryptoSlate",
   "prnewswire.com": "Company release", "businesswire.com": "Company release", "globenewswire.com": "Company release",
 };
 const BY_NAME = { cointelegraph: "Cointelegraph", reuters: "Reuters", "associated press": "AP", "ap news": "AP", cnbc: "CNBC", nikkei: "Nikkei Asia", axios: "Axios",
@@ -83,13 +83,14 @@ export function groupStories(items) {
     const official = g.find((x) => x.official)?.outlet || null;
     const links = [], seen = new Set();
     for (const x of g) if (!seen.has(x.url)) { seen.add(x.url); links.push({ source: x.outlet, url: x.url }); }
-    const title = g[0].title;
+    const title = g[0].title, withIntro = g.find((x) => x.intro);
     return {
       key: storyKey(title), title,
       date: g.map((x) => x.date).sort().pop(), ts: g.map((x) => x.ts || "").sort().pop(),
       outlets, company: g.some((x) => x.outlet === "Company release"),
       status: outlets.length >= 2 ? "confirmed" : outlets.length === 1 ? "single" : official ? "official" : "company", official,
       links: links.slice(0, 6),
+      ...(withIntro ? { intro: withIntro.intro, introBy: withIntro.outlet } : {}),
       syms: [...new Set(g.map((x) => x.sym).filter(Boolean))],
       scopes: [...new Set(g.map((x) => x.scope).filter(Boolean))],
     };
@@ -151,6 +152,9 @@ export const FEEDS = [
   ["https://www.coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"], ["https://www.theblock.co/rss.xml", "The Block"],
   ["https://decrypt.co/feed", "Decrypt"], ["https://blockworks.co/feed", "Blockworks"], ["https://www.dlnews.com/arc/outboundfeeds/rss/", "DL News"],
   ["https://cointelegraph.com/rss", "Cointelegraph"], ["https://fortune.com/feed/fortune-feeds/?id=3230629", "Fortune"],
+  ["https://unchainedcrypto.com/feed/", "Unchained"], ["https://cryptoslate.com/feed/", "CryptoSlate"],
+  // official sources: shown as "Official", never counted as an outlet confirming a story
+  ["https://blog.kraken.com/feed", "Kraken", "Kraken (exchange)"], ["https://www.sec.gov/news/pressreleases.rss", "SEC", "SEC (US regulator)"],
 ];
 const unxml = (x) => String(x || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
 export async function rss(url, outlet, { days = 7 } = {}) {
@@ -164,7 +168,10 @@ export async function rss(url, outlet, { days = 7 } = {}) {
       const link = get("link") || (it.match(/<link[^>]*href="([^"]+)"/) || [])[1] || (it.match(/<guid[^>]*>(https?:[^<]+)</) || [])[1];
       if (!link || !isFinite(when) || when < cut) continue;
       const ts = new Date(when).toISOString().slice(0, 19) + "Z";
-      out.push({ title: get("title"), url: link.trim(), outlet, date: ts.slice(0, 10), ts });
+      // the publisher's own short summary from its feed, trimmed to two sentences (about 280 characters)
+      const desc = (get("description") || get("summary") || "").replace(/\s+/g, " ").replace(/The post .* appeared first on .*$/i, "").trim();
+      const intro = desc ? (desc.match(/^(.{40,280}?[.!?])(\s|$)/) || [null, desc.slice(0, 280)])[1].trim() : "";
+      out.push({ title: get("title"), url: link.trim(), outlet, date: ts.slice(0, 10), ts, ...(intro && intro !== get("title") ? { intro } : {}) });
     }
     return out;
   } catch (e) { console.warn("rss failed:", url, e.message); return []; }
@@ -198,7 +205,7 @@ export async function officialNews(sym) {
 
 export async function fetchNews(symbols, { log = console.log, pause = 6000 } = {}) {
   const items = [], syms = symbols.map((s) => ({ ...s, ticker: s.t, name: s.n }));
-  const feeds = (await Promise.all(FEEDS.map(([u, o]) => rss(u, o)))).flat();
+  const feeds = (await Promise.all(FEEDS.map(([u, o, off]) => rss(u, o).then((l) => (off ? l.map((x) => ({ ...x, outlet: off, official: true })) : l))))).flat();
   log(`rss: ${feeds.length} headlines from ${FEEDS.length} outlet feeds`);
   // One GDELT search covers many coins at once ("Bitcoin" OR "Ethereum" OR …), kept to short queries; results are
   // then kept only from the outlet list and matched to coins by headline. A few requests instead of one per coin.

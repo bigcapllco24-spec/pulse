@@ -50,10 +50,13 @@ def binance_route(route):
 def active(p):
     return p.evaluate("(()=>{const c=document.querySelector('.card.active');return c?[c.getAttribute('aria-label'),c.dataset.view||'main',+c.dataset.i]:[null,null,-1]})()")
 
-def pass_gate(p, name="chart_fan"):
-    """A new account must choose a username first; fill it in and continue."""
+def pass_gate(p, name="chart_fan", three_months=True):
+    """A new account must choose a username first; fill it in and continue (then use 3-month daily charts, as these checks expect)."""
     if p.locator("#gate").count():
         p.fill("#gIn", name); p.wait_for_timeout(400); p.click("#gGo"); p.wait_for_timeout(600)
+    if three_months:
+        p.evaluate("(()=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.settings.chart={...a.settings.chart, range:'3M', v6:1}; localStorage.setItem('pl.demoAccount', JSON.stringify(a))})()")
+        p.reload(); p.wait_for_timeout(2500)
 
 def phone_tests(b):
     ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
@@ -67,6 +70,13 @@ def phone_tests(b):
     gtxt = p.inner_text("#gate")
     p.fill("#gIn", "chart_fan"); p.wait_for_timeout(400); p.click("#gGo"); p.wait_for_timeout(700)
     check("phone: a new account must pick a username first, told it can be changed only twice", gate and "3 to 20" in g_bad and g_dis and "2 times" in gtxt and not p.locator("#gate").count(), f"gate={gate} {g_bad} disabled={g_dis}")
+    # cards open on 1 day of 15-minute candles, and the move next to the name is over that range
+    p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1500)
+    d_tf = p.inner_text(".card.active [data-tf]").replace("\n", " "); d_chg = p.inner_text(".card.active .tkrow .chg")
+    check("phone: cards open on 1D (15-minute candles) and the % beside the name says it's the 1D move", d_tf.startswith("1D") and "15-min" in d_tf and d_chg.strip().endswith("1D"), f"{d_tf} / {d_chg}")
+    # the rest of these checks were written for 3 months of daily candles
+    p.evaluate("(()=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.settings.chart={...a.settings.chart, range:'3M', v6:1}; localStorage.setItem('pl.demoAccount', JSON.stringify(a))})()")
+    p.reload(); p.wait_for_timeout(2500)
     cdp = ctx.new_cdp_session(p)
 
     def swipe(x0, y0, x1, y1, steps=12, dur=0.25, settle=900):
@@ -128,8 +138,11 @@ def phone_tests(b):
     check("phone: scrolling inside news stays on the same symbol", before[0] == after[0] and after[1] == "news", f"{before} -> {after}")
     nw = p.evaluate("""(() => { const n = document.querySelector('.card.active [data-pane=news]'); return { market: !!n.querySelector('[data-scope=market]'), ev: n.querySelectorAll('.pev').length, txt: (n.querySelector('.pev p')||{}).textContent || '' }; })()""")
     check("phone: news has no Market tab and always shows price events", not nw["market"] and nw["ev"] >= 1 and len(nw["txt"]) > 10, str(nw))
-    nw = p.evaluate("""(() => { const n = document.querySelector('.card.active [data-pane=news]'); return { market: !!n.querySelector('[data-scope=market]'), ev: n.querySelectorAll('.pev').length, txt: (n.querySelector('.pev p')||{}).textContent || '' }; })()""")
-    check("phone: news has no Market tab and always shows price events", not nw["market"] and nw["ev"] >= 1 and len(nw["txt"]) > 10, str(nw))
+    if p.locator(".card.active [data-pane=news] .sgo").count():
+        p.locator(".card.active [data-pane=news] .sgo").first.click(); p.wait_for_timeout(500)
+        sb = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+        check("phone: the › on a news story opens a short brief and links to every source", "In brief" in sb and "at the source" in sb and p.locator("#sheet a.row[href^=http]").count() >= 1, sb[:80].replace("\n", " "))
+        p.click("#sheet [data-close]"); p.wait_for_timeout(400)
     left()
 
     # charts
@@ -195,7 +208,7 @@ def phone_tests(b):
     p.click(".card.active [data-lv]"); p.wait_for_timeout(400); p.click("#sheet [data-line=sr]"); p.wait_for_timeout(600)
     tags = p.locator(".card.active .lvtag").all_inner_texts(); n1 = p.locator(".card.active .chart .lvl").count()
     others = p.evaluate("[...document.querySelectorAll('.card')].filter(c=>c.dataset.filled && !c.classList.contains('active') && c.querySelector('.chartbox:not(.nodata)')).map(c=>c.querySelector('[data-lv]')?.getAttribute('aria-pressed'))")
-    check("phone: S/R → Support & resistance draws lines with touch counts, and every other card on screen shows them too", n0 == 0 and n1 >= 1 and any(("Support" in t or "Resistance" in t) and ("×" in t or "recent" in t) for t in tags) and others and all(x == "true" for x in others), f"before={n0} after={n1} others={others} {tags}")
+    check("phone: S/R → Support & resistance draws lines with touch counts, and every other card on screen shows them too", n0 == 0 and n1 >= 1 and any(_re.match(r"[SR] \S+ · ", t) and ("×" in t or "high" in t or "low" in t) for t in tags) and others and all(x == "true" for x in others), f"before={n0} after={n1} others={others} {tags}")
     if tags: p.locator(".card.active .lvtag").first.click(); p.wait_for_timeout(500)
     sh = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
     check("phone: tapping a line's label explains support and resistance", "Support and resistance" in sh and "predict" in sh, sh[:100].replace("\n", " "))
@@ -413,7 +426,7 @@ def phone_tests(b):
 
     # indicators are added and removed from the ƒx chip on the feed card, and show on the full-screen chart too
     p.click(".card.active [data-fx]"); p.wait_for_timeout(400)
-    p.click("#sheet [data-stog=BB]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=MACD]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=STOCH]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=MFI]"); p.wait_for_timeout(200)
+    p.click("#sheet [data-fxtab=over]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=BB]"); p.wait_for_timeout(200); p.click("#sheet [data-fxtab=lower]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=MACD]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=STOCH]"); p.wait_for_timeout(200); p.click("#sheet [data-stog=MFI]"); p.wait_for_timeout(200)
     p.click("#sheet [data-close]"); p.wait_for_timeout(600)
     chip = p.inner_text(".card.active [data-fx]")
     p.click(".card.active [data-full]"); p.wait_for_timeout(1200)
@@ -438,7 +451,8 @@ def phone_tests(b):
     check("phone: the Momentum quick set shows RSI, MACD and Stochastic on the card (a 2 × 2 grid from iPhone 12 width) and clears the price-chart lines", ms == "RSI,MACD,STOCH|" and p.locator(".card.active .lowers.g2").count() == 1, ms)
     p.click(".card.active [data-fx]"); p.wait_for_timeout(400)
     p.click("#sheet [data-sset=none]"); p.wait_for_timeout(200)
-    for c in ["BB", "RSI", "STOCH"]: p.click(f"#sheet [data-stog={c}]"); p.wait_for_timeout(150)
+    p.click("#sheet [data-fxtab=over]"); p.wait_for_timeout(150); p.click("#sheet [data-stog=BB]"); p.wait_for_timeout(150); p.click("#sheet [data-fxtab=lower]"); p.wait_for_timeout(150)
+    for c in ["RSI", "STOCH"]: p.click(f"#sheet .fxrow [data-stog={c}]"); p.wait_for_timeout(150)
     p.click("#sheet [data-close]"); p.wait_for_timeout(700)
     fd = p.evaluate("""(()=>{const c=document.querySelector('.card.active'); return {leg: c.querySelector('.olegend')?.innerText||'', panels: [...c.querySelectorAll('.lower')].map(l=>l.dataset.learn).join(',')}})()""")
     left(); txt = p.inner_text(".card.active [data-pane=details]")
