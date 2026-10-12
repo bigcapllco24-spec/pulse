@@ -681,7 +681,7 @@ export function applyTheme() {
   initPages();
   store.on((what) => {
     $("alertDot").hidden = !store.alerts.some((a) => !a.read);
-    if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") renderDash(); }
+    if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") renderDash(); if (store.ready && !store.data?.username) nameGate(); }
     if (what === "preds") APP.needsRebuild = true; // the Predict chips show open counts
     // the profile's score card and predictions page follow new and scored predictions
     if ((what === "preds" || what === "account") && APP.tab === "profile" && (!APP.profileSub || APP.profileSub === "predictions")) {

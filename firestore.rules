@@ -58,6 +58,11 @@ service cloud.firestore {
       allow create: if signedIn() && name.matches('^[a-z0-9_.]{3,20}$') && request.resource.data.keys().hasOnly(['acct', 'at'])
         && request.resource.data.acct == request.auth.uid
         && getAfter(/databases/$(db)/documents/accounts/$(request.resource.data.acct)).data.username == name;
+      // a name whose account no longer exists can be claimed by someone else, the same way as a new name
+      allow update: if signedIn() && request.resource.data.keys().hasOnly(['acct', 'at'])
+        && request.resource.data.acct == request.auth.uid
+        && !exists(/databases/$(db)/documents/accounts/$(resource.data.acct))
+        && getAfter(/databases/$(db)/documents/accounts/$(request.auth.uid)).data.username == name;
       allow delete: if signedIn() && resource.data.acct == request.auth.uid && (!existsAfter(/databases/$(db)/documents/accounts/$(resource.data.acct))
         || getAfter(/databases/$(db)/documents/accounts/$(resource.data.acct)).data.get('username', null) != name);
     }

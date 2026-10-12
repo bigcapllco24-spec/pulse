@@ -78,6 +78,7 @@ export async function init() {
   store.alerts = ls.get(LSALERTS, []);
   ({ open: store.preds = [], results: store.results = [] } = ls.get(LS.preds, {}));
   store.ready = true;
+  navigator.storage?.persist?.().catch(() => {}); // ask the browser to keep this site's storage (and so the sign-in)
   connecting = connect();
   return { onboarding: false };
 }
@@ -94,10 +95,26 @@ async function connect() {
     const tidy = Object.fromEntries(OLD.filter((k) => k in snap.data()).map((k) => [k, f.deleteField()]));
     if (Object.keys(pending).length || Object.keys(tidy).length) await f.setDoc(ref, { ...pending, ...tidy }, { merge: true }).catch(() => {});
   } else {
-    const { username, usernameChanges, pscore, ...first } = store.data; // a new account starts from what this phone has
-    await f.setDoc(ref, first);
-    STARTER.forEach((s) => noteFollow(s));
+    // No account yet: nothing is written until the username is chosen (see createAccount), so opening the app,
+    // or a browser that can't keep its sign-in, never leaves empty accounts behind.
+    // (a name cached on this phone from an older account doesn't belong to this one)
+    const { username, usernameChanges, pscore, ...rest } = store.data || {};
+    store.data = { ...DEFAULT_ACCOUNT(), ...rest }; ls.set(LSACC, store.data);
+    newId = id; store.emit("account"); return;
   }
+  attach(id, ref);
+}
+let newId = null;
+// Writes the account the first time, from what this phone has, when its owner chooses a username.
+async function createAccount() {
+  const { db, f } = fb, ref = f.doc(db, "accounts", newId);
+  const { username, usernameChanges, pscore, ...first } = { ...store.data, ...pending };
+  await f.setDoc(ref, first);
+  STARTER.forEach((s) => noteFollow(s));
+  attach(newId, ref); newId = null;
+}
+function attach(id, ref) {
+  const { db, f } = fb;
   pending = {};
   store.id = id;
   ls.set(LSACC, store.data);
@@ -260,11 +277,12 @@ export function checkUsername(raw) {
 }
 // Whether a name is free (or already this account's). Demo mode has no other users.
 export async function usernameFree(name) {
-  if (store.mode === "demo") return true;
+  if (store.mode === "demo") return "free";
   await connected();
   if (!fb) throw new Error("offline");
   const d = await fb.f.getDoc(fb.f.doc(fb.db, "usernames", name));
-  return !d.exists() || d.data().acct === store.id;
+  // a name can also be free again if the account that held it no longer exists; the save finds out
+  return !d.exists() || d.data().acct === store.id ? "free" : "held";
 }
 export async function setUsername(raw) {
   const { name, error } = checkUsername(raw);
@@ -275,15 +293,21 @@ export async function setUsername(raw) {
   const changes = (store.data.usernameChanges || 0) + (old ? 1 : 0);
   if (store.mode === "demo") { await save({ username: name, usernameChanges: changes }); return name; }
   await connected();
+  if (!store.id && newId) await createAccount();
   if (!store.id) throw new Error("Couldn't reach the server. Try again in a moment.");
   const { db, f } = fb;
-  await f.runTransaction(db, async (tx) => {
-    const ref = f.doc(db, "usernames", name), taken = await tx.get(ref);
-    if (taken.exists() && taken.data().acct !== store.id) throw new Error("That username is taken. Try another.");
-    tx.set(ref, { acct: store.id, at: new Date().toISOString() });
-    if (old) tx.delete(f.doc(db, "usernames", old));
-    tx.update(f.doc(db, "accounts", store.id), { username: name, usernameChanges: changes });
-  });
+  try {
+    await f.runTransaction(db, async (tx) => {
+      const ref = f.doc(db, "usernames", name);
+      await tx.get(ref); // read first, as transactions need; the rules decide whether a name held by someone else can be taken
+      tx.set(ref, { acct: store.id, at: new Date().toISOString() });
+      if (old) tx.delete(f.doc(db, "usernames", old));
+      tx.update(f.doc(db, "accounts", store.id), { username: name, usernameChanges: changes });
+    });
+  } catch (e) {
+    if (/permission|insufficient/i.test(e.code || e.message || "")) throw new Error("That username is taken. Try another.");
+    throw e;
+  }
   store.data = { ...store.data, username: name, usernameChanges: changes };
   store.emit("account");
   return name;

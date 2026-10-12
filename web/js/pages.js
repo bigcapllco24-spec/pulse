@@ -425,7 +425,7 @@ export function nameGate(onDone) {
     const { name, error } = checkUsername(inp.value), my = ++seq;
     if (error) return set(inp.value ? error : "3–20 letters, numbers, dots or underscores.", inp.value ? "bad" : "", false);
     set(`Checking @${name}…`, "", false);
-    try { const free = await usernameFree(name); if (my === seq) set(free ? `@${name} is free.` : `@${name} is taken. Try another.`, free ? "good" : "bad", free); }
+    try { const st = await usernameFree(name); if (my === seq) st === "free" ? set(`@${name} is free.`, "good", true) : set(`@${name} looks taken. If it was yours on an old account, tap Continue to try claiming it.`, "", true); }
     catch { if (my === seq) set(`@${name} looks good.`, "good", true); } // offline: the save itself checks again
   };
   let t = 0; inp.oninput = () => { clearTimeout(t); t = setTimeout(check, 250); };
