@@ -438,7 +438,7 @@ export function nameGate(onDone) {
   const off = store.on((what) => { if (what === "account" && store.data?.username && document.getElementById("gate")) close(); });
   btn.onclick = async () => {
     const was = btn.textContent, login = held; btn.disabled = true; btn.textContent = login ? "Logging in…" : "Saving…";
-    try { const n = await (login ? loginUsername : setUsername)(inp.value); toast(login ? `Welcome back, @${n}.` : `Welcome, @${n}.`); close(); }
+    try { const n = await (login ? loginUsername(inp.value, (t) => (btn.textContent = `${t}…`)) : setUsername(inp.value)); toast(login ? `Welcome back, @${n}.` : `Welcome, @${n}.`); close(); }
     catch (e) { set(e.message || "Couldn't save. Check your connection and try again.", "bad", true); btn.textContent = was; }
   };
   setTimeout(() => inp.focus(), 200);

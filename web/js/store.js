@@ -44,8 +44,10 @@ export const store = {
 
 let fb = null; // { db, auth, f: firestore module, unsubs: [] }
 
-async function loadFirebase() {
-  if (fb) return fb;
+// One sign-in for the whole app, however many callers ask at once (a second initializeApp would throw).
+let fbLoading = null;
+const loadFirebase = () => (fb ? Promise.resolve(fb) : (fbLoading ||= startFirebase().catch((e) => { fbLoading = null; throw e; })));
+async function startFirebase() {
   const [{ initializeApp }, authMod, f] = await Promise.all([
     import(FB + "firebase-app.js"), import(FB + "firebase-auth.js"), import(FB + "firebase-firestore.js"),
   ]);
@@ -95,7 +97,7 @@ async function connect() {
     if (ls2 !== "gone" && ls2.exists()) { id = linked; ref = ls2.ref; snap = ls2; } else ls.del(LSLINK);
   }
   snap ||= await f.getDoc(ref).catch(() => null);
-  if (!snap) return;
+  if (!snap || (store.id && store.id !== id)) return; // offline, or a username login on this phone finished first
   if (snap.exists()) {
     // fields from older versions of the app (indicator picks now live in settings.chart) are dropped once
     const OLD = ["indicators", "customIndicators", "recovery"], { indicators, customIndicators, recovery, ...cur } = snap.data();
@@ -297,21 +299,22 @@ export async function usernameFree(name) {
 // Log in by username (MVP: the username alone opens the account; a password or Google sign-in comes later).
 // This phone's sign-in is added to the account's devices, and the rules let any listed device use the account.
 // A name whose account no longer exists is claimed for this phone instead, as a new username.
-export async function loginUsername(raw) {
+export async function loginUsername(raw, step = () => {}) {
   const { name, error } = checkUsername(raw);
   if (error) throw new Error(error);
   if (store.mode === "demo") return setUsername(name);
-  try { await within(connected(), 15000); } catch {}
-  if (!fb) throw new Error("Couldn't reach the server. Try again in a moment.");
+  // only the sign-in is needed, not the account load that may still be running; every step gives up in time
+  const go = async (label, p, ms = 10000) => { step(label); try { return await within(p, ms); } catch (e) { if (e.message === "timeout") throw new Error(`${label} took too long. Check your connection and tap again.`); throw e; } };
+  await go("Signing in", loadFirebase());
   const { db, f, auth } = fb, me = auth.currentUser.uid;
-  const u = await f.getDoc(f.doc(db, "usernames", name));
+  const u = await go(`Finding @${name}`, f.getDoc(f.doc(db, "usernames", name)));
   if (!u.exists()) return setUsername(name);
   const acct = u.data().acct, ref = f.doc(db, "accounts", acct);
   if (acct !== me) {
-    try { await f.updateDoc(ref, { devices: f.arrayUnion(me) }); }
-    catch { return setUsername(name); } // the account is gone (the rules refuse): claim the name for this phone
+    try { await go("Adding this phone to the account", f.updateDoc(ref, { devices: f.arrayUnion(me) })); }
+    catch (e) { if (/too long/.test(e.message)) throw e; return setUsername(name); } // the account is gone (the rules refuse): claim the name here
   }
-  const snap = await f.getDoc(ref);
+  const snap = await go("Opening your account", f.getDoc(ref));
   if (!snap.exists()) return setUsername(name);
   ls.set(LSLINK, acct); newId = null;
   store.data = { ...DEFAULT_ACCOUNT(), ...snap.data() };
