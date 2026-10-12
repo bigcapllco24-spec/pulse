@@ -1,0 +1,78 @@
+// Player cards and the public leaderboard, every 2 hours with the data job (after scores are refreshed), plus a
+// tidy-up of groups. Everything here is written by the job only, so nobody can change their own card or rank.
+//
+//   players/{acct}   u (username), score, band, prov, n, followers, public, rank, of, spot, closePlus, best, badges,
+//                    since, line (the score at the end of each day, last 90 days)
+//   boards/public    rows (top 100 public players), of (how many are ranked)
+// A card never holds a price call. Followers are counted from everyone's "following" lists (which stay private).
+import { HORIZONS } from "../../web/js/score.js";
+
+const CLOSE = new Set(["Spot on", "Very close", "Close"]);
+export const RANK_MIN = 10; // scored calls before a public player is ranked (the score stops being provisional)
+
+// What a card says about someone's record, from their scored results.
+export function record(results) {
+  const n = results.length, close = results.filter((r) => CLOSE.has(r.label)).length;
+  let best = null, bestShare = -1;
+  for (const h of Object.keys(HORIZONS)) {
+    const xs = results.filter((r) => r.horizon === h);
+    if (xs.length < 3) continue;
+    const share = xs.filter((r) => CLOSE.has(r.label)).length / xs.length;
+    if (share > bestShare) { best = h; bestShare = share; }
+  }
+  const spot = results.filter((r) => r.label === "Spot on").length;
+  const badges = [spot && "First Spot on", n >= 10 && "10 scored", n >= 100 && "100 scored", new Set(results.map((r) => r.horizon)).size === Object.keys(HORIZONS).length && "All 4 periods"].filter(Boolean);
+  return { spot, closePlus: n ? Math.round((close / n) * 100) : null, best, badges };
+}
+
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// accounts: every account (from the data job); scored: Map account → scored results (from settlePredictions).
+export async function publishPlayers(db, accounts, scored = new Map(), { now = Date.now(), log = console.log } = {}) {
+  const named = accounts.filter((a) => typeof a.username === "string");
+  const followers = new Map();
+  for (const a of accounts) for (const f of new Set(Array.isArray(a.following) ? a.following : [])) if (f !== a.id) followers.set(f, (followers.get(f) || 0) + 1);
+  const ranked = named.filter((a) => a.public === true && a.pscore?.score != null && (a.pscore.n || 0) >= RANK_MIN)
+    .sort((x, y) => y.pscore.score - x.pscore.score || y.pscore.n - x.pscore.n || x.username.localeCompare(y.username));
+  const rank = new Map(ranked.map((a, i) => [a.id, i + 1]));
+  const old = new Map((await db.list("players")).map((p) => [p.id, p]));
+  const today = new Date(now).toISOString().slice(0, 10), from = new Date(now - 90 * 864e5).toISOString().slice(0, 10);
+  let wrote = 0;
+  for (const a of named) {
+    const ps = a.pscore || null, prev = old.get(a.id);
+    const line = (Array.isArray(prev?.line) ? prev.line : []).filter((x) => x.d > from && x.d !== today);
+    if (ps?.score != null) line.push({ d: today, s: ps.score });
+    const rec = scored.has(a.id) ? record(scored.get(a.id)) : { spot: prev?.spot ?? 0, closePlus: prev?.closePlus ?? null, best: prev?.best ?? null, badges: prev?.badges ?? [] };
+    const doc = { u: a.username, score: ps?.score ?? null, band: ps?.band ?? null, prov: ps ? !!ps.provisional : true, n: ps?.n || 0,
+      followers: followers.get(a.id) || 0, public: a.public === true, rank: rank.get(a.id) || null, of: ranked.length,
+      ...rec, since: String(a.createdAt || "").slice(0, 7), line };
+    if (prev && same(Object.fromEntries(Object.keys(doc).map((k) => [k, prev[k] ?? null])), Object.fromEntries(Object.entries(doc).map(([k, v]) => [k, v ?? null])))) continue;
+    await db.set(`players/${a.id}`, { ...doc, at: new Date(now).toISOString() }); wrote++;
+  }
+  const keep = new Set(named.map((a) => a.id));
+  for (const id of old.keys()) if (!keep.has(id)) await db.del(`players/${id}`); // account deleted, or no username
+  await db.set("boards/public", { rows: ranked.slice(0, 100).map((a) => ({ a: a.id, u: a.username, score: a.pscore.score, band: a.pscore.band, n: a.pscore.n })), of: ranked.length, at: new Date(now).toISOString() });
+  log(`players: ${named.length} cards (${wrote} updated), ${ranked.length} on the public board`);
+  return { cards: named.length, wrote, ranked: ranked.length };
+}
+
+// Groups: keeps member names in step with usernames, drops members whose account is gone, hands a group whose owner
+// left to the next member, and deletes empty groups. Writes only if nothing changed the group since it was read.
+export async function tidyGroups(db, accounts, { log = console.log } = {}) {
+  const byId = new Map(accounts.map((a) => [a.id, a]));
+  let changed = 0, removed = 0;
+  for (const g of await db.list("groups")) {
+    const members = Object.fromEntries(Object.keys(g.members || {}).filter((a) => typeof byId.get(a)?.username === "string").map((a) => [a, byId.get(a).username]));
+    const ids = Object.keys(members);
+    if (!ids.length) { await db.del(`groups/${g.id}`); removed++; continue; }
+    const owner = members[g.owner] ? g.owner : ids[0], patch = {};
+    if (!same(members, g.members)) patch.members = members;
+    if (owner !== g.owner) patch.owner = owner;
+    if (members[owner] !== g.ownerName) patch.ownerName = members[owner];
+    if (!Object.keys(patch).length) continue;
+    try { await db.set(`groups/${g.id}`, patch, { ifUnchanged: g }); changed++; }
+    catch (e) { if (e.status !== 400 && e.status !== 409) throw e; } // someone joined or left meanwhile: next run
+  }
+  log(`groups: ${changed} tidied, ${removed} empty ones removed`);
+  return { changed, removed };
+}

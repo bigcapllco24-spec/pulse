@@ -13,7 +13,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Geist+Mono:wght@500;600&display=swap" media="print" onload="this.media='all'">
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://identitytoolkit.googleapis.com">
   <link rel="preconnect" href="https://firestore.googleapis.com">
@@ -36,6 +36,8 @@
   <link rel="modulepreload" href="js/describe.js">
   <link rel="modulepreload" href="js/score.js">
   <link rel="modulepreload" href="js/predict.js">
+  <link rel="modulepreload" href="js/social.js">
+  <link rel="modulepreload" href="js/play.js">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -50,13 +52,14 @@
     </div>
     <div class="feed" id="feed" tabindex="-1"></div>
   </section>
-  <section class="screen" id="sDash" hidden aria-label="Dashboard"><div class="page"><div class="page-inner" id="dash"></div></div></section>
-  <section class="screen" id="sProfile" hidden aria-label="Profile"><div class="page"><div class="page-inner" id="profile"></div></div></section>
+  <section class="screen" id="sDash" hidden aria-label="Coins"><div class="page"><div class="page-inner" id="dash"></div></div></section>
+  <section class="screen" id="sPlay" hidden aria-label="Predict"><div class="page"><div class="page-inner" id="play"></div></div></section>
+  <section class="screen" id="sProfile" hidden aria-label="Settings"><div class="page"><div class="page-inner" id="profile"></div></div></section>
 
   <nav class="tabbar" aria-label="Main">
-    <button data-tab="dash"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>Dashboard</button>
+    <button data-tab="dash"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>Coins<b class="dot" id="alertDot" hidden></b></button>
     <button data-tab="feed" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-6 4 4 4-7 5 9"/><path d="M3 21h18"/></svg>Feed</button>
-    <button data-tab="profile"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>Profile<b class="dot" id="alertDot" hidden></b></button>
+    <button data-tab="play"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>Predict<b class="badge" hidden></b></button>
   </nav>
 
   <div class="backdrop" id="backdrop" hidden></div>

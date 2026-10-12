@@ -4,7 +4,7 @@
 // A prediction is made with the price the app showed. The real start price is then locked from Kraken's candles at
 // the moment it was made, and the end price is taken at the exact target time: 1-minute candles when they still
 // exist (Kraken keeps the last 12 hours), otherwise the finest candles that still cover that moment.
-import { HORIZONS, MIN_MOVE, MAX_MOVE, typicalMove, targetTime, dailyVol, scorePrediction } from "./score.js";
+import { HORIZONS, MIN_MOVE, MAX_MOVE, typicalMove, dueAt, dailyVol, scorePrediction } from "./score.js";
 
 export const KRAKEN_PAIR = { BTC: "XBTUSD", DOGE: "XDGUSD", RNDR: "RENDERUSD" };
 export const krakenPair = (t) => KRAKEN_PAIR[t] || t + "USD";
@@ -47,7 +47,7 @@ export function sigmaBefore(dailyRows, createdAt) {
 }
 
 // Moves one prediction forward as far as it can go right now.
-// p: { coin, t, horizon, target, createdAt, p0?, sigmaD? }. rows(t, minutes) → Kraken rows (cache them per run).
+// p: { coin, t, horizon, target, createdAt, endAt? (a group challenge's shared end time), p0?, sigmaD? }. rows(t, minutes) → Kraken rows (cache them per run).
 // Returns { status: "open" | "scored" | "void", patch } where patch holds the fields to add to the prediction.
 export async function settle(p, { now = Date.now(), rows }) {
   const patch = {}, iso = new Date(now).toISOString();
@@ -68,7 +68,7 @@ export async function settle(p, { now = Date.now(), rows }) {
     if (moves > LOCK_TOLERANCE.max) return voided("The call was far outside how much this coin moves in that time.");
   }
   // 2. resolve once the target time has passed
-  const due = Date.parse(targetTime(cur.createdAt, cur.horizon));
+  const due = Date.parse(dueAt(cur));
   if (now < due + SETTLE_DELAY) return { status: "open", patch };
   const iv = intervalFor(due, now);
   const actual = iv ? priceAt(await rows(cur.t, iv), due, iv) : null;

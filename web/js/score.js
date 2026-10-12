@@ -58,6 +58,8 @@ export function dailyVol(closes, n = 30) {
 // How far the price typically travels over a period, as a log move: daily volatility × √days.
 export const typicalMove = (sigmaD, horizon) => Math.max(sigmaD || 0, VOL_FLOOR) * Math.sqrt(HORIZONS[horizon].days);
 export const targetTime = (createdAt, horizon) => new Date(Date.parse(createdAt) + HORIZONS[horizon].days * DAY).toISOString();
+// When a prediction is scored: its period after it was made, or, for a group challenge, the end time everyone shares.
+export const dueAt = (p) => (p.endAt ? new Date(Date.parse(p.endAt)).toISOString() : targetTime(p.createdAt, p.horizon));
 
 // ---------- making a prediction
 // Checks a new prediction before it is saved: a known period, real prices, and a move that is a real call.
@@ -162,6 +164,36 @@ export function breadth(preds) {
   const coins = new Set(preds.map((p) => p.coin)).size, hs = new Set(preds.map((p) => p.horizon)).size;
   const months = new Set(preds.map((p) => String(p.createdAt).slice(0, 7))).size;
   return 0.5 * Math.min(coins / 5, 1) + 0.3 * (hs / Object.keys(HORIZONS).length) + 0.2 * Math.min(months / 6, 1);
+}
+
+// ---------- group challenges (shared by the data job and the app's demo mode)
+// Group points for one pick: by how close it was, plus 1 for calling the direction right.
+export const POINTS = { "Spot on": 5, "Very close": 3, Close: 2, Off: 1, "Far off": 0 };
+const PERIOD = { "1h": "1-hour", "1d": "1-day", "1y": "1-year" };
+const acctOf = (path) => path.split("/")[1];
+
+// The results table for one challenge, best first. Ties go to the smaller miss, then the earlier pick.
+// Never includes a price called: only how close (label, % off), the direction, and the points.
+export function challengeResults(ch, picks) {
+  const rows = picks.map((p) => {
+    const a = p.a ?? p.path.split("/")[1], u = ch.picked?.[a] || "player", base = { a, u, counts: !!p.counts };
+    const s = p.status === "scored" ? scorePrediction(p) : null;
+    if (!s) return { ...base, label: "Not counted", pts: 0, miss: Infinity, at: p.createdAt };
+    const up = p.target > p.p0, right = p.actual !== p.p0 && (p.actual > p.p0) === up;
+    return { ...base, label: s.label, off: Math.round(s.pctOff * 100) / 100, up, right, pts: POINTS[s.label] + (right ? 1 : 0), miss: s.miss, at: p.createdAt };
+  });
+  rows.sort((x, y) => y.pts - x.pts || x.miss - y.miss || Date.parse(x.at) - Date.parse(y.at));
+  return rows.map(({ miss, at, ...r }, i) => ({ ...r, rank: r.label === "Not counted" ? null : i + 1 }));
+}
+
+// Adds a challenge's points to a group's table: all-time, and this month's (mpts, for month m).
+export function addPoints(table = {}, results, month) {
+  const t = { ...table };
+  for (const r of results) {
+    const cur = t[r.a] || { all: 0, mpts: 0, m: month };
+    t[r.a] = { all: cur.all + r.pts, mpts: (cur.m === month ? cur.mpts : 0) + r.pts, m: month };
+  }
+  return t;
 }
 
 // ---------- weighted statistics

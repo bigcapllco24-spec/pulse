@@ -23,6 +23,7 @@ export const DEFAULT_ACCOUNT = () => ({
   v: 2, createdAt: new Date().toISOString(),
   watchlists: [{ id: "w1", name: "My watchlist", syms: STARTER.slice() }],
   rules: [], settings: { theme: "dark", list: "all", chart: { ...DEFAULT_CHART } }, lists: [], fcm: [],
+  following: [], groups: [], public: false, pickDefault: "counts", // people followed, group ids, leaderboard opt-in, group picks count by default
 });
 
 const B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -43,6 +44,7 @@ export const store = {
 };
 
 let fb = null; // { db, auth, f: firestore module, unsubs: [] }
+export const fbx = () => fb; // for social.js, once connected
 
 // One sign-in for the whole app, however many callers ask at once (a second initializeApp would throw).
 let fbLoading = null;
@@ -134,13 +136,16 @@ function attach(id, ref) {
     store.alerts = q.docs.map((d) => ({ id: d.id, ...d.data() })); ls.set(LSALERTS, store.alerts.slice(0, 50)); store.emit("alerts");
   }));
   // prediction game: open predictions, and the latest scored or voided ones (the data job writes those)
-  const rows = (q) => q.docs.map((d) => { const x = d.data({ serverTimestamps: "estimate" }); if (x.createdAt?.toDate) x.createdAt = x.createdAt.toDate().toISOString(); return { id: d.id, ...x }; });
+  const rows = (q) => q.docs.map((d) => ({ id: d.id, ...isoDates(d.data({ serverTimestamps: "estimate" })) }));
   const keepPreds = () => { ls.set(LS.preds, { open: store.preds, results: store.results.slice(0, 100) }); store.emit("preds"); };
   fb.unsubs.push(f.onSnapshot(f.collection(db, "accounts", id, "predictions"), (q) => { store.preds = rows(q); keepPreds(); }, () => {}));
   fb.unsubs.push(f.onSnapshot(f.query(f.collection(db, "accounts", id, "results"), f.orderBy("resolvedAt", "desc"), f.limit(300)), (q) => { store.results = rows(q); keepPreds(); }, () => {}));
   watchLists();
   store.emit("account");
 }
+
+// Firestore timestamps as ISO strings, the way the rest of the app (and the data job) reads them
+export function isoDates(x) { for (const k in x) if (x[k]?.toDate) x[k] = x[k].toDate().toISOString(); return x; }
 
 const listUnsubs = new Map();
 function watchLists() {
@@ -352,13 +357,14 @@ export async function setUsername(raw) {
 
 // ---- prediction game. One open prediction per coin and period; it can't be changed or cancelled once made.
 const PERIOD = (h) => HORIZONS[h].label.replace(/^1 /, "");
-export async function makePrediction({ sym, horizon, target, p0, sigmaD }) {
+// group: { g, c, endAt } when the prediction is also a group pick (demo mode only; live ones go in social.js's batch)
+export async function makePrediction({ sym, horizon, target, p0, sigmaD, group = null }) {
   if (!canPredict(store.preds, sym.key, horizon)) throw new Error(`You already have an open ${PERIOD(horizon)} prediction on ${sym.t}.`);
   const chk = checkPrediction({ horizon, p0, target, sigmaD });
   if (!chk.ok) throw new Error(chk.error);
   const doc = { coin: sym.key, t: sym.t, horizon, target, clientP0: p0, clientSigma: sigmaD };
   if (store.mode === "demo") {
-    store.preds = [...store.preds, { id: `${sym.t}_${horizon}`, ...doc, createdAt: new Date().toISOString() }];
+    store.preds = [...store.preds, { id: `${sym.t}_${horizon}`, ...doc, ...(group || {}), createdAt: new Date().toISOString() }];
     saveDemoPreds(); return;
   }
   await connected();
@@ -386,14 +392,17 @@ export function myScore() {
   return ps.score == null ? null : { score: ps.score, band: ps.band, provisional: ps.provisional, n: ps.n };
 }
 
-export async function deleteAccount() {
-  if (store.mode === "demo") { [LS.demo, LS.demoAlerts, LS.demoLists, LS.hidden, LS.demoPreds].forEach(ls.del); location.reload(); return; }
+// beforeDelete: leaves groups and the like first (social.js), while the account still exists to prove membership
+export async function deleteAccount(beforeDelete = async () => {}, afterDelete = async () => {}) {
+  if (store.mode === "demo") { [LS.demo, LS.demoAlerts, LS.demoLists, LS.hidden, LS.demoPreds, "pl.demoSocial"].forEach(ls.del); location.reload(); return; }
+  await beforeDelete();
   for (const l of store.data.lists || []) await leaveList(l.id);
   await clearAlerts();
   if (store.data?.username) { const b = fb.f.writeBatch(fb.db); b.delete(fb.f.doc(fb.db, "usernames", store.data.username)); b.delete(fb.f.doc(fb.db, "accounts", store.id)); await b.commit(); }
   else await fb.f.deleteDoc(fb.f.doc(fb.db, "accounts", store.id));
   // predictions and results can be removed only once the account is gone (so results can't be picked over)
   for (const [coll, list] of [["predictions", store.preds], ["results", store.results]]) for (const p of list) await fb.f.deleteDoc(fb.f.doc(fb.db, "accounts", store.id, coll, p.id)).catch(() => {});
+  await afterDelete().catch(() => {});
   await fb.authMod.signOut(fb.auth).catch(() => {}); // the next visit starts a brand-new anonymous account
   signOutDevice();
 }

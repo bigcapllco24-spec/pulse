@@ -286,7 +286,7 @@ def phone_tests(b):
     check("phone: no sideways page scroll", lay["sw"] <= lay["w"], str(lay))
     tabs = p.evaluate("[...document.querySelectorAll('.tabbar button')].map(b=>b.dataset.tab).join(',')")
     tb = p.evaluate("(()=>{const r=document.querySelector('.tabbar').getBoundingClientRect();return [r.bottom, innerHeight]})()")
-    check("phone: tab bar is Dashboard, Feed (centre), Profile and sits on the bottom edge", tabs == "dash,feed,profile" and abs(tb[0] - tb[1]) < 1, f"{tabs} {tb}")
+    check("phone: tab bar is Coins, Feed (centre), Predict and sits on the bottom edge", tabs == "dash,feed,play" and abs(tb[0] - tb[1]) < 1 and p.inner_text(".tabbar").split() == ["Coins", "Feed", "Predict"], f"{tabs} {tb}")
     ov = p.evaluate("""(()=>{const c=document.querySelector('.card.active'); return [...c.querySelectorAll('.lower')].every(l=>l.querySelector('.lower-label').getBoundingClientRect().bottom <= l.querySelector('svg.chart').getBoundingClientRect().top + 0.5)})()""")
     check("phone: RSI and MACD labels sit above their lines, not on them", ov)
 
@@ -319,15 +319,13 @@ def phone_tests(b):
     check("phone: Change watchlists in details opens the watchlist picker", p.locator("#sheet .check input[type=checkbox]").count() >= 2)
     p.click("#sheet [data-close]"); p.wait_for_timeout(700); right()
 
-    # dashboard
+    # Coins (the old dashboard): watchlists and alerts only; predictions live on the Predict tab
     p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(800)
-    first_dv = p.get_attribute("#dash [data-dv][aria-pressed=true]", "data-dv"); dv_order = p.locator("#dash [data-dv]").evaluate_all("bs => bs.map(b => b.dataset.dv)")
-    check("phone: the dashboard opens on Predictions (first in the switch), with Coins next to it", first_dv == "preds" and dv_order == ["preds", "coins"] and p.locator("#dash .pscard").count() == 1, f"{first_dv} {dv_order}")
-    p.click("#dash [data-dv=coins]"); p.wait_for_timeout(500)
+    check("phone: the Coins tab is titled Coins, with no predictions on it, and an Alerts section", p.inner_text("#dash h1") == "Coins" and not p.locator("#dash .pl-head, #dash .dswitch").count() and p.locator("#dash #dNewRule").count() == 1, p.inner_text("#dash h1"))
     rows = p.locator("#dash .list [data-open]").count()
-    check("phone: dashboard lists coins with data and the other symbols", rows >= len(ORDER), f"rows={rows}")
+    check("phone: Coins lists coins with data and the other symbols", rows >= len(ORDER), f"rows={rows}")
     p.locator("#dash [data-open='CRYPTO:XRP']").click(); p.wait_for_timeout(1300)
-    check("phone: tapping a dashboard row opens that card in the feed", active(p)[0] == "XRP", str(active(p)))
+    check("phone: tapping a Coins row opens that card in the feed", active(p)[0] == "XRP", str(active(p)))
 
     # full-screen chart for one coin over longer periods
     p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
@@ -382,53 +380,59 @@ def phone_tests(b):
     p.click("#full [data-fclose]"); p.wait_for_timeout(400)
     check("phone: hold-to-read works in full screen, and ✕ closes it back to the feed", "Open" in fcard and p.evaluate("document.getElementById('full').hidden") and active(p)[0] == "BTC", fcard[:60].replace("\n", " "))
 
-    # profile: grouped settings; the username chosen at the start can be changed only twice
-    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
-    groups = p.locator("#profile h2.pg").all_inner_texts()
-    lefts = [p.inner_text("#profile .phead b") + " | " + (p.inner_text("#profile .pleft") if p.locator("#profile .pleft").count() else "")]
-    p.click("[data-p=account]"); p.wait_for_timeout(300); p.click("#aName"); p.wait_for_timeout(400)
+    # the account sheet (the letter avatar on Predict): grouped settings and the app version; the username chosen at
+    # the start can be changed only twice
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(500); p.click("#plMe"); p.wait_for_timeout(700)
+    groups = p.locator("#sheet .label.pg").all_inner_texts(); sheet_txt = p.inner_text("#sheet")
+    check("phone: the account sheet groups settings (People and privacy, Charts and alerts, Sharing, App), shows the version, and Admin for admins", [g.lower() for g in groups] == ["people and privacy", "charts and alerts", "sharing", "app"] and "Pulse 1.0.0" in sheet_txt and p.locator("#sheet [data-av=inbox]").count() == 1, " | ".join(groups))
+    p.click("#sheet [data-av=account]"); p.wait_for_timeout(500)
+    lefts = [p.inner_text("#profile .dline >> nth=0")]
+    p.click("#aName"); p.wait_for_timeout(400)
     p.fill("#uIn", "pulse98765432"); bad2 = p.inner_text("#uMsg")
     for n in ["chart_fan2", "chart.fan3"]:
-        if not p.is_visible("#sheet"):
-            (p.click("#pName") if p.locator("#pName").count() else p.click("#aName")); p.wait_for_timeout(400)
-        p.fill("#uIn", n); p.click("#uSave"); p.wait_for_timeout(500)
-        if p.locator("#pBack").count(): p.click("#pBack"); p.wait_for_timeout(300)
-        lefts.append(p.inner_text("#profile .phead b") + " | " + (p.inner_text("#profile .pleft") if p.locator("#profile .pleft").count() else ""))
-    p.click("#pName"); p.wait_for_timeout(500)
+        if not p.is_visible("#sheet"): p.click("#aName"); p.wait_for_timeout(400)
+        p.fill("#uIn", n); p.click("#uSave"); p.wait_for_timeout(600)
+        lefts.append(p.inner_text("#profile .dline >> nth=0"))
+    p.click("#aName"); p.wait_for_timeout(500)
     blocked = (p.inner_text("#toast") if p.is_visible("#toast") else "") and not p.is_visible("#sheet")
-    check("phone: profile is grouped (Charts, Alerts, Sharing, Account, Help, and Admin for admins); predictions moved to the dashboard", len(groups) in (5, 6) and groups[0].lower().startswith("charts") and groups[4].lower() == "help" and not p.locator("#profile .pscard").count(), " | ".join(groups))
+    check("phone: Account shows the app version", "Pulse 1.0.0" in p.inner_text("#profile"))
     check("phone: username rejects phone-like numbers", "phone" in bad2, bad2)
-    check("phone: the starting username can be changed twice, then no more", lefts[0].startswith("@chart_fan |") and "2 username changes left" in lefts[0] and "1 username change left" in lefts[1] and "No username changes left" in lefts[2] and bool(blocked), " ; ".join(lefts))
+    check("phone: the starting username can be changed twice, then no more", lefts[0].startswith("@chart_fan ·") and "2 changes left" in lefts[0] and "1 change left" in lefts[1] and "0 changes left" in lefts[2] and bool(blocked), " ; ".join(lefts))
+    p.click("#pBack"); p.wait_for_timeout(500)
+    check("phone: Back from a settings page returns to Predict with the account sheet open", not p.locator("#sPlay").get_attribute("hidden") and p.is_visible("#sheet [data-av=account]"), "")
+    p.click("#sheet [data-close]"); p.wait_for_timeout(400)
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(600)
 
-    # watchlists live on the dashboard: chips switch lists (and the feed), Edit removes a coin
+    # watchlists live on Coins: chips switch lists (and the feed), Edit removes a coin
     p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(500)
     chips = p.locator("#dash .wchip[data-l]").all_inner_texts()
-    check("phone: dashboard shows watchlist chips (All, My watchlist, Altcoins)", len(chips) >= 3 and any("Altcoins" in c for c in chips), " | ".join(chips))
+    check("phone: Coins shows watchlist chips (All, My watchlist, Altcoins)", len(chips) >= 3 and any("Altcoins" in c for c in chips), " | ".join(chips))
     p.locator("#dash .wchip", has_text="Altcoins").click(); p.wait_for_timeout(500)
     n_alt = p.locator("#dash .list [data-open]").count()
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(1200)
-    check("phone: picking a watchlist on the dashboard filters it and the feed", n_alt == 1 and p.inner_text("#switchName") == "Altcoins", f"rows={n_alt} feed={p.inner_text('#switchName')}")
+    check("phone: picking a watchlist on Coins filters it and the feed", n_alt == 1 and p.inner_text("#switchName") == "Altcoins", f"rows={n_alt} feed={p.inner_text('#switchName')}")
     p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(500)
     p.locator("#dash .wchip", has_text="My watchlist").click(); p.wait_for_timeout(400)
     before = p.locator("#dash .list [data-open]").count()
     p.click("#dEdit"); p.wait_for_timeout(300); p.locator("#dash [data-rm]").first.click(); p.wait_for_timeout(300); p.click("#dDone"); p.wait_for_timeout(400)
     after = p.locator("#dash .list [data-open]").count()
-    check("phone: Edit on the dashboard removes a coin from the watchlist", after == before - 1, f"{before} -> {after}")
+    check("phone: Edit on Coins removes a coin from the watchlist", after == before - 1, f"{before} -> {after}")
     p.locator("#dash .wchip", has_text="All").first.click(); p.wait_for_timeout(400)
 
-    # profile pages
-    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
+    # every settings page opens from the account sheet and goes back to it
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(500)
     pages_ok, bad = True, []
     for sub in ["chart", "rules", "alerts", "lists", "account", "appearance", "legal"]:
-        p.click(f"[data-p={sub}]"); p.wait_for_timeout(350)
-        h = p.inner_text("#profile h1")
+        if not p.is_visible("#sheet [data-av]"): p.click("#plMe"); p.wait_for_timeout(500)
+        p.click(f"#sheet [data-av={sub}]"); p.wait_for_timeout(450)
+        h = p.inner_text("#profile h1") if p.is_visible("#profile h1") else ""
         if not h: pages_ok = False; bad.append(sub)
-        p.click("#pBack"); p.wait_for_timeout(250)
-    check("phone: every profile page opens and goes back", pages_ok, ",".join(bad))
+        p.click("#pBack"); p.wait_for_timeout(450)
+    check("phone: every settings page opens from the account sheet and goes back to it", pages_ok, ",".join(bad))
 
     # chart style changes reach the feed
-    p.click("[data-p=chart]"); p.wait_for_timeout(300)
+    if not p.is_visible("#sheet [data-av]"): p.click("#plMe"); p.wait_for_timeout(500)
+    p.click("#sheet [data-av=chart]"); p.wait_for_timeout(400)
     p.click("[data-k=range][data-v='1M']"); p.click("[data-k=type][data-v=line]"); p.wait_for_timeout(300)
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(1200)
     p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
@@ -513,27 +517,31 @@ def phone_tests(b):
     if sw: p.click("#sheet .fxswap [data-swap] >> nth=0"); p.wait_for_timeout(300)
     now_ = p.inner_text("#sheet .fxnow"); p.click("#sheet [data-close]"); p.wait_for_timeout(800)
     check("phone: adding a 5th panel asks which one to swap, then swaps it", "Swap one for" in sw and "On-Balance" in now_ and gone and gone not in now_, f"{sw[:60]!r} / {gone} / {now_[:80]!r}")
-    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500); p.click("#pBack") if p.locator("#pBack").count() else None
-    p.click("[data-p=feedback]"); p.wait_for_timeout(600)
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(500); p.click("#plMe"); p.wait_for_timeout(500)
+    p.click("#sheet [data-av=feedback]"); p.wait_for_timeout(700)
     p.click(".card.active [data-lv]"); p.wait_for_timeout(600); fs2 = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
     p.fill("#fbText", "What does S/R mean?"); p.click("#fbSend"); p.wait_for_timeout(500); p.click("#fbBar [data-fbdone]"); p.wait_for_timeout(300)
     check("phone: Feedback mode turns a button tap into a note about that button (S/R), and Done turns it off", "S/R button" in fs2 and not p.locator("#fbBar").count(), fs2[:80].replace("\n", " "))
-    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(700); p.click("[data-p=inbox]"); p.wait_for_timeout(700)
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(500); p.click("#plMe"); p.wait_for_timeout(700); p.click("#sheet [data-av=inbox]"); p.wait_for_timeout(700)
     ib = p.inner_text("#profile")
     p.click(".fbitem [data-fset=done] >> nth=0"); p.wait_for_timeout(500); ib2 = p.inner_text("#profile .seg")
     check("phone: the feedback inbox lists both notes with where they were left, and marking one done moves it", "Held S/R for 5 seconds" in ib and "What does S/R mean?" in ib and "S/R button" in ib and "Open 1" in ib2 and "Done 1" in ib2, ib2)
-    p.click("#pBack"); p.wait_for_timeout(300)
+    p.click("#pBack"); p.wait_for_timeout(400); p.click("#sheet [data-close]") if p.is_visible("#sheet") else None; p.wait_for_timeout(300)
 
-    # rules make alerts (demo mode checks rules on the phone)
-    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(300); p.click("#pBack") if p.locator("#pBack").count() else None
-    p.click("[data-p=rules]"); p.wait_for_timeout(300)
+    # rules make alerts (demo mode checks rules on the phone); both live on the Coins tab now
+    p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(500); p.click("#dNewRule"); p.wait_for_timeout(400)
     p.select_option("#rMetric", "rsi14"); p.select_option("#rOp", "below"); p.fill("#rVal", "99"); p.click("#rForm button"); p.wait_for_timeout(500)
-    p.click("#pBack"); p.click("[data-p=alerts]"); p.wait_for_timeout(300)
+    p.click("#pBack"); p.wait_for_timeout(500)
+    on_coins = not p.locator("#sDash").get_attribute("hidden")
+    fresh = p.locator("#dash .alertstrip").count(); rule_rows = p.locator("#dash [data-ron]").count()
+    dot = p.is_visible('.tabbar [data-tab=dash] #alertDot')
+    p.click("#dAlerts"); p.wait_for_timeout(400)
     n_alerts = p.locator("#profile .list .row").count()
-    check("phone: a rule that is met creates alerts and the red dot", n_alerts >= 1 and p.is_visible("#alertDot"), f"alerts={n_alerts}")
+    check("phone: a rule that is met creates alerts, shown on Coins, with the dot on the Coins tab", on_coins and fresh >= 1 and rule_rows >= 1 and n_alerts >= 1 and dot, f"coins={on_coins} new={fresh} rules={rule_rows} alerts={n_alerts} dot={dot}")
+    p.click("#pBack"); p.wait_for_timeout(400)
 
     # appearance
-    p.click("#pBack"); p.click("[data-p=appearance]"); p.click("[data-t=light]"); p.wait_for_timeout(300)
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(400); p.click("#plMe"); p.wait_for_timeout(500); p.click("#sheet [data-av=appearance]"); p.wait_for_timeout(400); p.click("[data-t=light]"); p.wait_for_timeout(300)
     check("phone: light theme switches", p.evaluate("document.documentElement.dataset.theme") == "light")
     p.click("[data-t=dark]")
 
@@ -549,7 +557,7 @@ def phone_tests(b):
     check("phone: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
-NOCOACH = "localStorage.getItem('pl.coach')||localStorage.setItem('pl.coach', JSON.stringify({feed:1,dash:1,profile:1,add:1}))"
+NOCOACH = "localStorage.getItem('pl.coach')||localStorage.setItem('pl.coach', JSON.stringify({feed:1,dash:1,profile:1,add:1,play:1}))"
 
 # Prediction game. Its own Kraken stand-in: one smooth made-up price per coin, so 1-minute and daily candles agree
 # (the start price is locked from 1-minute candles, the volatility from daily ones).
@@ -574,24 +582,24 @@ def prediction_test(b):
     chip = p.locator(".card.active [data-pred]")
     check("predict: every coin card has a Predict chip", chip.count() == 1 and "Predict" in chip.inner_text(), str(active(p)))
     chip.click(); p.wait_for_timeout(500)
-    periods = p.locator(".pseg [data-h]").all_inner_texts(); default = p.get_attribute(".pseg [aria-pressed=true]", "data-h")
+    periods = p.locator("#sheet .utabs [data-h]").all_inner_texts(); default = p.get_attribute("#sheet .utabs [aria-selected=true]", "data-h")
     check("predict: the sheet offers 30 min, 1 hour, 1 day and 1 year, starting on 1 day", [x.split("\n")[0] for x in periods] == ["30 min", "1 hour", "1 day", "1 year"] and default == "1d", f"{periods} {default}")
     now = p.evaluate("parseFloat(document.querySelector('.pnow b').textContent.replace(/[^0-9.]/g,''))")
     p.fill("#pIn", f"{now * 1.0003:.4f}"); p.wait_for_timeout(150)
-    close_msg, close_off = p.inner_text("#pMsg"), p.is_disabled("#pGo")
+    close_msg, close_off = p.inner_text("#pInMsg"), p.is_disabled("#pGo")
     p.fill("#pIn", f"{now * 1.05:.4f}"); p.wait_for_timeout(150)
-    ok_msg, ok_on = p.inner_text("#pMsg"), not p.is_disabled("#pGo")
+    ok_msg, ok_on = p.inner_text("#pInMsg"), not p.is_disabled("#pGo")
     check("predict: a call too close to today's price is refused; a real call up is accepted", close_off and "too close" in close_msg and ok_on and "a call up" in ok_msg, f"{close_msg} / {ok_msg}")
-    p.click("#pGo"); p.wait_for_timeout(800)
+    p.click("#pGo"); p.wait_for_timeout(1000)
     toast_txt = p.inner_text("#toast") if p.is_visible("#toast") else ""
     badge = p.inner_text(".card.active [data-pred]")
     p.click(".card.active [data-pred]"); p.wait_for_timeout(400)
-    one_open = p.is_disabled(".pseg [data-h='1d']") and "open" in p.inner_text(".pseg [data-h='1d']") and p.get_attribute(".pseg [aria-pressed=true]", "data-h") != "1d"
+    one_open = p.is_disabled("#sheet .utabs [data-h='1d']") and "open" in p.inner_text("#sheet .utabs [data-h='1d']") and p.get_attribute("#sheet .utabs [aria-selected=true]", "data-h") != "1d"
     p.click("[data-close]"); p.wait_for_timeout(400)
     check("predict: locking in confirms it, the chip counts it, and 1 day can't be predicted again while it's open", "Locked in" in toast_txt and "1" in badge and one_open, f"{toast_txt} / {badge!r}")
-    p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(500); p.click("#dash [data-dv=preds]"); p.wait_for_timeout(500)
-    card0 = p.inner_text("#dash .pscard"); row0 = p.inner_text("#dash [data-dv=preds]")
-    check("predict: predictions live on the dashboard: before anything is scored there's no score yet and the switch counts the open one", "waiting to be scored" in card0 and "1 open" in row0, f"{card0!r} / {row0!r}")
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(600)
+    head0 = p.inner_text("#play .pl-head"); open0 = p.inner_text("#play .pl-view")
+    check("predict: predictions live on the Predict tab: before anything is scored there's no score yet, and Calls lists the open one", "No score yet" in head0 and "@chart_fan" in head0 and "open · 1" in open0.lower() and "called" in open0, f"{head0!r} / {open0[:120]!r}")
     # an hour-long call made 3 hours ago (settled on the phone from 1-minute candles) and 11 earlier scored results
     p.evaluate("""(async()=>{const d=JSON.parse(localStorage.getItem('pl.demoPreds')), made=Date.now()-3*3600e3;
       const j=await (await fetch('https://api.kraken.com/0/public/OHLC?pair=ETHUSD&interval=1')).json(), r=j.result.ETHUSD.filter(x=>x[0]*1000<=made).pop();
@@ -600,21 +608,21 @@ def prediction_test(b):
         d.results.push({id:'X'+i,coin:'CRYPTO:SOL',t:'SOL',horizon:h,target:t,p0:100,sigmaD:.03,actual:a,createdAt:new Date(at).toISOString(),resolvedAt:new Date(at+3600e3).toISOString(),status:'scored',pctOff:(t/a-1)*100,label:'Close'});});
       localStorage.setItem('pl.demoPreds', JSON.stringify(d));})()""")
     p.reload(); p.wait_for_timeout(3500)
-    p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(500)
-    if p.get_attribute("#dash [data-dv][aria-pressed=true]", "data-dv") != "preds": p.click("#dash [data-dv=preds]"); p.wait_for_timeout(500)
-    card = p.inner_text("#dash .pscard"); score = int(p.inner_text("#dash .pscard .psn b"))
-    check("predict: with 12 scored predictions the dashboard shows one score between 300 and 900, with its band", 300 <= score <= 900 and any(bnd in card for bnd in ["Exceptional", "Very good", "Good", "Fair", "Building"]) and "Provisional" not in card and "12 scored" in card, card.replace("\n", " "))
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(600)
+    card = p.inner_text("#play .pl-head"); score = int(p.inner_text("#play .pl-score b"))
+    ring = p.get_attribute("#plMe", "class")
+    check("predict: with 12 scored predictions the header shows one score between 300 and 900 with its band, and the letter avatar is ringed in the band's colour", 300 <= score <= 900 and any(bnd in card for bnd in ["Exceptional", "Very good", "Good", "Fair", "Building"]) and "Provisional" not in card and _re.search(r"\bb[1-5]\b", ring) and "prov" not in ring, card.replace("\n", " ") + " " + ring)
     p.wait_for_timeout(2500)
-    first = p.inner_text("#dash .list:last-of-type .row >> nth=0") if p.locator("#dash .list").count() > 1 else ""
-    page = p.inner_text("#dash")
+    first = p.inner_text("#play .pl-view .hl:last-of-type .row >> nth=0") if p.locator("#play .pl-view .hl").count() else ""
+    page = p.inner_text("#play")
     check("predict: the hour-long call settled on the phone from 1-minute candles and shows how close it was", first.startswith("ETH · 1 hour") and "it was $" in first and _re.search(r"\d+\.\d% (above|below)", first) and any(l in first for l in ["Spot on", "Very close", "Close", "Off", "Far off"]), first.replace("\n", " "))
     check("predict: each prediction shows only how close it was, never a per-prediction score", "points" not in page.lower() and "trade" not in page.lower(), "")
-    first_el = p.evaluate("document.querySelector('#dash .dview').firstElementChild?.className")
-    check("predict: the Predictions half starts with the ask (pick a coin, call its price), and has no 'How the score works'", first_el == "pask" and "How the score works" not in page and p.locator("#dash .pask [data-pp]").count() >= 1, str(first_el))
-    p.click("#dash [data-dv=coins]"); p.wait_for_timeout(600)
-    check("dashboard: the switch goes back to the coins, with the watchlist chips", p.locator("#dash .wchips").count() == 1 and p.locator("#dash .pscard").count() == 0, "")
+    first_el = p.evaluate("document.querySelector('#play .pl-view').firstElementChild?.textContent")
+    check("predict: Calls starts with the ask (pick a coin, call its price), and has no 'How the score works'", first_el == "Make a call" and "How the score works" not in page and p.locator("#play .pchips [data-pp]").count() >= 1, str(first_el))
+    p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(600)
+    check("coins: Coins has the watchlist chips and no prediction header", p.locator("#dash .wchips").count() == 1 and p.locator("#dash .pl-head").count() == 0, "")
     colours = p.evaluate("[...document.querySelectorAll('#dash .list [data-open]')].map(r => [r.querySelector('.r span').className, r.querySelector('.spark path').getAttribute('class')])")
-    check("dashboard: each coin's sparkline is red when its % is down and green when up (same period)", colours and all((c == "up") == (k == "lu") for c, k in colours), str(colours[:4]))
+    check("coins: each coin's sparkline is red when its % is down and green when up (same period)", colours and all((c == "up") == (k == "lu") for c, k in colours), str(colours[:4]))
     check("predict: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
@@ -642,13 +650,17 @@ def tour_test(b):
     want = ["1 / 6", "2 / 6", "3 / 6", "4 / 6", "5 / 6", "6 / 6", "none"]
     check("tour: the feed tour moves on as each gesture is done (up, left, right, left, hold, tap)", seen == want, str(seen))
     p.click("#sheet [data-close]"); p.wait_for_timeout(500)
-    p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(900)
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(900)
     d = [step()]
     for _ in range(3):
         if p.locator("#coach [data-next]").count(): p.click("#coach [data-next]"); p.wait_for_timeout(250)
     d.append(step())
-    p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(400); p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(900); d.append(step())
-    check("tour: the dashboard explains predictions and the switch once, in 3 steps, and not again", d == ["1 / 3", "none", "none"], str(d))
+    p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(400); p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(900); d.append(step())
+    check("tour: the Predict tab explains your score, Calls/Groups/Ranks and making a call once, in 3 steps, and not again", d == ["1 / 3", "none", "none"], str(d))
+    p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(900); c1 = p.locator("#coach").count()
+    if c1: p.click("#coach [data-next]"); p.wait_for_timeout(250)
+    p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(400); p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(900)
+    check("tour: Coins explains itself once in one step", c1 == 1 and not p.locator("#coach").count(), str(c1))
     p.reload(); p.wait_for_timeout(2500)
     check("tour: never shown again after it is finished", step() == "none")
     ctx.close()
@@ -668,7 +680,7 @@ def landscape_test(b):
     # a phone on its side: vertical swipes page the feed from the first page and between coins
     ctx = b.new_context(viewport={"width": 844, "height": 390}, device_scale_factor=2, is_mobile=True, has_touch=True)
     ctx.route("https://api.kraken.com/**", kraken_route); ctx.route("https://data-api.binance.vision/**", binance_route); demo_mode(ctx)
-    ctx.add_init_script("localStorage.setItem('pl.coach', JSON.stringify({feed:1,dash:1,profile:1,add:1}))")
+    ctx.add_init_script("localStorage.setItem('pl.coach', JSON.stringify({feed:1,dash:1,profile:1,add:1,play:1}))")
     p = ctx.new_page(); p.goto(BASE); p.wait_for_timeout(1500); pass_gate(p, "sideways1", three_months=False); p.wait_for_timeout(1500)
     cdp = ctx.new_cdp_session(p)
     def vs(y0, y1, x=300):
@@ -737,6 +749,168 @@ def desktop_tests(b):
     check("desktop: no JavaScript errors", not errs, " | ".join(errs[:3]))
     p.close()
 
+def group_test(b):
+    # Groups and challenges, end to end on one phone (demo mode: three made-up friends join every group you start and pick too).
+    ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
+    ctx.route("https://api.kraken.com/**", steady_kraken_route); demo_mode(ctx); ctx.add_init_script(NOCOACH)
+    p = ctx.new_page(); errs = []
+    p.on("pageerror", lambda e: errs.append(str(e))); p.on("dialog", lambda d: d.accept())
+    social = lambda: p.evaluate("JSON.parse(localStorage.getItem('pl.demoSocial')||'{}')")
+    p.goto(BASE); p.wait_for_timeout(2500); pass_gate(p, three_months=False); p.wait_for_timeout(1200)
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(600); p.click("[data-pv=groups]"); p.wait_for_timeout(300)
+    check("groups: with no groups, Groups explains itself and offers to start one", "Play with friends" in p.inner_text("#play") and p.is_visible("#plNewG"))
+    p.click("#plNewG"); p.wait_for_timeout(500); p.fill("#ngIn", "Weekend crew"); p.click("#ngGo"); p.wait_for_timeout(1300)
+    st = social(); gid = next(iter(st.get("groups", {})), None); grp = st["groups"].get(gid, {}) if gid else {}
+    acct = p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount'))")
+    check("groups: a new group records who started it (account and username) and lists them as its first member, and the group is on my account",
+          grp.get("owner") == "me" and grp.get("ownerName") == "chart_fan" and grp.get("members", {}).get("me") == "chart_fan" and acct.get("groups") == [gid] and len(gid or "") == 20, json.dumps(grp)[:200])
+    check("groups: the new group opens with its link to share", p.is_visible("#sheet") and "Weekend crew" in p.inner_text("#shTitle") and p.is_visible("#grShare"))
+    p.click("#grNew"); p.wait_for_timeout(600); p.click("#sheet [data-h='1h']"); p.wait_for_timeout(300)
+    hint = p.inner_text("#cInMsg"); hi = float(_re.search(r"\$([\d,.]+) or higher", hint).group(1).replace(",", ""))
+    p.fill("#cIn", f"{hi * 1.01:.4f}"); p.wait_for_timeout(200)
+    counts_default = p.is_checked("#sheet input[name=pcnt][value=counts]")
+    p.click("#cGo"); p.wait_for_timeout(1500)
+    st = social(); ch = (st.get("ch", {}).get(gid) or [{}])[0]
+    preds = p.evaluate("JSON.parse(localStorage.getItem('pl.demoPreds')).open")
+    cp = [x for x in preds if x.get("c") == ch.get("id")]
+    check("challenge: starting one is the first pick; the group's friends pick too; it ends one hour later for everyone",
+          ch.get("by") == "me" and ch.get("byName") == "chart_fan" and ch.get("horizon") == "1h" and sorted(ch.get("picked", {}).values()) == ["asha", "chart_fan", "dev", "rohan"]
+          and abs((_dt(ch["endAt"]) - _dt(ch["at"])) - 3600) < 2 and abs((_dt(ch["joinUntil"]) - _dt(ch["at"])) - 1200) < 2, json.dumps(ch)[:240])
+    check("challenge: a pick that counts (the default) is also an ordinary prediction with the challenge's end time", counts_default and len(cp) == 1 and cp[0].get("endAt") == ch.get("endAt") and cp[0].get("g") == gid, str(cp)[:200])
+    body = p.inner_text("#sheet")
+    check("challenge: the card shows who started it, how many picked and that prices are hidden", "Started by you" in body and "4 of 4 picked" in body and "prices hidden" in body and "Your call:" in body, body[:200].replace("\n", " "))
+    p.click("#sheet [data-close]"); p.wait_for_timeout(400); p.click("[data-pv=calls]"); p.wait_for_timeout(300)
+    check("calls: the open call shows which group it's for", "Weekend crew" in p.inner_text("#play .pl-view"))
+    # a friend starts an ETH challenge: it waits for my pick
+    p.evaluate("""((g)=>{const d=JSON.parse(localStorage.getItem('pl.demoSocial')), M=60000, now=Date.now(), iso=(x)=>new Date(x).toISOString(), c='waitingforpickxxxxxxx';
+      d.ch[g].push({id:c,coin:'CRYPTO:ETH',t:'ETH',horizon:'1h',by:'demo_asha',byName:'asha',at:iso(now-2*M),joinUntil:iso(now+18*M),endAt:iso(now+58*M),picked:{demo_asha:'asha'},status:'open'});
+      d.picks.push({a:'demo_asha',g,c,coin:'CRYPTO:ETH',t:'ETH',horizon:'1h',target:1,counts:false,createdAt:iso(now-2*M),endAt:iso(now+58*M),cast:true});
+      localStorage.setItem('pl.demoSocial', JSON.stringify(d));})""", gid)
+    p.reload(); p.wait_for_timeout(3000); p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(600)
+    badge = p.inner_text(".tabbar [data-tab=play] .badge") if p.locator(".tabbar [data-tab=play] .badge").is_visible() else ""
+    strip = p.inner_text("#play [data-pick]") if p.locator("#play [data-pick]").count() else ""
+    check("challenge: a challenge waiting for my pick shows on the Predict tab (badge) and at the top of the page", badge.strip() == "1" and "Weekend crew needs your pick" in strip and "ETH · 1 hour" in strip and "closes in" in strip, f"{badge!r} {strip!r}")
+    p.click("#play [data-pick]"); p.wait_for_timeout(700)
+    hint = p.inner_text("#kInMsg"); lo = float(_re.search(r"\$([\d,.]+) or lower", hint).group(1).replace(",", ""))
+    p.fill("#kIn", f"{lo * 0.99:.4f}"); p.wait_for_timeout(200); p.click("#sheet input[name=pcnt][value=group]"); p.wait_for_timeout(200); p.click("#kGo"); p.wait_for_timeout(1500)
+    st = social(); eth = [c for c in st["ch"][gid] if c["t"] == "ETH"][0]; mine = [x for x in st["picks"] if x.get("a") == "me" and x["c"] == eth["id"]]
+    check("challenge: making a group-only pick seals it and adds me to the challenge, with no prediction", "me" in eth["picked"] and len(mine) == 1 and mine[0]["counts"] is False and not any(x.get("c") == eth["id"] for x in p.evaluate("JSON.parse(localStorage.getItem('pl.demoPreds')).open")), str(mine)[:200])
+    check("challenge: once picked, nothing waits for me", not p.locator(".tabbar [data-tab=play] .badge").is_visible() or p.inner_text(".tabbar [data-tab=play] .badge").strip() in ("", "0"))
+    if p.is_visible("#sheet"): p.click("#sheet [data-close]"); p.wait_for_timeout(400)
+    # fast-forward: both challenges ended 10 minutes ago
+    p.evaluate("""(()=>{const d=JSON.parse(localStorage.getItem('pl.demoSocial')), M=60000, end=Date.now()-10*M, iso=(x)=>new Date(x).toISOString();
+      for (const g in d.ch) for (const c of d.ch[g]) { c.at=iso(end-60*M); c.joinUntil=iso(end-40*M); c.endAt=iso(end); }
+      for (const p of d.picks) { p.createdAt=iso(end-58*M); p.endAt=iso(end); delete p.p0; delete p.status; }
+      localStorage.setItem('pl.demoSocial', JSON.stringify(d));
+      const q=JSON.parse(localStorage.getItem('pl.demoPreds')); for (const p of q.open) if (p.c) { p.createdAt=iso(end-58*M); p.endAt=iso(end); } localStorage.setItem('pl.demoPreds', JSON.stringify(q)); })()""")
+    p.reload(); p.wait_for_timeout(3000); p.click("#status"); p.wait_for_timeout(6000)
+    st = social(); chs = st["ch"][gid]; done = [c for c in chs if c["status"] == "done"]
+    res = [r for c in done for r in c.get("results", [])]
+    check("results: both challenges are scored at their shared end time; picks are deleted once revealed; the group's table gets the points",
+          len(done) == 2 and not st["picks"] and st["groups"][gid].get("table", {}).get("me", {}).get("all", -1) >= 0 and all(set(r) >= {"a", "u", "label", "pts", "rank"} for r in res)
+          and not any(k in json.dumps(res) for k in ["target", "actual", "p0"]), json.dumps([(c["t"], c["status"], [(r["u"], r["label"], r["pts"]) for r in c.get("results", [])]) for c in chs])[:300])
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(600); p.click("[data-pv=groups]"); p.wait_for_timeout(400)
+    check("results: Groups says new results are in", "results are in" in p.inner_text("#play [data-g]"))
+    p.click("#play [data-g]"); p.wait_for_timeout(800)
+    sealed = p.locator("#sheet [data-reveal]").count()
+    check("results: results stay sealed until tapped (no labels shown yet)", sealed == 2 and "Spot on" not in p.inner_text("#sheet .sealed >> nth=0"), str(sealed))
+    p.click("#sheet [data-reveal] >> nth=0"); p.wait_for_timeout(120); flipped = p.locator("#sheet .chcard.flip").count(); p.wait_for_timeout(1300)
+    card = p.inner_text("#sheet .chcard >> nth=0")
+    check("results: tapping flips the card open: everyone ranked with how close and which way, and their points, never a price",
+          flipped == 1 and _re.search(r"@chart_fan", card) and _re.search(r"\+\d", card) and any(l in card for l in ["Spot on", "Very close", "Close", "Off", "Far off", "Not counted"]) and "called" not in card, card.replace("\n", " ")[:300])
+    p.click("#sheet [data-rx$='|nice'] >> nth=0"); p.wait_for_timeout(600)
+    check("results: reacting to a result is saved and shown", p.get_attribute("#sheet [data-rx$='|nice'] >> nth=0", "aria-pressed") == "true" and "Nice call · 1" in p.inner_text("#sheet [data-rx$='|nice'] >> nth=0"))
+    p.click("#sheet [data-reveal] >> nth=0"); p.wait_for_timeout(1400)
+    check("results: once both are opened, nothing is left sealed and the table shows this month's points", p.locator("#sheet [data-reveal]").count() == 0 and "table" in p.inner_text("#sheet").lower() and "pts" in p.inner_text("#sheet"))
+    p.click("#sheet [data-close]"); p.wait_for_timeout(400); p.click("[data-pv=ranks]"); p.wait_for_timeout(400)
+    rk = p.inner_text(f"#play [data-board='{gid}']")
+    check("ranks: the group shows on Ranks with my place this month", "Weekend crew" in rk and _re.search(r"\d(st|nd|rd|th)", rk) and "pts" in rk, rk.replace("\n", " "))
+    # find and follow a player
+    p.click("#plFind"); p.wait_for_timeout(600); p.fill("#fpIn", "as"); p.wait_for_timeout(700)
+    hits = p.locator("#fpRes .pl-hit .t").all_inner_texts()
+    check("search: typing the start of a username finds players", hits == ["@asha", "@ashwin", "@aslan"], str(hits))
+    p.click("#fpRes [data-f='demo_asha']"); p.wait_for_timeout(500)
+    acct = p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount'))")
+    check("search: following a player saves them to my private list", p.inner_text("#fpRes [data-f='demo_asha']") == "Following" and acct.get("following") == ["demo_asha"], str(acct.get("following")))
+    p.click("#fpRes [data-a='demo_asha']"); p.wait_for_timeout(700)
+    pc = p.inner_text("#sheet")
+    check("player card: shows the username, score, followers and record, with Follow and Invite", "@asha" in pc and "814" in pc and "followers" in pc and "Following" in p.inner_text("#pcFollow") and p.is_visible("#pcInvite") and "groups in common" in pc.lower(), pc.replace("\n", " ")[:200])
+    p.click("#sheet [data-close]"); p.wait_for_timeout(500)
+    fr = p.inner_text("#play [data-board=following]")
+    check("ranks: 'People you follow' ranks me against who I follow", _re.search(r"\d(st|nd|rd|th)", fr) and "of 2" in fr, fr.replace("\n", " "))
+    p.click("#plMe"); p.wait_for_timeout(500); p.click("#sheet [data-av=following]"); p.wait_for_timeout(600)
+    check("following: the account sheet lists who I follow, only to me", "@asha" in p.inner_text("#flList"))
+    p.click("#sheet [data-close]"); p.wait_for_timeout(400)
+    # the public leaderboard is opt-in
+    p.click("#play [data-board=everyone]"); p.wait_for_timeout(500)
+    join = p.is_visible("#jbGo"); p.click("#jbGo"); p.wait_for_timeout(600)
+    acct = p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount'))")
+    p.click("#play [data-board=everyone]"); p.wait_for_timeout(700)
+    rows = p.locator("#sheet .lbrow").count(); tabs = p.locator("#sheet [data-bt]").all_inner_texts()
+    check("leaderboard: joining it is a choice; the board lists public players and has tabs for following and each group", join and acct.get("public") is True and rows >= 5 and tabs[:2] == ["Everyone", "Following"] and "Weekend crew" in tabs, f"{rows} {tabs}")
+    p.click("#sheet [data-bt='following']"); p.wait_for_timeout(500)
+    check("leaderboard: the Following tab shows me and who I follow", "@asha" in p.inner_text("#sheet [data-bl]") and "you" in p.inner_text("#sheet [data-bl]"))
+    p.click("#sheet [data-close]"); p.wait_for_timeout(400)
+    # leave the group: it's gone from my account and the page
+    p.click("[data-pv=groups]"); p.wait_for_timeout(300); p.click("#play [data-g]"); p.wait_for_timeout(700); p.click("#grInfo"); p.wait_for_timeout(500)
+    info = p.inner_text("#sheet")
+    check("group info: lists the players, who started it, and lets the starter rename and remove", "Started the group" in info and p.is_visible("#giRen") and p.locator("#sheet [data-rm]").count() == 3, info[:160].replace("\n", " "))
+    p.click("#giLeave"); p.wait_for_timeout(900)
+    acct = p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount'))")
+    check("groups: leaving a group removes it from my account and the page", acct.get("groups") == [] and gid not in social().get("groups", {}) and "Play with friends" in p.inner_text("#play"), str(acct.get("groups")))
+    check("groups: no JavaScript errors", not errs, " | ".join(errs[:3]))
+    ctx.close()
+
+def _dt(s):
+    import datetime as _d
+    return _d.datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+
+def screens_test(b):
+    # Every new screen at common phone sizes, a phone on its side, a desktop window and the light theme:
+    # nothing wider than the screen, nothing cut off at the side.
+    sizes = [(320, 640, False, "dark"), (360, 780, False, "dark"), (390, 844, False, "light"), (430, 932, False, "dark"), (844, 390, False, "dark"), (1280, 800, True, "dark")]
+    over = """((sel)=>{const W=innerWidth, bad=[]; const root=document.querySelector(sel); if(!root) return ['missing '+sel];
+      if (document.documentElement.scrollWidth>W+1) bad.push('page '+document.documentElement.scrollWidth);
+      for (const e of root.querySelectorAll('*')) { const r=e.getBoundingClientRect(); if(!r.width||!r.height) continue;
+        let p=e.parentElement, clipped=false; while(p&&p!==document.body){const s=getComputedStyle(p); if(/(auto|scroll|hidden)/.test(s.overflowX)&&p.scrollWidth>p.clientWidth+1){clipped=true;break;} p=p.parentElement;}
+        if(!clipped&&(r.right>W+1||r.left<-1)) bad.push((e.id||e.className||e.tagName)+' '+Math.round(r.left)+'..'+Math.round(r.right)); }
+      return bad.slice(0,5);})"""
+    for w, h, desk, theme in sizes:
+        ctx = b.new_context(viewport={"width": w, "height": h}, is_mobile=not desk, has_touch=not desk, color_scheme=theme)
+        ctx.route("https://api.kraken.com/**", steady_kraken_route); demo_mode(ctx); ctx.add_init_script(NOCOACH)
+        p = ctx.new_page(); errs = []; p.on("pageerror", lambda e: errs.append(str(e))); p.on("dialog", lambda d: d.accept())
+        p.goto(BASE); p.wait_for_timeout(2500); pass_gate(p, three_months=False); p.wait_for_timeout(1000)
+        if theme == "light":
+            p.evaluate("(()=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.settings.theme='light'; localStorage.setItem('pl.demoAccount', JSON.stringify(a))})()"); p.reload(); p.wait_for_timeout(2500)
+        tag = f"{w}x{h}{' desktop' if desk else ''} {theme}"
+        bad = {}
+        p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(600)
+        for v in ["calls", "groups", "ranks"]:
+            p.click(f"[data-pv={v}]"); p.wait_for_timeout(300); bad[v] = p.evaluate(over, "#play")
+        p.click("[data-pv=groups]"); p.click("#plNewG"); p.wait_for_timeout(500); p.fill("#ngIn", "A group with a long name"); p.click("#ngGo"); p.wait_for_timeout(1200)
+        p.click("#grNew"); p.wait_for_timeout(600); bad["challenge sheet"] = p.evaluate(over, "#sheet")
+        hint = p.inner_text("#cInMsg"); hi = float(_re.search(r"\$([\d,.]+) or higher", hint).group(1).replace(",", ""))
+        p.fill("#cIn", f"{hi * 1.01:.4f}"); p.wait_for_timeout(200); p.click("#cGo"); p.wait_for_timeout(1500)
+        bad["group sheet"] = p.evaluate(over, "#sheet")
+        foot = p.evaluate("(()=>{const f=document.querySelector('#sheet .shfoot'); if(!f) return 'missing'; const r=f.getBoundingClientRect(); return r.bottom<=innerHeight+1 && r.top>=0 ? 'ok' : r.top+'..'+r.bottom})()")
+        p.click("#grInfo"); p.wait_for_timeout(500); bad["group info"] = p.evaluate(over, "#sheet")
+        p.click("#sheet [data-close]"); p.wait_for_timeout(400)
+        p.click("#plMe"); p.wait_for_timeout(500); bad["account sheet"] = p.evaluate(over, "#sheet")
+        p.click("#sheet [data-av=card]"); p.wait_for_timeout(600); bad["player card"] = p.evaluate(over, "#sheet")
+        p.click("#sheet [data-close]"); p.wait_for_timeout(400)
+        p.click("[data-pv=ranks]"); p.wait_for_timeout(300); p.click("#play [data-board=following]"); p.wait_for_timeout(600); bad["leaderboard"] = p.evaluate(over, "#sheet")
+        p.click("#sheet [data-close]"); p.wait_for_timeout(400)
+        p.click("[data-pv=calls]"); p.click("#play [data-pp] >> nth=0"); p.wait_for_timeout(600); bad["predict sheet"] = p.evaluate(over, "#sheet")
+        p.click("#sheet [data-close]"); p.wait_for_timeout(400)
+        p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(700); bad["coins"] = p.evaluate(over, "#dash")
+        tabs = p.evaluate("(()=>{const t=document.querySelector('.tabbar').getBoundingClientRect(); return t.bottom<=innerHeight+1 && t.right<=innerWidth+1})()")
+        if theme == "light": check(f"screens {tag}: the light theme is on", p.get_attribute("html", "data-theme") == "light")
+        bad = {k: v for k, v in bad.items() if v}
+        check(f"screens {tag}: Predict, groups, sheets and Coins fit the screen (no sideways overflow)", not bad, json.dumps(bad)[:400])
+        check(f"screens {tag}: the group's New challenge button and the tab bar stay on screen", foot == "ok" and tabs, f"{foot} {tabs}")
+        check(f"screens {tag}: no JavaScript errors", not errs, " | ".join(errs[:3]))
+        ctx.close()
+
 with sync_playwright() as pw:
     b = pw.chromium.launch(executable_path=CHROME)
     try: tour_test(b)
@@ -751,6 +925,10 @@ with sync_playwright() as pw:
     except Exception as e: check("desktop: suite ran to the end", False, repr(e)[:300])
     try: prediction_test(b)
     except Exception as e: check("predict: suite ran to the end", False, repr(e)[:300])
+    try: group_test(b)
+    except Exception as e: check("groups: suite ran to the end", False, repr(e)[:300])
+    try: screens_test(b)
+    except Exception as e: check("screens: suite ran to the end", False, repr(e)[:300])
     b.close()
 
 fails = [r for r in results if not r[1]]

@@ -156,7 +156,7 @@ export function openLearn(kind, v) {
     ${sec("How it's worked out", para(ex.calc))}
     ${sec("Usual settings", para(ex.settings))}
     ${sec("Keep in mind", para(ex.limits))}
-    ${sec("Alert me", alerts.length ? `<div class="opts">${alerts.map(([op, x], j) => `<button class="opt" data-ra="${j}">🔔 ${esc(OPS_TXT[op])} ${esc(String(x))}</button>`).join("")}</div><p class="hint">For ${esc(tk)}. Checked after every data refresh. Manage alerts in Profile → Alert rules.</p>` : "")}
+    ${sec("Alert me", alerts.length ? `<div class="opts">${alerts.map(([op, x], j) => `<button class="opt" data-ra="${j}">🔔 ${esc(OPS_TXT[op])} ${esc(String(x))}</button>`).join("")}</div><p class="hint">For ${esc(tk)}. Checked after every data refresh. Manage alerts in Coins → Alerts.</p>` : "")}
     ${srcs ? `<p class="gsrc">Sources: ${srcs}</p>` : ""}
     <p class="disclaimer">${esc(DISCLAIMER)}</p>`, (body) => {
     body.querySelectorAll("[data-ra]").forEach((b) => (b.onclick = async () => {

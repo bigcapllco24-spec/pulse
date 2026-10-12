@@ -5,12 +5,27 @@ service cloud.firestore {
   match /databases/{db}/documents {
     function signedIn() { return request.auth != null; }
     function isOwner(acct) { return request.auth != null && request.auth.uid == acct; }
+    function acctDoc(acct) { return get(/databases/$(db)/documents/accounts/$(acct)); }
     // An account can be used by the sign-in that made it and by any device that logged in with its username
     // (listed in accounts/{acct}.devices). MVP: the username alone logs in; a password or Google sign-in comes later.
-    function canUse(acct) { return isOwner(acct) || (request.auth != null
-      && request.auth.uid in get(/databases/$(db)/documents/accounts/$(acct)).data.get('devices', [])); }
+    function canUse(acct) { return isOwner(acct) || (request.auth != null && request.auth.uid in acctDoc(acct).data.get('devices', [])); }
+    function nameOf(acct) { return acctDoc(acct).data.get('username', null); }
     // Admins: a document /admins/{uid}, added by hand in the Firebase console. They can read and triage feedback.
     function isAdmin() { return request.auth != null && exists(/databases/$(db)/documents/admins/$(request.auth.uid)); }
+
+    // Groups: members are kept by account id, with the username they play under ({account: username}).
+    function groupPath(g) { return /databases/$(db)/documents/groups/$(g); }
+    function memberOf(g, acct) { return acct in get(groupPath(g)).data.members; }
+    // Group challenges: minutes picks stay open, and minutes until the challenge is scored, per period.
+    function pickMins(h) { return {'1h': 20, '1d': 120, '1y': 1440}[h]; }
+    function lenMins(h) { return {'1h': 60, '1d': 1440, '1y': 525600}[h]; }
+    // A pick (or a prediction that also counts as one) must match a challenge that is still taking picks, in a group the
+    // account belongs to: same coin, same period, same end time for everyone.
+    function inChallenge(acct, d) {
+      let ch = getAfter(/databases/$(db)/documents/groups/$(d.g)/challenges/$(d.c)).data;
+      return memberOf(d.g, acct) && ch.status == 'open' && request.time < ch.joinUntil
+        && d.t == ch.t && d.horizon == ch.horizon && d.endAt == ch.endAt;
+    }
 
     // Username: a public display name. Set once, then changed at most twice; every change must claim the
     // new name in /usernames in the same write, so names stay unique.
@@ -24,13 +39,15 @@ service cloud.firestore {
         || (after is string && existsAfter(nameDoc(after)) && getAfter(nameDoc(after)).data.acct == acct
             && n1 == (before == null ? n0 : n0 + 1) && n1 <= 2);
     }
+    // People you follow (at most 200) and your groups (at most 10) live on your own account, seen only by you.
+    function listsOk() { return request.resource.data.get('following', []).size() <= 200 && request.resource.data.get('groups', []).size() <= 10; }
 
     match /accounts/{acct} {
       allow get: if canUse(acct);
       allow delete: if isOwner(acct);
       // pscore (the prediction game's profile score) is written by the data job only
       allow create: if isOwner(acct) && !request.resource.data.keys().hasAny(['username', 'usernameChanges', 'pscore']);
-      allow update: if (canUse(acct) && usernameOk(acct) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pscore']))
+      allow update: if (canUse(acct) && usernameOk(acct) && listsOk() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pscore']))
         // logging in by username: a device adds only itself to the account's devices (at most 10)
         || (request.auth != null && resource.data.get('username', null) != null
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['devices'])
@@ -42,20 +59,47 @@ service cloud.firestore {
       // Prediction game. One open prediction per coin and period: its id is "<TICKER>_<period>", and the app can
       // only create it, never change or cancel it. The data job locks the real start price, scores it when it is
       // due and moves it to results. Both can be removed only once the account itself has been deleted.
+      // A group pick that counts to the public score is also a prediction: it carries its group (g), challenge (c)
+      // and the challenge's shared end time (endAt).
       match /predictions/{pid} {
         allow get, list: if canUse(acct);
         allow create: if canUse(acct)
-          && request.resource.data.keys().hasOnly(['coin', 't', 'horizon', 'target', 'createdAt', 'clientP0', 'clientSigma'])
+          && request.resource.data.keys().hasOnly(['coin', 't', 'horizon', 'target', 'createdAt', 'clientP0', 'clientSigma', 'g', 'c', 'endAt'])
           && request.resource.data.horizon in ['30m', '1h', '1d', '1y']
           && request.resource.data.t is string && request.resource.data.coin == 'CRYPTO:' + request.resource.data.t
           && pid == request.resource.data.t + '_' + request.resource.data.horizon
           && request.resource.data.target is number && request.resource.data.target > 0
-          && request.resource.data.createdAt == request.time;
+          && request.resource.data.createdAt == request.time
+          && (!request.resource.data.keys().hasAny(['g', 'c', 'endAt'])
+              || (request.resource.data.keys().hasAll(['g', 'c', 'endAt']) && inChallenge(acct, request.resource.data)));
         allow delete: if isOwner(acct) && !exists(/databases/$(db)/documents/accounts/$(acct));
       }
       match /results/{rid} {
         allow get, list: if canUse(acct);
         allow delete: if isOwner(acct) && !exists(/databases/$(db)/documents/accounts/$(acct));
+      }
+      // A sealed group pick: only its owner can read it; the data job scores it and puts the outcome in the challenge.
+      // A pick that counts to the public score is made together with its prediction (same coin, period and end time).
+      match /picks/{c} {
+        allow get, list: if canUse(acct);
+        allow create: if canUse(acct)
+          && request.resource.data.keys().hasOnly(['g', 'c', 'coin', 't', 'horizon', 'target', 'counts', 'createdAt', 'endAt'])
+          && request.resource.data.c == c && request.resource.data.g is string
+          && request.resource.data.coin == 'CRYPTO:' + request.resource.data.t
+          && request.resource.data.target is number && request.resource.data.target > 0 && request.resource.data.counts is bool
+          && request.resource.data.createdAt == request.time && inChallenge(acct, request.resource.data)
+          && (!request.resource.data.counts
+              || getAfter(/databases/$(db)/documents/accounts/$(acct)/predictions/$(request.resource.data.t + '_' + request.resource.data.horizon)).data.get('c', null) == c);
+        allow delete: if isOwner(acct) && !exists(/databases/$(db)/documents/accounts/$(acct));
+      }
+      // Invites to a group: any member can invite an account; only that account sees, accepts or declines them.
+      match /invites/{g} {
+        allow get, list, delete: if canUse(acct);
+        allow create: if signedIn() && request.resource.data.keys().hasOnly(['g', 'name', 'from', 'fromAcct', 'at'])
+          && request.resource.data.g == g && canUse(request.resource.data.fromAcct) && memberOf(g, request.resource.data.fromAcct)
+          && request.resource.data.from == get(groupPath(g)).data.members[request.resource.data.fromAcct]
+          && request.resource.data.name == get(groupPath(g)).data.name
+          && request.resource.data.at == request.time && exists(/databases/$(db)/documents/accounts/$(acct));
       }
     }
     // Which symbols anyone follows, so the data job knows what to fetch. Holds no account information.
@@ -65,6 +109,8 @@ service cloud.firestore {
     }
     match /usernames/{name} {
       allow get: if signedIn();
+      // finding players by the start of their username, a few at a time
+      allow list: if signedIn() && request.query.limit <= 20;
       allow create: if signedIn() && name.matches('^[a-z0-9_.]{3,20}$') && request.resource.data.keys().hasOnly(['acct', 'at'])
         && canUse(request.resource.data.acct)
         && getAfter(/databases/$(db)/documents/accounts/$(request.resource.data.acct)).data.username == name;
@@ -75,6 +121,83 @@ service cloud.firestore {
         && getAfter(/databases/$(db)/documents/accounts/$(request.auth.uid)).data.username == name;
       allow delete: if signedIn() && canUse(resource.data.acct) && (!existsAfter(/databases/$(db)/documents/accounts/$(resource.data.acct))
         || getAfter(/databases/$(db)/documents/accounts/$(resource.data.acct)).data.get('username', null) != name);
+    }
+    // Player cards and the public leaderboard: written by the data job only. A card shows a username, score, band,
+    // follower count and record, never a price call.
+    match /players/{acct} {
+      allow get, list: if signedIn();
+    }
+    match /boards/{id} {
+      allow get: if signedIn();
+    }
+    // Groups: the long random id is the invite (like shared lists). Members join and leave themselves; the owner
+    // (who made it) can rename it and remove members, and hands it to another member when leaving. The monthly
+    // points table is written by the data job.
+    match /groups/{g} {
+      function added() { return request.resource.data.members.keys().removeAll(resource.data.members.keys()); }
+      function removed() { return resource.data.members.keys().removeAll(request.resource.data.members.keys()); }
+      function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+      function nameOk() { return request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 24; }
+      allow get: if signedIn();
+      allow create: if signedIn() && g.size() >= 20 && nameOk()
+        && request.resource.data.keys().hasOnly(['name', 'owner', 'ownerName', 'members', 'createdAt'])
+        && canUse(request.resource.data.owner)
+        && request.resource.data.ownerName is string && request.resource.data.ownerName == nameOf(request.resource.data.owner)
+        && request.resource.data.members.keys().hasOnly([request.resource.data.owner]) && request.resource.data.members.size() == 1
+        && request.resource.data.members[request.resource.data.owner] == request.resource.data.ownerName
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedIn() && (
+        // someone joins: adds only themselves, under their own username, up to 20 players
+        (changed().hasOnly(['members']) && added().size() == 1 && removed().size() == 0 && canUse(added()[0])
+          && request.resource.data.members[added()[0]] == nameOf(added()[0]) && request.resource.data.members.size() <= 20)
+        // a member leaves, or the owner removes a member
+        || (changed().hasOnly(['members']) && removed().size() == 1 && added().size() == 0 && removed()[0] != resource.data.owner
+          && (canUse(removed()[0]) || canUse(resource.data.owner)))
+        // the owner leaves and hands the group to another member
+        || (changed().hasOnly(['members', 'owner', 'ownerName']) && removed().size() == 1 && added().size() == 0
+          && removed()[0] == resource.data.owner && canUse(resource.data.owner)
+          && request.resource.data.owner in request.resource.data.members
+          && request.resource.data.ownerName == request.resource.data.members[request.resource.data.owner])
+        // the owner renames it
+        || (changed().hasOnly(['name']) && canUse(resource.data.owner) && nameOk())
+      );
+      // the last member leaving deletes it
+      allow delete: if signedIn() && resource.data.members.size() == 1 && canUse(resource.data.members.keys()[0]);
+
+      // A challenge: one coin, one period, one end time for everyone. Starting one is making the first pick. Members
+      // add their own pick until picks close; prices stay in each player's own picks until the data job scores them.
+      match /challenges/{c} {
+        function changedC() { return request.resource.data.diff(resource.data).affectedKeys(); }
+        function newPicks() { return request.resource.data.picked.keys().removeAll(resource.data.picked.keys()); }
+        allow read: if signedIn();
+        allow create: if signedIn() && c.size() >= 20
+          && request.resource.data.keys().hasOnly(['coin', 't', 'horizon', 'by', 'byName', 'at', 'joinUntil', 'endAt', 'picked', 'status'])
+          && canUse(request.resource.data.by) && memberOf(g, request.resource.data.by)
+          && request.resource.data.byName == get(groupPath(g)).data.members[request.resource.data.by]
+          && request.resource.data.horizon in ['1h', '1d', '1y']
+          && request.resource.data.t is string && request.resource.data.coin == 'CRYPTO:' + request.resource.data.t
+          && request.resource.data.status == 'open'
+          && request.resource.data.at is timestamp
+          && request.resource.data.at > request.time - duration.value(10, 'm') && request.resource.data.at < request.time + duration.value(10, 'm')
+          && request.resource.data.joinUntil == request.resource.data.at + duration.value(pickMins(request.resource.data.horizon), 'm')
+          && request.resource.data.endAt == request.resource.data.at + duration.value(lenMins(request.resource.data.horizon), 'm')
+          && request.resource.data.picked.keys().hasOnly([request.resource.data.by]) && request.resource.data.picked.size() == 1
+          && request.resource.data.picked[request.resource.data.by] == request.resource.data.byName
+          && existsAfter(/databases/$(db)/documents/accounts/$(request.resource.data.by)/picks/$(c));
+        allow update: if signedIn() && (
+          // a member picks: adds only themselves to the picked names, while picks are open, with their pick saved
+          (changedC().hasOnly(['picked']) && request.time < resource.data.joinUntil && newPicks().size() == 1
+            && resource.data.picked.keys().removeAll(request.resource.data.picked.keys()).size() == 0
+            && canUse(newPicks()[0]) && memberOf(g, newPicks()[0])
+            && request.resource.data.picked[newPicks()[0]] == get(groupPath(g)).data.members[newPicks()[0]]
+            && existsAfter(/databases/$(db)/documents/accounts/$(newPicks()[0])/picks/$(c)))
+          // a member reacts to the results (one of four words), changing only their own reaction
+          || (changedC().hasOnly(['rx', 'rxBy']) && resource.data.status == 'done'
+            && canUse(request.resource.data.rxBy) && memberOf(g, request.resource.data.rxBy)
+            && request.resource.data.rx.diff(resource.data.get('rx', {})).affectedKeys().hasOnly([request.resource.data.rxBy])
+            && request.resource.data.rx[request.resource.data.rxBy] in ['nice', 'close', 'unlucky', 'bold'])
+        );
+      }
     }
     // Feedback on any part of the app: anyone signed in can add a note (never read others'); admins read and mark
     // them done or declined. No personal details are stored, only the sign-in id and where in the app it was left.

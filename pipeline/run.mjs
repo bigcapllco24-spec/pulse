@@ -3,6 +3,7 @@
 // 2. Writes data/candles.json (coins, from Kraken) and data/news.json (GDELT, outlet policy, story matching).
 // 3. Checks every account's rules on the latest bar, stores alerts and sends push notifications.
 // 4. Prediction game: locks start prices, scores predictions that are due and updates profile scores.
+// 5. Player cards and the public leaderboard (players/, boards/public), and a tidy-up of groups.
 // Usage: node pipeline/run.mjs web/data
 // Env: FIREBASE_SERVICE_ACCOUNT (JSON; without it only starter symbols are refreshed and no alerts are sent),
 //      COINGECKO_DEMO_KEY (optional), SITE_URL (for alert links), MAX_NEWS_SYMBOLS (default 150)
@@ -12,6 +13,7 @@ import { serviceAccount, firestore, sendPush } from "./lib/google.mjs";
 import { fetchCrypto } from "./lib/crypto.mjs";
 import { fetchNews } from "./lib/news.mjs";
 import { settlePredictions } from "./lib/predictions.mjs";
+import { publishPlayers, tidyGroups } from "./lib/players.mjs";
 import { compute, ruleMet, METRICS, OPS, fmt } from "../web/js/indicators.js";
 
 const outDir = process.argv[2] || "web/data";
@@ -42,7 +44,9 @@ async function main() {
 
   if (db) {
     const accounts = await checkRules(sa, db, series);
-    await settlePredictions(db, accounts, { log });
+    const { results } = await settlePredictions(db, accounts, { log });
+    await publishPlayers(db, accounts, results, { log });
+    await tidyGroups(db, accounts, { log });
   }
 }
 

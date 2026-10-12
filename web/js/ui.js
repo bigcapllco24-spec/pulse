@@ -90,4 +90,5 @@ if (window.visualViewport) {
   vv.addEventListener("resize", fit); vv.addEventListener("scroll", fit);
 }
 
-export const haptic = () => { try { navigator.vibrate?.(6); } catch {} };
+// A short buzz where the phone supports it (Android browsers; iPhone browsers have no vibration for web pages).
+export const haptic = (pattern = 6) => { try { navigator.vibrate?.(pattern); } catch {} };

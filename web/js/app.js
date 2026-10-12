@@ -2,6 +2,8 @@
 // or its details (finger moves left). The feed loops through the watchlist with a "caught up" card between rounds.
 import { CONFIG } from "../config.js";
 import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists, settleDemoPredictions } from "./store.js";
+import { initSocial, settleDemoChallenges } from "./social.js";
+import { initPlay, renderPlay, openPredictSheet, openLink, badge, openAvatarSheet } from "./play.js";
 import { krakenRows } from "./predict.js";
 import { loadSymbols, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
@@ -16,7 +18,7 @@ import { initFeedback } from "./feedback.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz, cancelPendingHold } from "./interact.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, krakenBars, INTRA, intraState, dailyOf, RANGE_LABEL } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, toast, haptic, openSheet, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, openPredictSheet, nameGate, checkPanelFit, initDashSwipe } from "./pages.js";
+import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, nameGate, checkPanelFit } from "./pages.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
 
@@ -421,7 +423,7 @@ function renderDetails(c, it) {
   pane.innerHTML = html + `</div>`;
   pane.querySelectorAll("[data-how]").forEach((bt) => (bt.onclick = () => { const p = bt.closest("section").querySelector(".how"); p.hidden = !p.hidden; bt.setAttribute("aria-expanded", String(!p.hidden)); }));
   pane.querySelectorAll("[data-ind]").forEach((bt) => (bt.onclick = () => openLearn(bt.dataset.ind, c._v)));
-  pane.querySelector("[data-addrule]")?.addEventListener("click", () => { location.hash = ""; showTab("profile", "rules", s.key); });
+  pane.querySelector("[data-addrule]")?.addEventListener("click", () => { location.hash = ""; APP.backTo = "feed"; showTab("profile", "rules", s.key); });
   pane.querySelectorAll("[data-save]").forEach((bt) => (bt.onclick = () => openListsFor(s)));
   const mb = pane.querySelector("[data-movebox]");
   mb?.querySelectorAll("[data-gonews]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); c._go(PANE.news); }));
@@ -462,7 +464,7 @@ function catchupHtml() {
     facts.push(`<div class="fact"><span class="ic acc">${fresh.length}</span><div><b>${fresh.length} new ${fresh.length === 1 ? "story" : "stories"}</b> since you last looked. Latest: “${esc(top.title.slice(0, 80))}${top.title.length > 80 ? "…" : ""}”</div></div>`);
   }
   const unread = store.alerts.filter((a) => !a.read).length;
-  if (unread) facts.push(`<div class="fact"><span class="ic acc">!</span><div><b>${unread} alert${unread === 1 ? "" : "s"}</b> waiting. See Profile → Alerts.</div></div>`);
+  if (unread) facts.push(`<div class="fact"><span class="ic acc">!</span><div><b>${unread} alert${unread === 1 ? "" : "s"}</b> waiting. See Coins → Alerts.</div></div>`);
   const today = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
   if (!m9 && APP.syms.length) loadSince9(ref);
   return `<div class="special" data-recap><div class="label">Daily recap · ${esc(today)}</div>
@@ -606,21 +608,28 @@ export function redrawCards(key) {
   APP.needsRebuild = true;
 }
 let dashT = 0;
-document.addEventListener("pulse-intra", (e) => { redrawCards(e.detail); if (APP.tab === "dash") { clearTimeout(dashT); dashT = setTimeout(() => { const pg = $("dash").parentElement, y = pg.scrollTop; renderDash(); pg.scrollTop = y; }, 300); } });
+// new intraday prices: the open cards redraw, and Coins or Predict (prices, "now x% away") once things settle
+document.addEventListener("pulse-intra", (e) => { redrawCards(e.detail); if (APP.tab === "dash" || APP.tab === "play") { clearTimeout(dashT); dashT = setTimeout(() => keepScroll(APP.tab), 300); } });
+const keepScroll = (tab) => { const el = $(tab === "dash" ? "dash" : "play"), pg = el.parentElement, y = pg.scrollTop; (tab === "dash" ? renderDash : renderPlay)(); pg.scrollTop = y; };
 // turning the phone changes how many panels fit, so cards redraw once the rotation settles
 let rzT = 0, lastFit = maxPanels();
 addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { if (maxPanels() !== lastFit) { lastFit = maxPanels(); redrawCards(); checkPanelFit(() => redrawCards()); } }, 250); });
 
 // ---------- tabs and refresh
+// Tabs: Coins ("dash"), Feed and Predict ("play"). "profile" is the settings pages, opened from the avatar sheet
+// on Predict (or from Coins for alerts); the tab bar keeps showing where they were opened from.
 export function showTab(tab, sub, arg) {
+  if (tab === "profile" && !sub) { tab = "play"; setTimeout(openAvatarSheet, 0); }
   APP.tab = tab;
-  $("sFeed").hidden = tab !== "feed"; $("sDash").hidden = tab !== "dash"; $("sProfile").hidden = tab !== "profile";
-  document.querySelectorAll(".tabbar button").forEach((b) => b.setAttribute("aria-current", b.dataset.tab === tab ? "page" : "false"));
+  $("sFeed").hidden = tab !== "feed"; $("sDash").hidden = tab !== "dash"; $("sPlay").hidden = tab !== "play"; $("sProfile").hidden = tab !== "profile";
+  const lit = tab === "profile" ? APP.backTo || "play" : tab;
+  document.querySelectorAll(".tabbar button").forEach((b) => b.setAttribute("aria-current", b.dataset.tab === lit ? "page" : "false"));
   if (tab === "dash") { renderDash(); setTimeout(() => APP.tab === "dash" && startTour("dash"), 350); }
-  if (tab === "profile") { renderProfile(sub, arg); if (!sub) setTimeout(() => APP.tab === "profile" && startTour("profile"), 350); }
+  if (tab === "play") { renderPlay(); setTimeout(() => APP.tab === "play" && startTour("play"), 350); }
+  if (tab === "profile") renderProfile(sub, arg);
   if (tab === "feed" && APP.needsRebuild) { APP.needsRebuild = false; buildFeed({ keepKey: APP.seq[APP.active]?.sym?.key }); }
 }
-document.querySelectorAll(".tabbar button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+document.querySelectorAll(".tabbar button").forEach((b) => (b.onclick = () => { APP.backTo = null; showTab(b.dataset.tab); }));
 $("addBtn").onclick = () => openAddSheet();
 $("switcher").onclick = () => openSwitcher();
 $("status").onclick = () => doRefresh(true);
@@ -642,7 +651,7 @@ export async function doRefresh(manual) {
   await refresh(allSyms(), () => { if (APP.built && !manual) refill(); });
   lastRefresh = Date.now();
   setStatus();
-  if (store.mode === "demo") { demoRules(); settleDemoPredictions(krakenRows).catch(() => {}); } // the data job does both for live accounts
+  if (store.mode === "demo") { demoRules(); settleDemoPredictions(krakenRows).catch(() => {}); settleDemoChallenges(krakenRows).catch(() => {}); } // the data jobs do these for live accounts
   const keep = APP.seq[APP.active]?.sym?.key;
   if (manual || !APP.built) buildFeed({ keepKey: keep }); else refill();
   if (manual) toast("Up to date.");
@@ -698,17 +707,22 @@ export function applyTheme() {
   if (ch && !ch.v2) save({ settings: { ...store.data.settings, chart: { ...ch, type: "candles", mas: [], lower: "RSI,MACD", v2: 1, v4: 1 } } }).catch(() => {});
   applyTheme();
   initPages();
-  initDashSwipe();
+  initSocial();
+  initPlay();
   store.on((what) => {
     $("alertDot").hidden = !store.alerts.some((a) => !a.read);
-    if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") renderDash(); if (store.ready && !store.data?.username) nameGate(); }
-    if (what === "preds") APP.needsRebuild = true; // the Predict chips show open counts
-    // the dashboard's switch and Predictions half follow new and scored predictions
-    if (what === "preds" && APP.tab === "dash") { const pg = $("dash").parentElement, y = pg.scrollTop; renderDash(); pg.scrollTop = y; }
+    if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") keepScroll("dash"); if (store.ready && !store.data?.username) nameGate(); }
+    if (what === "alerts" && APP.tab === "dash") keepScroll("dash");
+    if (what === "preds") APP.needsRebuild = true; // the Predict chips on cards show open counts
+    // the Predict tab follows new and scored predictions, and your name or score changing
+    if ((what === "preds" || what === "account") && APP.tab === "play" && $("sheet").hidden) keepScroll("play");
+    badge();
   });
   $("alertDot").hidden = !store.alerts.some((a) => !a.read);
   buildFeed();
   const named = new Promise((r) => nameGate(r)); // a new account picks its username first
+  if (/^#\/(g\/|predict)/.test(location.hash)) named.then(() => openLink()); // a group's invite link, or a push about a challenge
+  addEventListener("hashchange", () => { if (/^#\/(g\/|predict)/.test(location.hash)) named.then(() => openLink()); });
   await doRefresh(false);
   await named;
   setTimeout(() => APP.tab === "feed" && startTour("feed"), 500);

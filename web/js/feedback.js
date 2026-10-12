@@ -16,14 +16,14 @@ function describeTarget(el) {
   const txt = (n) => (n?.getAttribute?.("aria-label") || n?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
   const card = t(".card"), it = card ? APP.seq[+card.dataset.i] : null, coin = it?.sym?.t || null;
   const view = card?.dataset.view || "main";
-  const screen = t("#full") ? "Full-screen chart" : t(".sheet") ? "Sheet" : t("#sDash") ? "Dashboard" : t("#sProfile") ? "Profile" : t(".tabbar") ? "Tab bar" : t(".topbar") ? "Top bar" : "Feed";
+  const screen = t("#full") ? "Full-screen chart" : t(".sheet") ? "Sheet" : t("#sDash") ? "Coins" : t("#sPlay") ? "Predict" : t("#sProfile") ? "Settings" : t(".tabbar") ? "Tab bar" : t(".topbar") ? "Top bar" : "Feed";
   const parts = [
     [".lower[data-learn]", (n) => `${n.dataset.learn} panel`], [".oli", (n) => `${txt(n).split(" ")[0]} line`], [".lvtag", () => "Support/resistance label"],
     [".scrubcard", () => "Hold-to-read card"], ["[data-fx]", () => "ƒx (indicators) button"], ["[data-lv]", () => "S/R button"], ["[data-tf]", () => "Time range chip"], [".head .chg", () => "Change % next to the coin name"],
     ["[data-pred]", () => "Predict button"], ["[data-full]", () => "Full-screen button"], [".chartbox", () => "Price chart"], [".story", (n) => `News story: ${txt(n.querySelector(".h"))}`],
     [".nsec", (n) => `News section: ${txt(n)}`], [".pev", () => "Price event"], [".dsec", (n) => `Details · ${txt(n.querySelector("h3"))}`], [".reading", (n) => `Reading: ${txt(n.querySelector(".k"))}`],
     [".srow", (n) => `Indicator: ${txt(n.querySelector(".t"))}`], [".sset", (n) => `Quick set: ${txt(n.querySelector("b"))}`], [".choice", (n) => `Option: ${txt(n.querySelector("b"))}`],
-    [".gsec", (n) => `Guide · ${txt(n.querySelector("h3"))}`], [".recap div", (n) => `Recap tile: ${txt(n.querySelector("span"))}`], [".special", () => "Recap card"], [".pscard", () => "Prediction score card"],
+    [".gsec", (n) => `Guide · ${txt(n.querySelector("h3"))}`], [".recap div", (n) => `Recap tile: ${txt(n.querySelector("span"))}`], [".special", () => "Recap card"], [".pl-head", () => "Prediction score"],
     [".row", (n) => `Row: ${txt(n.querySelector(".t") || n)}`], [".head", () => "Coin header"], [".tabbar button", (n) => `Tab: ${txt(n)}`], ["#switcher", () => "Watchlist switcher"], ["#status", () => "Updated / refresh"],
     ["h1, h2, h3", (n) => `Heading: ${txt(n)}`], ["button", (n) => `Button: ${txt(n)}`],
   ];

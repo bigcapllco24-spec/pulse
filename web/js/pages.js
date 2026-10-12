@@ -1,28 +1,28 @@
-// Dashboard, Profile, sheets (add stocks, watchlists, switcher) and onboarding.
+// Coins (watchlists and alerts), the settings pages opened from the avatar sheet, sheets (add coins, watchlists,
+// switcher, chart, indicators, lines) and the username step. The Predict tab and people live in play.js.
 import { CONFIG } from "../config.js";
-import { store, save, chartSettings, setUsername, loginUsername, checkUsername, usernameFree, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, makePrediction, myScore, isAdmin, listFeedback, setFeedbackStatus, myUid } from "./store.js";
-import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
-import { HORIZONS, BANDS, CHANCE, SCORE_MIN, SCORE_MAX, PROVISIONAL_UNDER, checkPrediction, canPredict, allowedRange, dailyVol, targetTime, closenessText } from "./score.js";
+import { store, save, chartSettings, setUsername, loginUsername, checkUsername, usernameFree, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, listFeedback, setFeedbackStatus, myUid } from "./store.js";
+import { leaveAllGroups, deleteMySocial } from "./social.js";
 import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
 import { OVERLAYS, PANELS, MAX_OVERLAYS, maxPanels, SETS, picks } from "./studies.js";
 import { D, view, storiesFor, RANGE_LABEL, resolveInterval, dailyOf } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, haptic, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
-import { startTour, resetTours } from "./coach.js";
 import { openLearn } from "./interact.js";
-import { setFeedbackMode } from "./feedback.js";
+import { startTour } from "./coach.js";
 import { APP, buildFeed, showTab, currentSyms, applyTheme, doRefresh } from "./app.js";
+import { openAvatarSheet, backFromProfile } from "./play.js";
 
 const symDoc = (r) => ({ key: r.key, t: r.t, n: r.n, m: r.m, ty: r.ty });
 
 export function initPages() {
   window.addEventListener("hashchange", () => {
     const m = location.hash.match(/^#\/join\/([a-z0-9]+)/);
-    if (m) { showTab("profile"); joinFlow(m[1]); }
+    if (m) { showTab("profile", "lists"); joinFlow(m[1]); }
   });
   const m = location.hash.match(/^#\/join\/([a-z0-9]+)/);
-  if (m) setTimeout(() => { showTab("profile"); joinFlow(m[1]); }, 300);
+  if (m) setTimeout(() => { showTab("profile", "lists"); joinFlow(m[1]); }, 300);
 }
 
 // ---------- add-stock sheet: search, then choose watchlists
@@ -149,35 +149,11 @@ export function openSwitcher() {
   }, () => buildFeed());
 }
 
-// ---------- dashboard: Predictions first (score, quick predict, open and scored calls), then Coins (your watchlists;
-// picking one also sets what the feed shows). A switch at the top, or a sideways swipe.
+// ---------- Coins: your watchlists (picking one also sets what the feed shows), then your alerts.
 export function renderDash() {
-  const el = $("dash"), half = APP.dashView === "coins" ? "coins" : "preds"; // predictions first; coins a tap or swipe away
-  const syms = currentSyms(), cs = chartSettings();
-  const moveOf = (s) => { const rv = view_(s, cs) && view(s.key, chartSettings(s.key)); return rv ? rv.windowChange : view_(s, cs)?.daily.now.changePct; };
-  const upN = syms.filter((s) => (moveOf(s) ?? 0) > 0).length, haveN = syms.filter((s) => view_(s, cs)).length;
-  const sc = myScore(), open = store.preds.length;
-  const tab = (k, title, meta) => `<button data-dv="${k}" aria-pressed="${half === k}"><b>${title}</b><span>${meta}</span></button>`;
-  el.innerHTML = `<h1>Dashboard</h1>
-    <div class="dswitch" role="tablist" aria-label="Dashboard">${tab("preds", "Predictions", `${sc?.score != null ? `Score ${sc.score}` : "No score yet"}${open ? ` · ${open} open` : ""}`)}${tab("coins", "Coins", haveN ? `${upN} of ${haveN} up · ${esc(cs.range)}` : `${syms.length} coins`)}</div>
-    <div class="dview" data-view="${half}"></div>`;
-  const body = el.querySelector(".dview");
-  if (half === "preds") predsView(body); else coinsView(body);
-  el.querySelectorAll("[data-dv]").forEach((b) => (b.onclick = () => { if (APP.dashView !== b.dataset.dv) { APP.dashView = b.dataset.dv; haptic(); renderDash(); el.parentElement.scrollTop = 0; } }));
-}
-const view_ = (s, cs) => view(s.key, dailyOf(cs));
-// sideways swipe on the dashboard switches halves (rows that scroll sideways keep their own swipe)
-export function initDashSwipe() {
-  // touch events, not pointer ones: the page scrolls up and down, and the browser cancels pointers once it scrolls
-  const root = $("dash"); let st = null;
-  const go = (dx, dy, ms) => {
-    if (ms > 600 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    const next = dx < 0 ? "coins" : "preds";
-    if ((APP.dashView || "preds") !== next) { APP.dashView = next; haptic(); renderDash(); root.parentElement.scrollTop = 0; }
-  };
-  root.addEventListener("touchstart", (e) => { const t = e.touches[0]; st = e.touches.length > 1 || e.target.closest(".wchips, .pchips, .opts") ? null : { x: t.clientX, y: t.clientY, at: e.timeStamp }; }, { passive: true });
-  root.addEventListener("touchend", (e) => { if (!st) return; const t = e.changedTouches[0], s0 = st; st = null; go(t.clientX - s0.x, t.clientY - s0.y, e.timeStamp - s0.at); }, { passive: true });
-  root.addEventListener("touchcancel", () => (st = null), { passive: true });
+  const el = $("dash");
+  el.innerHTML = `<h1>Coins</h1><div class="dview"></div>`;
+  coinsView(el.querySelector(".dview"));
 }
 function coinsView(el) {
   const cs = chartSettings(), syms = currentSyms(), wl = watchlists();
@@ -205,6 +181,7 @@ function coinsView(el) {
     ${noData.length ? `<p class="hint">Waiting for prices: ${noData.map((s) => esc(s.t)).join(", ")}.</p>` : ""}
     ${!syms.length ? `<div class="empty">Nothing in this watchlist yet.</div>` : ""}
     <p class="hint" style="margin-top:12px">Choosing a watchlist here also sets what your feed shows.</p>
+    ${alertsHtml()}
     <p class="disclaimer">${esc(DISCLAIMER)}</p>`;
   const pick = async (id) => { APP.dashEdit = false; await save({ settings: { ...store.data.settings, list: id } }); APP.needsRebuild = true; renderDash(); };
   el.querySelectorAll("[data-l]").forEach((b) => (b.onclick = () => pick(b.dataset.l)));
@@ -219,56 +196,41 @@ function coinsView(el) {
   el.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => { await save({ watchlists: watchlists().map((x) => (x.id === w.id ? { ...x, syms: x.syms.filter((s) => s.key !== b.dataset.rm) } : x)) }); APP.needsRebuild = true; renderDash(); }));
   el.querySelectorAll("[data-s]").forEach((b) => (b.onclick = () => { APP.dashSort = b.dataset.s; renderDash(); }));
   el.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { showTab("feed"); buildFeed({ keepKey: b.dataset.open }); }));
+  wireAlerts(el);
+}
+// Alerts on the Coins tab: anything new that fired, then your rules with an on/off switch each.
+function alertsHtml() {
+  const fresh = store.alerts.filter((a) => !a.read).slice(0, 3), rules = store.data?.rules || [];
+  const label = (r) => `${r.sym === "*" ? "Any coin" : esc(r.sym.split(":")[1])}: ${esc(METRICS[r.metric]?.label || r.metric)} ${esc(OPS[r.op])} ${esc(r.value)}${esc(METRICS[r.metric]?.unit || "")}`;
+  return `<div class="secrow"><span class="label">Alerts</span><button class="linkbtn" id="dNewRule">New alert</button></div>
+    ${fresh.map((a) => `<div class="strip alertstrip"><i></i><span class="m"><b>${esc(a.text)}</b><span class="s">${esc(ago(a.at))}</span></span><button class="btn ghost sm" data-aread="${esc(a.id)}">Dismiss</button></div>`).join("")}
+    ${rules.length ? `<div class="hl">${rules.slice(0, 5).map((r) => `<div class="row"><span class="main"><span class="t">${label(r)}</span><span class="s">${esc(r.note || (r.lastFired ? `last met ${fmtDay(r.lastFired)}` : "Checked after every refresh"))}</span></span><label class="switch"><input type="checkbox" data-ron="${esc(r.id)}" ${r.active !== false ? "checked" : ""} aria-label="Rule on"><span></span></label></div>`).join("")}</div>`
+      : `<p class="hint">Hold any chart in the feed and let go to set an alert at that price, or add a rule on any reading.</p>`}
+    <div class="opts" style="margin-top:10px">${rules.length ? `<button class="opt" id="dRules">All rules · ${rules.length}</button>` : ""}<button class="opt" id="dAlerts">Alert history${store.alerts.length ? ` · ${store.alerts.length}` : ""}</button></div>`;
+}
+function wireAlerts(el) {
+  const page = (sub) => { APP.backTo = "dash"; showTab("profile", sub); };
+  el.querySelector("#dNewRule").onclick = () => page("rules");
+  el.querySelector("#dRules")?.addEventListener("click", () => page("rules"));
+  el.querySelector("#dAlerts").onclick = () => page("alerts");
+  el.querySelectorAll("[data-aread]").forEach((b) => (b.onclick = async () => { await markAlertsRead([b.dataset.aread]); renderDash(); }));
+  el.querySelectorAll("[data-ron]").forEach((c) => (c.onchange = () => save({ rules: (store.data.rules || []).map((r) => (r.id === c.dataset.ron ? { ...r, active: c.checked } : r)) })));
 }
 
-// ---------- profile
-// Profile: a header with the username, then settings grouped by what people come here to do.
-const ICON = {
-  chart: '<path d="M3 17l5-6 4 4 4-7 5 9"/>', indicators: '<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>', rules: '<path d="M12 3a6 6 0 016 6c0 5 2 6 2 6H4s2-1 2-6a6 6 0 016-6zM10 19a2 2 0 004 0"/>',
-  alerts: '<path d="M4 4h16v12H5l-1 4z"/>', lists: '<circle cx="8" cy="9" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M2 20c1-4 4-5 6-5s5 1 6 5M14 20c.5-2.5 2-3.5 3.5-3.5S21 17.5 22 20"/>',
-  account: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>', appearance: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z"/>',
-  tour: '<path d="M5 3l14 9-14 9z"/>', feedback: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>', inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 2h6l1-2h5"/>', legal: '<path d="M7 3h8l4 4v14H7zM15 3v4h4M10 12h6M10 16h6"/>',
-  predictions: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.6"/>',
-};
-const GROUPS = [
-  ["Charts & learning", [["chart", "Chart style", "Time range, candles and lines"]]],
-  ["Alerts", [["rules", "Alert rules", "Get told when your levels are hit"], ["alerts", "Alerts", "Everything that has fired"]]],
-  ["Sharing", [["lists", "Shared lists", "Follow a list with friends"]]],
-  ["Account & privacy", [["account", "Account", "Username, delete your data"], ["appearance", "Appearance", "Dark, light or match phone"]]],
-  ["Help", [["feedback", "Give feedback", "Hold anything for 3 seconds, or switch on tap-to-comment"], ["tour", "Show the app tour again", "Swipes, charts and watchlists in a minute"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]]],
-];
-let admin = null; // whether this sign-in may read feedback (checked once, after connecting)
-const icon = (k) => `<svg class="pic" viewBox="0 0 24 24" aria-hidden="true">${ICON[k] || ""}</svg>`;
-export function renderProfile(sub, arg) {
-  const el = $("profile");
-  APP.profileSub = sub || null;
-  const back = `<button class="btn ghost sm" id="pBack" style="padding-left:0">‹ Profile</button>`;
-  if (!sub) {
-    const unread = store.alerts.filter((a) => !a.read).length;
-    const u = store.data?.username, left = usernameChangesLeft(), nW = watchlists().length, nC = allSyms().length;
-    el.innerHTML = `<div class="phead">
-        <div class="pav" aria-hidden="true">${u ? esc(u[0].toUpperCase()) : `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>`}</div>
-        <div class="pwho"><b>${u ? "@" + esc(u) : "Your profile"}</b><span>${nC} coins · ${nW} watchlist${nW === 1 ? "" : "s"}${store.mode === "demo" ? " · saved on this phone" : ""}</span></div>
-        ${u ? `<button class="btn sm" id="pName">Change</button>` : ""}
-      </div>
-      ${u ? `<p class="hint pleft">${left > 0 ? `${left} username change${left === 1 ? "" : "s"} left` : "No username changes left"}</p>` : ""}
 
-      ${(admin ? [...GROUPS, ["Admin", [["inbox", "Feedback inbox", "Everyone's notes, newest first"]]]] : GROUPS).map(([g, rows]) => `<h2 class="pg">${g}</h2><div class="list pgl">${rows.map(([k, l, d]) => `<button class="row" data-p="${k}">${icon(k)}<span class="main"><span class="t">${l}${k === "alerts" && unread ? ` <span class="pill confirmed">${unread} new</span>` : ""}</span><span class="s">${k === "predictions" ? esc(predCounts()) : d}</span></span><span class="chev">›</span></button>`).join("")}</div>`).join("")}
-      <p class="disclaimer">${esc(DISCLAIMER)}</p>`;
-    el.querySelector("#pName")?.addEventListener("click", () => openUsernameSheet());
-    if (admin === null) isAdmin().then((a) => { admin = a; if (a && APP.tab === "profile" && !APP.profileSub) renderProfile(); });
-    el.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => {
-      if (b.dataset.p === "tour") { resetTours(); showTab("feed"); setTimeout(() => startTour("feed"), 300); return; }
-      if (b.dataset.p === "feedback") { setFeedbackMode(true); showTab("feed"); return; }
-      renderProfile(b.dataset.p);
-    }));
-    return;
-  }
-  const fn = { watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal, predictions: pPredictions, inbox: pInbox }[sub];
-  fn(el, back, arg);
-  el.querySelector("#pBack").onclick = () => renderProfile();
+
+// ---------- settings pages, opened from the avatar sheet on the Predict tab (or from Coins, for alerts and rules).
+// Each has a Back button to wherever it was opened from. With no page given, the avatar sheet opens instead.
+const PAGES = () => ({ watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal, inbox: pInbox });
+export function renderProfile(sub, arg) {
+  const el = $("profile"), fn = PAGES()[sub];
+  if (!fn) { el.innerHTML = ""; setTimeout(() => { showTab("play"); if (sub !== "predictions") openAvatarSheet(); }, 0); return; }
+  APP.profileSub = sub;
+  fn(el, `<button class="btn ghost sm" id="pBack" style="padding-left:0">‹ Back</button>`, arg);
+  el.querySelector("#pBack").onclick = () => backFromProfile();
   el.parentElement.scrollTop = 0;
 }
+const rePage = () => renderProfile(APP.profileSub);
 
 // Username sheet: live checks, a clear count of changes left, and a warning against real names.
 export function openUsernameSheet(onDone, reason) {
@@ -277,7 +239,7 @@ export function openUsernameSheet(onDone, reason) {
   openSheet(cur ? "Change username" : "Choose a username", `
     ${reason ? `<p>${esc(reason)}</p>` : ""}<label class="field"><span>Username</span><div class="uname"><span>@</span><input id="uIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" value="${esc(cur)}" placeholder="e.g. chartwatcher"></div></label>
     <p class="hint" id="uMsg">3–20 letters, numbers, dots or underscores.</p>
-    <div class="notice">Your username is public in shared lists. Don't use your real name, email or phone number.</div>
+    <div class="notice">Your username is public: other players see it with your score. Don't use your real name, email or phone number.</div>
     <p class="hint">${cur ? `Changing it uses 1 of your ${left} remaining change${left === 1 ? "" : "s"}.` : `After choosing one you can change it ${USERNAME_CHANGES} more times.`}</p>
     <button class="btn primary block" id="uSave" disabled>${cur ? "Change username" : "Save username"}</button>`, (body) => {
     const inp = body.querySelector("#uIn"), msg = body.querySelector("#uMsg"), btn = body.querySelector("#uSave");
@@ -285,7 +247,7 @@ export function openUsernameSheet(onDone, reason) {
     inp.oninput = check; check(); setTimeout(() => inp.focus(), 250);
     btn.onclick = async () => {
       btn.disabled = true; btn.textContent = "Saving…";
-      try { const n = await setUsername(inp.value); closeSheet(); toast(`You're @${n}.`); if (onDone) onDone(); else renderProfile(); }
+      try { const n = await setUsername(inp.value); closeSheet(); toast(`You're @${n}.`); if (onDone) onDone(); else if (APP.tab === "profile") rePage(); }
       catch (e) { msg.textContent = e.message || "Couldn't save. Try again."; msg.className = "hint bad"; btn.disabled = false; btn.textContent = cur ? "Change username" : "Save username"; }
     };
   });
@@ -298,7 +260,7 @@ function pWatchlists(el, back) {
       ${(w.syms || []).length ? `<div class="list" style="margin-top:8px;background:var(--surface2)">${w.syms.map((s, i) => `<div class="row"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">${esc(s.n)}</span></span>
         <button class="btn ghost sm" data-up="${esc(w.id)}|${esc(s.key)}" ${i === 0 ? "disabled" : ""} aria-label="Move up">↑</button><button class="btn ghost sm" data-dn="${esc(w.id)}|${esc(s.key)}" ${i === w.syms.length - 1 ? "disabled" : ""} aria-label="Move down">↓</button><button class="btn ghost sm" data-rm="${esc(w.id)}|${esc(s.key)}" aria-label="Remove">✕</button></div>`).join("")}</div>` : `<p class="hint">Empty.</p>`}</div>`).join("")}
     <button class="btn primary block" id="wAdd">Add coins</button><button class="btn block" id="wNew" style="margin-top:8px">New watchlist</button>`;
-  const re = () => pWatchlists(el, back) || (el.querySelector("#pBack").onclick = () => renderProfile());
+  const re = () => pWatchlists(el, back) || (el.querySelector("#pBack").onclick = () => backFromProfile());
   el.querySelector("#wAdd").onclick = () => openAddSheet();
   el.querySelector("#wNew").onclick = async () => { const n = prompt("Name the watchlist", "Semiconductors"); if (n) { await newWatchlist(n); re(); } };
   el.querySelectorAll("[data-ren]").forEach((b) => (b.onclick = async () => { const w = wl.find((x) => x.id === b.dataset.ren); const n = prompt("Rename", w.name); if (n) { await renameWatchlist(w.id, n); re(); } }));
@@ -309,7 +271,7 @@ function pWatchlists(el, back) {
   el.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => { const [w, k] = pair(b, "rm"); await save({ watchlists: watchlists().map((x) => (x.id === w ? { ...x, syms: x.syms.filter((s) => s.key !== k) } : x)) }); re(); }));
 }
 
-// Chart options, shared by Profile → Chart style (everyone's default) and the chip on each feed card.
+// Chart options, shared by Settings → Chart style (everyone's default) and the chip on each feed card.
 const RANGE_OPTS = [["1D", "1D"], ["1W", "1W"], ["1M", "1M"], ["3M", "3M"], ["6M", "6M"], ["1Y", "1Y"], ["2Y", "2Y"]];
 const CANDLE_OPTS = [["auto", "Auto"], ["1D", "Daily"], ["1W", "Weekly"]];
 const TYPE_OPTS = [["candles", "Candles"], ["line", "Line"], ["area", "Area"]];
@@ -331,7 +293,7 @@ function pChart(el, back) {
   el.innerHTML = `${back}<h1>Chart style</h1><p class="hint">Your default for every coin. To change one coin, tap the time chip on its card in the feed.</p>
     ${chartOptsHtml(c)}
     ${custom.length ? `<h2>Coins with their own chart</h2><p>${custom.map((k) => `<span class="pill">${esc(k.split(":")[1])}</span>`).join(" ")} <button class="btn ghost sm" id="cReset">Reset all to default</button></p>` : ""}`;
-  const re = () => { pChart(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
+  const re = () => { pChart(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
   const set = async ({ _pick, ...patch }) => { await save({ settings: { ...store.data.settings, ...(_pick ? { levelsPick: patch.levels } : {}), chart: { ...store.data.settings.chart, ...patch } } }); APP.needsRebuild = true; re(); };
   el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => (b.dataset.k === "levels" ? setLines(b.dataset.v).then(re) : set({ [b.dataset.k]: b.dataset.v }))));
   el.querySelector("#cReset")?.addEventListener("click", async () => { await save({ settings: { ...store.data.settings, chartBy: {} } }); APP.needsRebuild = true; re(); });
@@ -382,7 +344,7 @@ function pRules(el, back, preKey) {
       <div class="field"><label for="rNote">Note (optional)</label><input id="rNote" maxlength="80"></div><button class="btn primary block">Add rule</button></form>` : `<div class="empty">Add a coin to a watchlist to set rules.</div>`}
     <h2>Your rules</h2>${rules.length ? `<div class="list">${rules.map((r) => `<div class="row"><span class="main"><span class="t">${label(r)}</span><span class="s">${esc(r.note || "")}${r.lastFired ? ` · last met ${esc(fmtDay(r.lastFired))}` : ""}</span></span>
       <label class="switch"><input type="checkbox" data-on="${esc(r.id)}" ${r.active !== false ? "checked" : ""} aria-label="Rule on"><span></span></label><button class="btn ghost sm" data-del="${esc(r.id)}" aria-label="Delete">✕</button></div>`).join("")}</div>` : `<div class="empty">No rules yet.</div>`}`;
-  const re = () => { pRules(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
+  const re = () => { pRules(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
   el.querySelector("#rForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const value = parseFloat(el.querySelector("#rVal").value);
@@ -415,7 +377,7 @@ function pAlerts(el, back) {
   el.innerHTML = `${back}<h1>Alerts</h1><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn sm" id="aPush">Turn on push alerts</button>${a.some((x) => !x.read) ? `<button class="btn sm" id="aRead">Mark all read</button>` : ""}${a.length ? `<button class="btn ghost sm" id="aClear">Clear</button>` : ""}</div>
     ${a.length ? `<div class="list">${a.map((x) => `<div class="row"><span class="main"><span class="t" style="${x.read ? "font-weight:500" : ""}">${esc(x.text)}</span><span class="s">${esc(ago(x.at))}</span></span>${x.read ? "" : `<span class="pill confirmed">New</span>`}</div>`).join("")}</div>` : `<div class="empty">No alerts yet. Set a rule to get one.</div>`}
     <p class="disclaimer">Alerts state facts about your own levels. They are not signals or advice.</p>`;
-  const re = () => { pAlerts(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
+  const re = () => { pAlerts(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
   el.querySelector("#aRead")?.addEventListener("click", async () => { await markAlertsRead(a.filter((x) => !x.read).map((x) => x.id)); re(); });
   el.querySelector("#aClear")?.addEventListener("click", async () => { await clearAlerts(); re(); });
   el.querySelector("#aPush").onclick = async () => { try { await enablePush(); toast("Push alerts are on for this phone."); } catch (e) { toast(e.message, { ms: 5000 }); } };
@@ -429,7 +391,7 @@ function pLists(el, back) {
     ${lists.map((l) => `<div class="box"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h3>${esc(l.name)}</h3><span><button class="btn sm" data-copy="${esc(l.id)}">Invite link</button> <button class="btn ghost sm" data-leave="${esc(l.id)}">Leave</button></span></div>
       <p class="hint">Members: ${esc(Object.values(l.members || {}).join(", ") || "just you")}</p><p>${(l.symbols || []).map((s) => esc(s.t)).join(", ") || `<span class="hint">Empty</span>`}</p>
       ${(l.symbols || []).length ? `<button class="btn sm" data-copyto="${esc(l.id)}">Copy into a watchlist</button>` : ""}</div>`).join("")}`;
-  const re = () => { pLists(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); };
+  const re = () => { pLists(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
   el.querySelector("#lForm").onsubmit = (e) => {
     e.preventDefault();
     const name = el.querySelector("#lName").value.trim();
@@ -442,10 +404,9 @@ function pLists(el, back) {
 async function joinFlow(id) {
   history.replaceState(null, "", location.pathname);
   withUsername(async () => {
-    try { await joinList(id, store.data.username); toast("Joined. Find it in Profile → Shared lists."); renderProfile("lists"); } catch (e) { toast(e.message, { ms: 5000 }); }
+    try { await joinList(id, store.data.username); toast("Joined. Find it in Account → Shared lists."); renderProfile("lists"); } catch (e) { toast(e.message, { ms: 5000 }); }
   });
 }
-// A username is only asked for when it's needed: shared lists show members by username.
 // Every account starts by choosing its username: a full-screen first step that can't be skipped. It's the name
 // on the prediction game and in shared lists; it can be changed twice later. Closes by itself if the account
 // turns out to have one already (for example once the server copy loads).
@@ -456,7 +417,7 @@ export function nameGate(onDone) {
   el = document.createElement("div"); el.id = "gate"; el.className = "gate"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true");
   el.innerHTML = `<div class="gatein"><div class="label">Welcome to ${esc(CONFIG.appName)}</div>
     <h1>Pick your username</h1>
-    <p>It's how you show up in the prediction game and in shared lists. Already have one? Type it to log in.</p>
+    <p>It's your name in the prediction game: on your player card, in groups and on the leaderboard. Already have one? Type it to log in.</p>
     <label class="field"><span>Username</span><div class="uname"><span>@</span><input id="gIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="e.g. chartwatcher"></div></label>
     <p class="hint" id="gMsg">3–20 letters, numbers, dots or underscores.</p>
     <div class="notice">You can change it only <b>${USERNAME_CHANGES} times</b> after this, so choose one you'll keep. Don't use your real name, email or phone number.</div>
@@ -499,161 +460,29 @@ function pAccount(el, back) {
     <p class="hint">Uninstalling the app or clearing the browser's site data starts a fresh account. Moving to another phone will come later.</p>
     <h2>Username</h2><p class="dline">${n ? `@${esc(n)} · ${usernameChangesLeft()} change${usernameChangesLeft() === 1 ? "" : "s"} left` : "Not set yet."} <button class="btn ghost sm" id="aName">${n ? "Change" : "Add"}</button></p>
     <h2>Delete</h2><button class="btn danger" id="del">Delete my account and all its data</button>
-    <h2>Sign-in id</h2><p class="dline"><code class="uid">${esc(myUid() || "connecting…")}</code> <button class="btn ghost sm" id="aUid">Copy</button></p><p class="hint">Only needed if you help run the app: an admin adds this id to give access to the feedback inbox.</p>`;
+    <h2>Sign-in id</h2><p class="dline"><code class="uid">${esc(myUid() || "connecting…")}</code> <button class="btn ghost sm" id="aUid">Copy</button></p><p class="hint">Only needed if you help run the app: an admin adds this id to give access to the feedback inbox.</p>
+    <h2>App version</h2><p class="dline">${esc(CONFIG.appName)} ${esc(CONFIG.version)}</p>`;
   el.querySelector("#aUid").onclick = () => navigator.clipboard?.writeText(myUid() || "").then(() => toast("Copied."), () => toast("Couldn't copy."));
-  el.querySelector("#aName").onclick = () => openUsernameSheet(() => pAccount(el, back) || (el.querySelector("#pBack").onclick = () => renderProfile()));
-  el.querySelector("#del").onclick = async () => { if (confirm("Delete your account, watchlists, rules and alerts? This can't be undone.")) await deleteAccount(); };
+  el.querySelector("#aName").onclick = () => openUsernameSheet(() => pAccount(el, back) || (el.querySelector("#pBack").onclick = () => backFromProfile()));
+  el.querySelector("#del").onclick = async () => { if (confirm("Delete your account, watchlists, rules, alerts, predictions and groups? This can't be undone.")) await deleteAccount(leaveAllGroups, deleteMySocial); };
 }
 function pAppearance(el, back) {
   const t = store.data.settings?.theme || "dark";
   el.innerHTML = `${back}<h1>Appearance</h1><div class="opts">${[["dark", "Dark"], ["light", "Light"], ["auto", "Match phone"]].map(([k, l]) => `<button class="opt" data-t="${k}" aria-pressed="${t === k}">${l}</button>`).join("")}</div>`;
-  el.querySelectorAll("[data-t]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, theme: b.dataset.t } }); applyTheme(); pAppearance(el, back); el.querySelector("#pBack").onclick = () => renderProfile(); }));
+  el.querySelectorAll("[data-t]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, theme: b.dataset.t } }); applyTheme(); pAppearance(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); }));
 }
 function pLegal(el, back) {
   el.innerHTML = `${back}<h1>Legal and disclaimer</h1>
     <h2>Not investment advice</h2><p>${esc(DISCLAIMER)} Check facts and consult a registered adviser before investing.</p>
-    <h2>Prediction game</h2><p>Predicting a coin's price is a game for learning how markets move. There is no money, no prizes and nothing to buy. Your predictions are private: nobody else sees them, and the app never publishes price calls. A prediction or a score is not advice and says nothing about where prices will go.</p>
+    <h2>Prediction game</h2><p>Predicting a coin's price is a game for learning how markets move. There is no money, no prizes and nothing to buy. Your price calls are private and the app never publishes them. In a group you choose to play in, members see that you made a call and, once it is scored, how close it was and which way you called, never your price. Other players can see your username, score, band and follower count, and your rank if you join the public leaderboard. A prediction, a score or a rank is not advice and says nothing about where prices will go.</p>
     <h2>Fact tags and sorting</h2><p>Tags such as “Volume 2.1x usual” or “New 50-day high” state facts about the latest data. Sorting by move, news or RSI orders your own list by that fact. Neither is a signal or a ranking of investments.</p>
-    <h2>Privacy</h2><p>We don't ask for or store your name, email, phone number, location or contacts, and use no tracking or advertising cookies. We keep a random account ID for this app on this phone, the username you chose, your watchlists, chart style, rules and indicator choices, list nicknames and, if you turn on alerts, a push token. You can delete everything from Account.</p>
+    <h2>Privacy</h2><p>We don't ask for or store your name, email, phone number, location or contacts, and use no tracking or advertising cookies. We keep a random account ID for this app on this phone, the username you chose, your watchlists, chart style, rules and indicator choices, list nicknames, the players you follow (seen only by you), the groups you're in and, if you turn on alerts, a push token. You can delete everything from Account.</p>
+    <h2>App version</h2><p>${esc(CONFIG.appName)} ${esc(CONFIG.version)}</p>
     <h2>Data sources</h2><p>Coin prices from Kraken's public data, checked against CoinGecko. News found via the GDELT Project and linked to each publisher.</p>
     <h2>Age</h2><p>For people aged 18 and over.</p>
     <h2>Grievance contact</h2><p>${esc(CONFIG.companyName)} · <a href="mailto:${esc(CONFIG.grievanceEmail)}">${esc(CONFIG.grievanceEmail)}</a>. Complaints acknowledged within 24 hours, resolved within 15 days.</p>
     <p class="hint">Summary only. Full terms and privacy notice to be reviewed by a lawyer before public launch.</p>`;
 }
-
-// ---------- prediction game
-// One public number, the prediction score (300 to 900). Each prediction shows only how close it was; the per-prediction
-// trade score behind the profile score is never shown. See docs/prediction-score.md.
-const PERIODS = Object.keys(HORIZONS);
-const SHORT = { "30m": "30 min", "1h": "1 hour", "1d": "1 day", "1y": "1 year" };
-const when = (isoStr, h) => new Date(isoStr).toLocaleString("en-IN", h === "1y" ? { day: "numeric", month: "short", year: "numeric" } : { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
-const untilText = (isoStr) => { const m = Math.round((Date.parse(isoStr) - Date.now()) / 60000); return m <= 0 ? "scoring soon" : m < 60 ? `in ${m} min` : m < 2880 ? `in ${Math.round(m / 60)} h` : `in ${Math.round(m / 1440)} days`; };
-const scoredN = () => store.results.filter((r) => r.status === "scored").length;
-function predCounts() {
-  const o = store.preds.length, n = scoredN();
-  return !o && !n ? "Predict a coin's price from its chart" : `${o} open · ${n} scored`;
-}
-const LABEL_CLASS = { "Spot on": "cl-a", "Very close": "cl-a", Close: "cl-b", Off: "cl-c", "Far off": "cl-d" };
-// The score card: the one public number, where it sits on 300–900, and how much it is built on.
-function scoreCard(tappable) {
-  const s = myScore(), n = s?.n ?? scoredN(), o = store.preds.length;
-  const pos = (x) => (((x - SCORE_MIN) / (SCORE_MAX - SCORE_MIN)) * 100).toFixed(1);
-  const ticks = BANDS.filter(([min]) => min > SCORE_MIN).map(([min]) => `<i style="left:${pos(min)}%"></i>`).join("");
-  const body = s?.score != null
-    ? `<div class="pst"><span class="label">Prediction score</span>${s.provisional ? `<span class="pill single">Provisional</span>` : ""}</div>
-      <div class="psn"><b>${s.score}</b><span>${esc(s.band)}</span></div>
-      <div class="psbar" aria-hidden="true">${ticks}<em style="left:${pos(s.score)}%"></em></div>
-      <div class="psx"><span>${SCORE_MIN}</span><span>${CHANCE} chance</span><span>${SCORE_MAX}</span></div>
-      <p class="hint">${s.provisional ? `${n} of ${PROVISIONAL_UNDER} predictions scored before it settles` : `Built on ${n} scored prediction${n === 1 ? "" : "s"}`}${o ? ` · ${o} open` : ""}</p>`
-    : `<div class="pst"><span class="label">Prediction score</span></div>
-      <div class="psn"><b class="muted">–</b><span>${o ? `${o} prediction${o === 1 ? "" : "s"} waiting to be scored` : "No score yet"}</span></div>
-      <p class="hint">${o ? `Your score appears once a prediction has been scored.` : `Pick a coin above, or tap <b>Predict</b> on any chart.`} Everyone starts at ${CHANCE}, about what guessing would score.</p>`;
-  return tappable ? `<button class="pscard" data-p="predictions">${body}</button>` : `<div class="pscard">${body}</div>`;
-}
-
-// The prediction sheet, from the Predict chip on a card.
-export function openPredictSheet(sym, onDone) {
-  const bars = D.series[sym.key]?.bars || [];
-  const p0 = bars.at(-1)?.c, sigmaD = dailyVol(bars.slice(0, -1).map((b) => b.c)); // full days only, as the lock uses
-  if (!p0 || sigmaD == null) { toast(`${sym.t} prices haven't loaded yet.`); return; }
-  const free = PERIODS.filter((h) => canPredict(store.preds, sym.key, h));
-  let horizon = free.includes("1d") ? "1d" : free[0];
-  openSheet(`Predict · ${esc(sym.t)}`, "", (body) => {
-    const draw = (keep = "") => {
-      if (!horizon) {
-        body.innerHTML = `<p>You have an open prediction on every period for ${esc(sym.t)}. Each one can be made again once it has been scored.</p>
-          <button class="btn block" id="pSee">See your predictions</button>`;
-        body.querySelector("#pSee").onclick = () => { closeSheet(); APP.dashView = "preds"; showTab("dash"); };
-        return;
-      }
-      const r = allowedRange({ horizon, p0, sigmaD }), due = targetTime(new Date().toISOString(), horizon);
-      body.innerHTML = `<div class="pnow"><span>${esc(sym.t)} now</span><b>${esc(money(p0, sym.m))}</b></div>
-        <div class="label" style="margin:14px 0 6px">Time period</div>
-        <div class="seg pseg" role="group" aria-label="Time period">${PERIODS.map((h) => { const open = !canPredict(store.preds, sym.key, h); return `<button data-h="${h}" aria-pressed="${h === horizon}" ${open ? "disabled" : ""}>${SHORT[h]}${open ? "<small>open</small>" : ""}</button>`; }).join("")}</div>
-        <label class="field" style="margin-top:12px"><span>Where will ${esc(sym.t)} be in ${esc(HORIZONS[horizon].label)}?</span>
-          <div class="uname"><span>$</span><input id="pIn" inputmode="decimal" autocomplete="off" placeholder="${esc(money(r.upFrom, sym.m).replace("$", ""))}" value="${esc(keep)}"></div></label>
-        <p class="hint" id="pMsg">Call a move: ${esc(money(r.downFrom, sym.m))} or lower, or ${esc(money(r.upFrom, sym.m))} or higher.</p>
-        <p class="hint">Scored against the price at <b>${esc(when(due, horizon))}</b>.</p>
-        <div class="notice">Once locked in it can't be changed or cancelled. One open prediction per coin per period. It's a game: no money, and not advice.</div>
-        <button class="btn primary block" id="pGo" disabled>Lock in prediction</button>`;
-      const inp = body.querySelector("#pIn"), msg = body.querySelector("#pMsg"), go = body.querySelector("#pGo");
-      const val = () => parseFloat(inp.value.replace(/[^0-9.]/g, ""));
-      const check = () => {
-        const target = val();
-        if (!inp.value.trim()) { msg.className = "hint"; msg.textContent = `Call a move: ${money(r.downFrom, sym.m)} or lower, or ${money(r.upFrom, sym.m)} or higher.`; go.disabled = true; return; }
-        const c = checkPrediction({ horizon, p0, target, sigmaD });
-        msg.className = "hint " + (c.ok ? "good" : "bad");
-        msg.textContent = c.ok ? `${pct(((target - p0) / p0) * 100, 1)} from now · a call ${target > p0 ? "up" : "down"}` : c.error;
-        go.disabled = !c.ok;
-      };
-      inp.oninput = check; check();
-      body.querySelectorAll("[data-h]").forEach((b) => (b.onclick = () => { horizon = b.dataset.h; draw(inp.value); }));
-      go.onclick = async () => {
-        go.disabled = true; go.textContent = "Locking in…";
-        try {
-          await makePrediction({ sym, horizon, target: val(), p0, sigmaD });
-          closeSheet(); toast(`Locked in: ${sym.t} at ${money(val(), sym.m)} in ${HORIZONS[horizon].label}. Scored ${untilText(due)}.`, { ms: 4500 });
-          onDone?.();
-        } catch (e) { msg.className = "hint bad"; msg.textContent = e.message || "Couldn't save. Try again."; go.disabled = false; go.textContent = "Lock in prediction"; }
-      };
-      setTimeout(() => inp.focus(), 250);
-    };
-    draw();
-  });
-}
-
-// A due prediction gets its result straight away on the phone, worked out the same way the server will
-// (same candles, same code); it shows as "Confirming" until the 15-minute scoring run makes it official.
-const previews = new Map(); // `${t}_${horizon}_${createdAt}` → settle() result, or "pending"
-const pkey = (p) => `${p.t}_${p.horizon}_${p.createdAt}`;
-const previewRows = rowCache((t, iv) => krakenRows(t, iv));
-function previewDue(open, rerender) {
-  const now = Date.now();
-  for (const p of open) {
-    const k = pkey(p);
-    if (previews.has(k) || now < Date.parse(targetTime(p.createdAt, p.horizon)) + SETTLE_DELAY) continue;
-    previews.set(k, "pending");
-    settle(p, { now, rows: previewRows }).then((r) => { previews.set(k, r); rerender(); }).catch(() => previews.delete(k));
-  }
-}
-// The Predictions half of the dashboard.
-function predsView(el) {
-  const coins = allSyms().filter((x) => D.series[x.key]?.bars?.length);
-  // the first thing on the page is the ask: pick a coin and call its price; it then joins the open predictions below
-  el.innerHTML = `${coins.length ? `<section class="pask"><h2>Where will the price be?</h2>
-      <p>Pick a coin and call its price in 30 minutes, 1 hour, 1 day or 1 year. Your call joins your open predictions below.</p>
-      <div class="pchips">${coins.map((x) => { const n = store.preds.filter((p) => p.t === x.t).length, last = D.series[x.key].bars.at(-1).c;
-        return `<button class="pchip" data-pp="${esc(x.key)}"><b>${esc(x.t)}</b><span>${esc(money(last, x.m))}</span>${n ? `<i>${n} open</i>` : ""}</button>`; }).join("")}</div></section>` : ""}
-    ${scoreCard(false)}
-    <div data-plist></div>`;
-  predsList(el.querySelector("[data-plist]"), () => APP.tab === "dash" && APP.dashView !== "coins" && renderDash());
-  el.querySelectorAll("[data-pp]").forEach((b) => (b.onclick = () => { const x = allSyms().find((y) => y.key === b.dataset.pp); if (x) openPredictSheet(x, () => renderDash()); }));
-}
-function pPredictions(el, back) { // older links into Profile land on the dashboard now
-  APP.dashView = "preds"; setTimeout(() => showTab("dash"), 0); el.innerHTML = back;
-}
-function predsList(el, rerender) {
-  const open = [...store.preds].sort((a, b) => Date.parse(targetTime(a.createdAt, a.horizon)) - Date.parse(targetTime(b.createdAt, b.horizon)));
-  previewDue(open, () => { if (el.isConnected) rerender(); });
-  const pv = (p) => { const r = previews.get(pkey(p)); return r && r !== "pending" ? r : null; };
-  const done = [...store.results].sort((a, b) => Date.parse(b.resolvedAt || 0) - Date.parse(a.resolvedAt || 0));
-  const m = (x) => money(x, "CRYPTO");
-  el.innerHTML = `<h2>Open${open.length ? ` · ${open.length}` : ""}</h2>
-    ${open.length ? `<div class="list" data-preds>${open.map((p) => { const due = targetTime(p.createdAt, p.horizon), r = pv(p);
-      if (r?.status === "scored") { const x = { ...p, ...r.patch }; return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · it was ${esc(m(x.actual))}</span></span><span class="r"><span class="pill ${LABEL_CLASS[x.label] || ""}">${esc(x.label)}</span><span class="hint">${esc(closenessText(x).split(" · ")[0])} · confirming</span></span></div>`; }
-      return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · from ${p.p0 != null ? esc(m(p.p0)) : `about ${esc(m(p.clientP0))}`}</span></span><span class="r"><b>${esc(previews.get(pkey(p)) === "pending" ? "Checking…" : untilText(due))}</b><span class="hint">${esc(when(due, p.horizon))}</span></span></div>`; }).join("")}</div>`
-      : `<div class="empty">Nothing open yet. Pick a coin at the top to make your first call.</div>`}
-    ${store.mode === "live" && open.length ? `<p class="hint">When a prediction's time is up you see the result here straight away (marked “confirming”); it becomes official within about 15 minutes, against the price at that exact minute.</p>` : ""}
-    <h2>Scored${done.length ? ` · ${done.length}` : ""}</h2>
-    ${done.length ? `<div class="list">${done.map((p) => p.status === "scored"
-      ? `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · it was ${esc(m(p.actual))}</span></span><span class="r"><span class="pill ${LABEL_CLASS[p.label] || ""}">${esc(p.label)}</span><span class="hint">${esc(closenessText(p).split(" · ")[0])}</span></span></div>`
-      : `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s" style="white-space:normal">${esc(p.voidReason || "Not counted.")}</span></span><span class="r"><span class="pill single">Not counted</span></span></div>`).join("")}</div>`
-      : `<div class="empty">Scored predictions show here, with how close each one was.</div>`}
-    <p class="disclaimer">A game for learning how prices move. Predictions are private and are not advice.</p>`;
-}
-
-
-// ---------- onboarding (live mode, no account on this phone)
 
 // ---------- indicators: add or remove from the feed card's ƒx button. One shared choice for every coin.
 // The ƒx sheet, built to scan fast: what's on now (tap ✕ to remove), one row of quick sets, then one list at a
@@ -773,12 +602,12 @@ function pInbox(el, back) {
           <p>${esc(x.text)}</p>${x.note ? `<p class="hint">Note: ${esc(x.note)}</p>` : ""}
           <div class="fbact">${(x.status || "open") === "open" ? `<button class="btn sm" data-fset="done">Done</button><button class="btn ghost sm" data-fset="declined">Decline</button>` : `<span class="pill ${x.status === "done" ? "confirmed" : "single"}">${esc(x.status)}</span><button class="btn ghost sm" data-fset="open">Reopen</button>`}</div>
         </article>`).join("")}</div>` : `<div class="empty">Nothing here.</div>`}`;
-    el.querySelector("#pBack").onclick = () => renderProfile();
+    el.querySelector("#pBack").onclick = () => backFromProfile();
     el.querySelectorAll("[data-fs]").forEach((b) => (b.onclick = () => { APP.inboxFilter = b.dataset.fs; pInbox(el, back); }));
     el.querySelectorAll("[data-fset]").forEach((b) => (b.onclick = async () => { await setFeedbackStatus(b.closest("[data-id]").dataset.id, b.dataset.fset); pInbox(el, back); }));
     el.querySelector("#fbCopy")?.addEventListener("click", () => {
       const text = shown.map((x, i) => `${i + 1}. [${x.screen}${x.coin ? " · " + x.coin : ""}] ${x.where}\n   "${x.text}" (id ${x.id})`).join("\n");
       navigator.clipboard?.writeText(`Pulse feedback, ${shown.length} open notes:\n${text}`).then(() => toast("Copied. Paste it into Claude."), () => toast("Couldn't copy."));
     });
-  }).catch(() => { el.innerHTML = `${back}<h1>Feedback inbox</h1><div class="empty">Couldn't load feedback. Only admins can see it.</div>`; el.querySelector("#pBack").onclick = () => renderProfile(); });
+  }).catch(() => { el.innerHTML = `${back}<h1>Feedback inbox</h1><div class="empty">Couldn't load feedback. Only admins can see it.</div>`; el.querySelector("#pBack").onclick = () => backFromProfile(); });
 }

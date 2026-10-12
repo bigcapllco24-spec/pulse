@@ -57,7 +57,12 @@ export function fromFs(v) {
   if ("mapValue" in v) return Object.fromEntries(Object.entries(v.mapValue.fields || {}).map(([k, x]) => [k, fromFs(x)]));
   return null;
 }
-const docOut = (d) => ({ id: d.name.split("/").pop(), path: d.name.split("/documents/")[1], ...fromFs({ mapValue: { fields: d.fields || {} } }) });
+// A document as a plain object with its id and path. When it was last written rides along out of sight (_t), so a
+// write can be made only if nothing changed it since it was read (see set's ifUnchanged).
+function docOut(d) {
+  const o = { id: d.name.split("/").pop(), path: d.name.split("/documents/")[1], ...fromFs({ mapValue: { fields: d.fields || {} } }) };
+  return Object.defineProperty(o, "_t", { value: d.updateTime, enumerable: false });
+}
 
 export function firestore(sa) {
   const base = () => `https://firestore.googleapis.com/v1/projects/${sa.projectId}/databases/(default)/documents`;
@@ -79,10 +84,11 @@ export function firestore(sa) {
       } while (token);
       return out;
     },
-    // Writes the given fields only (merge). Pass {mustNotExist:true} to create without overwriting.
-    async set(path, data, { mustNotExist = false } = {}) {
+    // Writes the given fields only (merge). Pass {mustNotExist:true} to create without overwriting, or
+    // {ifUnchanged: doc} to write only if that document (as read) hasn't been written since.
+    async set(path, data, { mustNotExist = false, ifUnchanged = null } = {}) {
       const mask = Object.keys(data).map((k) => "updateMask.fieldPaths=" + encodeURIComponent("`" + k.replace(/`/g, "\\`") + "`")).join("&");
-      const pre = mustNotExist ? "&currentDocument.exists=false" : "";
+      const pre = mustNotExist ? "&currentDocument.exists=false" : ifUnchanged?._t ? "&currentDocument.updateTime=" + encodeURIComponent(ifUnchanged._t) : "";
       return call("PATCH", `${base()}/${path}?${mask}${pre}`, { fields: toFs(data).mapValue.fields });
     },
     async del(path) { return call("DELETE", `${base()}/${path}`); },

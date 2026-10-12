@@ -26,12 +26,12 @@ export const TOURS = {
     { target: ".card.active .chartbox", text: "Hold the chart, then slide, to read any day. Let go to set an alert at that price.", hand: "hold", until: (d) => d.type === "scrub", delay: 1400 },
     { target: ".card.active [data-tf]", text: "Tap here to change the time range or chart type, for this coin or all of them. The S/R button shows support and resistance lines.", hand: "tap", ring: true, until: (d) => d.type === "tf" },
   ],
-  dash: [
-    { target: "#dash .dswitch", text: "Predictions first, your coins next door. Tap or swipe sideways to switch.", ring: true },
-    { target: "#dash .pchips", text: "Tap a coin to predict where its price will be. It's a game for learning: no money, not advice.", ring: true, hand: "tap" },
-    { target: "#dash .pscard", text: "Your score, from 300 to 900. Everyone starts at 550 and it builds as predictions are scored.", ring: true },
+  dash: [{ target: "#dash .wchips", text: "Your coins, by watchlist. Picking one here also sets what the feed shows. Your alerts are further down.", ring: true }],
+  play: [
+    { target: "#play .pl-head", text: "This is you: your username and prediction score, from 300 to 900. Tap the letter for your account and settings.", ring: true },
+    { target: "#play .utabs", text: "Calls are your predictions. Groups are friends calling the same coin over the same time. Ranks show where you stand.", ring: true },
+    { target: "#play .pchips", text: "Tap a coin to call its price. It's a game for learning: no money, not advice.", ring: true, hand: "tap" },
   ],
-  profile: [{ target: "#profile .list", text: "Your settings: chart style, alerts, sharing and your account. Predictions live on the Dashboard. Nothing personal about you is stored.", ring: true }],
   add: [{ target: "#addQ", text: "Type a coin's name or symbol, like “sol”. Tap the result, then pick its watchlists.", ring: true }],
 };
 
