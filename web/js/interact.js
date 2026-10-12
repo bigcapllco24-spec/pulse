@@ -9,7 +9,7 @@ import { APP } from "./app.js";
 import { coachEvent } from "./coach.js";
 
 // Chart geometry (must match chart.js): viewBox 360 x 210, 46 px price gutter on the right, 22 px top, 14 px bottom.
-const W = 360, H = 210, PR = 46, PT = 22, PB = 14;
+const W = 360, H = 210, PR = 46, PT = 12, PB = 14;
 const HOLD_MS = 280, SLOP = 8;
 
 let hold = null, scrub = null, chip = null;

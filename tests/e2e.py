@@ -75,8 +75,8 @@ def phone_tests(b):
     check("phone: a new account must pick a username first, told it can be changed only twice", gate and "3 to 20" in g_bad and g_dis and "2 times" in gtxt and not p.locator("#gate").count(), f"gate={gate} {g_bad} disabled={g_dis}")
     # cards open on 1 day of 15-minute candles, and the move next to the name is over that range
     p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1500)
-    d_tf = p.inner_text(".card.active [data-tf]").replace("\n", " "); d_chg = p.inner_text(".card.active .tkrow .chg")
-    check("phone: cards open on 1D (15-minute candles) and the % beside the name says it's the 1D move", d_tf.startswith("1D") and "15-min" in d_tf and d_chg.strip().endswith("1D"), f"{d_tf} / {d_chg}")
+    d_tf = p.get_attribute(".card.active [data-tf]", "aria-label"); d_chg = p.inner_text(".card.active .tkrow .chg")
+    check("phone: cards open on 1D (15-minute candles) and the % beside the name says it's the 1D move", "1D" in d_tf and "15-min" in d_tf and p.inner_text(".card.active [data-tf]").strip() == "1D" and d_chg.strip().endswith("1D"), f"{d_tf} / {d_chg}")
     # the rest of these checks were written for 3 months of daily candles
     p.evaluate("(()=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.settings.chart={...a.settings.chart, range:'3M', v6:1}; localStorage.setItem('pl.demoAccount', JSON.stringify(a))})()")
     p.reload(); p.wait_for_timeout(2500)
@@ -175,9 +175,9 @@ def phone_tests(b):
     check("phone: details and news open by swiping alone", dv == "details" and nv == "news", f"{dv} {nv}")
 
     # the time axis names the months under the chart, and the chip says what the chart covers
-    ax = p.locator(".card.active .xaxis span").all_inner_texts(); tf0 = p.inner_text(".card.active [data-tf]").replace("\n", " ")
+    ax = p.locator(".card.active .xaxis span").all_inner_texts(); tf0 = p.inner_text(".card.active [data-tf]").strip() + " " + p.get_attribute(".card.active [data-tf]", "aria-label")
     import re as _r2
-    check("phone: months are labelled under the chart and the chip shows the range (3M Daily)", len(ax) >= 2 and all(_r2.fullmatch(r"[A-Z][a-z]{2}|20\d\d|\d{1,2}", t) for t in ax) and tf0.startswith("3M") and "Daily" in tf0, f"{ax} / {tf0}")
+    check("phone: months are labelled under the chart and the chip shows the range (3M Daily)", len(ax) >= 2 and all(_r2.fullmatch(r"[A-Z][a-z]{2}|20\d\d|\d{1,2}", t) for t in ax) and tf0.startswith("3M") and "daily" in tf0.lower(), f"{ax} / {tf0}")
     # chart chip: change just this coin, then all coins
     p.click(".card.active [data-tf]"); p.wait_for_timeout(400)
     p.click("#sheet [data-scope=coin]"); p.click("#sheet [data-k=range][data-v='1Y']"); p.wait_for_timeout(300)
@@ -479,6 +479,8 @@ def phone_tests(b):
     fsz = p.evaluate("parseFloat(getComputedStyle(document.getElementById('fbText')||document.body).fontSize)")
     if p.is_visible("#sheet"): p.click("#sheet [data-close]"); p.wait_for_timeout(500)
     check("phone: triple-tapping a button (S/R) opens a note about it, and the note box is 16px+ so iPhones don't zoom", "S/R button" in fs3 and fsz >= 16, f"{fs3[:60]!r} {fsz}")
+    p.click(".card.active [data-pexp]"); p.wait_for_timeout(600); np_ = p.locator("#sheet .pbig .lower").count(); p.click("#sheet [data-close]"); p.wait_for_timeout(500)
+    check("phone: ⤢ opens the chart's indicator panels large in a sheet", np_ >= 1, str(np_))
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500); p.click("#pBack") if p.locator("#pBack").count() else None
     p.click("[data-p=feedback]"); p.wait_for_timeout(600)
     p.click(".card.active [data-lv]"); p.wait_for_timeout(600); fs2 = p.inner_text("#sheet") if p.is_visible("#sheet") else ""

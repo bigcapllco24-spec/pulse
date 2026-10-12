@@ -1,6 +1,6 @@
 // Fixed, standardised charts drawn as SVG: the same window, scale rules and overlays for every symbol,
 // so the eye learns the shapes while scrolling. No pan or zoom, so swipes never fight the chart.
-const W = 360, H = 210, PR = 46, PT = 22, PB = 14; // right gutter for price labels, top room for the window label
+const W = 360, H = 210, PR = 46, PT = 12, PB = 14; // right gutter for price labels, top room for the window label
 const LH = 64;
 
 const f = (x) => (Math.abs(x) >= 1000 ? x.toFixed(0) : Math.abs(x) >= 100 ? x.toFixed(1) : Math.abs(x) >= 1 ? x.toFixed(2) : x.toPrecision(3));

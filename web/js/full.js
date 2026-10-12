@@ -12,6 +12,7 @@ import { chartSettings, store, save } from "./store.js";
 import { initInteract, openLearn, cancelPendingHold } from "./interact.js";
 import { APP, buildFeed } from "./app.js";
 import { openIndicatorsSheet, openLinesSheet } from "./pages.js";
+import { openPanels, expandBtn } from "./panels.js";
 import { esc, money, pct, arrow, haptic, fmtDay, toast, openSheet, closeSheet } from "./ui.js";
 
 // range → candle size (Kraken minutes, or "d" for the app's daily candles) and how much time to show first
@@ -118,7 +119,8 @@ function draw() {
   if (s.lvKey !== lk && !s.moving) { s.lvKey = lk; s.lv = levelsFor(v, s.levels); }
   const geo = { count: v.count, shift: v.shift, days: spanDays, full: true };
   box.innerHTML = mainChart(v.win, v.ov, { type: s.type, interval: v.interval, levels: s.levels === "off" ? [] : s.lv || [], over: s.over, ...geo });
-  el.querySelector(".flowers").innerHTML = s.lower.map((k) => lowerChart(v.win, v.ov, k, geo)).join("");
+  el.querySelector(".flowers").innerHTML = expandBtn(s.lower.length) + s.lower.map((k) => lowerChart(v.win, v.ov, k, geo)).join("");
+  const pe = el.querySelector("[data-pexp]"); if (pe) pe.onclick = (e) => { e.stopPropagation(); openPanels({ ...v, ivLabel: IVLABEL[s.iv], picks: { lower: s.lower } }, s.sym, spanDays); };
   const chg = ((v.win[v.win.length - 1].c - v.win[0].o) / v.win[0].o) * 100, older = Math.floor(s.end - s.count);
   const when = (t) => (t.length > 10 ? fmtDay(t) : new Date(t + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }));
   const hc = el.querySelector(".fhead .chg"); // the header shows the same move as the note: the period on screen
@@ -208,7 +210,7 @@ function shell(body) {
   return `<div class="fbar"><button class="fclose" data-fclose aria-label="Close full-screen chart">✕</button>
       <div class="fhead"><span class="row1"><span class="tk">${esc(sym.t)}</span><span class="chg"></span></span>
         <span class="price">${last != null ? esc(money(last, sym.m)) : ""}</span></div>
-      <div class="fctl"><button class="tfbtn" data-frange aria-label="Time range: ${esc(range)}"><b>${esc(range)}</b><span>${esc(IVLABEL[RANGES[range][0]])}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
+      <div class="fctl"><button class="tfbtn" data-frange aria-label="Time range: ${esc(range)}"><b>${esc(range)}</b><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
         <button class="lvbtn fxchip" data-ffx aria-label="Indicators: ${n} on"><i>ƒx</i>${n || "Add"}</button>
         <button class="lvbtn" data-flv aria-pressed="${levels !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${levels === "pivots" ? "Pivots" : "S/R"}</button></div></div>
     <div class="card fcard"><div class="pane main" data-pane="main">${body}</div></div>`;

@@ -9,6 +9,7 @@ import { describe } from "./describe.js";
 import { mainChart, lowerChart } from "./chart.js";
 import { levelsFor, swingLevels } from "./levels.js";
 import { picks, studyWindow, maxPanels, OVERLAYS, PANELS } from "./studies.js";
+import { openPanels, expandBtn } from "./panels.js";
 import { startTour, coachEvent } from "./coach.js";
 import { openFull } from "./full.js";
 import { initFeedback } from "./feedback.js";
@@ -244,13 +245,13 @@ function renderMain(c, it) {
     c._v = { ...v, ov, picks: { over: pk.over, lower: shown } }; // what hold-to-read and the panel guides read from
     main.innerHTML = `<div class="head"><div class="hl"><div class="tkrow"><span class="tk">${esc(s.t)}</span><span class="chg ${chg >= 0 ? "up" : "down"}" title="Change over ${esc(RANGE_LABEL[v.range] || v.range)}">${arrow(chg)} ${pct(chg)}<small>${esc(v.range)}</small></span></div>
       <div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span></div>${predChip(s)}</div>
-      <div class="hr"><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${esc(v.ivLabel.toLowerCase())} candles"><b>${esc(v.range)}</b><span>${esc(v.ivLabel)}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
+      <div class="hr"><div class="hr1"><button class="fxbtn hfull" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${esc(v.ivLabel.toLowerCase())} candles"><b>${esc(v.range)}</b><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button></div>
       <div class="hr2"><button class="lvbtn fxchip" data-fx aria-label="Indicators: ${pk.over.length + pk.lower.length} on"><i>ƒx</i>${pk.over.length + pk.lower.length || "Add"}</button><button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div></div>
-      <div class="chartbox"><button class="fxbtn" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: pk.over, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
-      ${shown.length ? `<div class="lowers${shown.length > 2 ? " g2" : ""}">${shown.map((k) => lowerChart(v.win, ov, k)).join("")}</div>` : ""}<div class="cfoot">${dots}</div>`;
+      <div class="chartbox">${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: pk.over, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
+      ${shown.length ? `<div class="lowers${shown.length > 2 ? " g2" : ""}">${expandBtn(shown.length)}${shown.map((k) => lowerChart(v.win, ov, k)).join("")}</div>` : ""}<div class="cfoot">${dots}</div>`;
   } else {
     c._v = null;
-    main.innerHTML = `<div class="head"><div class="hl"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div><div class="hr"><button class="tfbtn" data-tf aria-label="Chart settings for ${esc(s.t)}"><b>${esc(cs.range)}</b><span>${esc(IV_LABEL[resolveInterval(cs)] || "")}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button></div></div>
+    main.innerHTML = `<div class="head"><div class="hl"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div><div class="hr"><button class="tfbtn" data-tf aria-label="Chart settings for ${esc(s.t)}"><b>${esc(cs.range)}</b><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button></div></div>
       <div class="chartbox nodata"><p>${INTRA[cs.range] && D.series[s.key] ? (intraState(s.key, cs.range).failed ? `${esc(s.t)}'s ${cs.range === "1D" ? "15-minute" : "hourly"} candles couldn't load just now. Tap the time chip to pick a longer range, or try again in a minute.` : `Loading ${cs.range === "1D" ? "15-minute" : "hourly"} candles for ${esc(s.t)}…`) : D.status === "refreshing" ? `Loading ${esc(s.t)} prices…` : `${esc(s.t)} prices couldn't load. Pull to refresh or tap “Updated” at the top.`}</p></div>${dots}`;
   }
 }
@@ -574,6 +575,7 @@ function wire(c, it) {
   if (it.type !== "sym") return;
   const justScrubbed = () => Date.now() - (APP.scrubEndAt || 0) < 400;
   c.querySelectorAll("[data-learn]").forEach((p) => p.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) openLearn(p.dataset.learn, c._v); }));
+  c.querySelector("[data-pexp]")?.addEventListener("click", (e) => { e.stopPropagation(); openPanels(c._v, it.sym, RANGES[c._v?.range]); });
   // ƒx chip: add or remove indicators. S/R chip: pick the lines on the chart. Both apply to every coin, so every
   // card on screen redraws at once.
   c.querySelector("[data-fx]")?.addEventListener("click", (e) => { e.stopPropagation(); openIndicatorsSheet(() => redrawCards()); });
