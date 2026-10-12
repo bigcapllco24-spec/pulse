@@ -1,6 +1,6 @@
 // Dashboard, Profile, sheets (add stocks, watchlists, switcher) and onboarding.
 import { CONFIG } from "../config.js";
-import { store, save, chartSettings, setUsername, checkUsername, usernameFree, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
+import { store, save, chartSettings, setUsername, loginUsername, checkUsername, usernameFree, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
   markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList,
   enablePush, signOutDevice, deleteAccount, makePrediction, myScore, isAdmin, listFeedback, setFeedbackStatus, myUid } from "./store.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
@@ -412,29 +412,32 @@ export function nameGate(onDone) {
   el = document.createElement("div"); el.id = "gate"; el.className = "gate"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true");
   el.innerHTML = `<div class="gatein"><div class="label">Welcome to ${esc(CONFIG.appName)}</div>
     <h1>Pick your username</h1>
-    <p>It's how you show up in the prediction game and in shared lists, and your score stays with it.</p>
+    <p>It's how you show up in the prediction game and in shared lists. Already have one? Type it to log in.</p>
     <label class="field"><span>Username</span><div class="uname"><span>@</span><input id="gIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="e.g. chartwatcher"></div></label>
     <p class="hint" id="gMsg">3–20 letters, numbers, dots or underscores.</p>
     <div class="notice">You can change it only <b>${USERNAME_CHANGES} times</b> after this, so choose one you'll keep. Don't use your real name, email or phone number.</div>
     <button class="btn primary block" id="gGo" disabled>Continue</button></div>`;
   document.body.appendChild(el); document.body.classList.add("gated");
   const inp = el.querySelector("#gIn"), msg = el.querySelector("#gMsg"), btn = el.querySelector("#gGo");
-  let seq = 0;
+  let seq = 0, held = false;
   const set = (t, cls, ok) => { msg.textContent = t; msg.className = "hint " + (cls || ""); btn.disabled = !ok; };
   const check = async () => {
     const { name, error } = checkUsername(inp.value), my = ++seq;
     if (error) return set(inp.value ? error : "3–20 letters, numbers, dots or underscores.", inp.value ? "bad" : "", false);
     set(`Checking @${name}…`, "", false);
-    try { const st = await usernameFree(name); if (my === seq) st === "free" ? set(`@${name} is free.`, "good", true) : set(`@${name} looks taken. If it was yours on an old account, tap Continue to try claiming it.`, "", true); }
-    catch { if (my === seq) set(`@${name} looks good.`, "good", true); } // offline: the save itself checks again
+    try {
+      const st = await usernameFree(name); if (my !== seq) return;
+      held = st !== "free"; btn.textContent = held ? `Log in as @${name}` : "Continue";
+      held ? set(`@${name} already has an account. If it's yours, log in to open it on this phone.`, "", true) : set(`@${name} is free.`, "good", true);
+    } catch { if (my === seq) { held = false; btn.textContent = "Continue"; set(`@${name} looks good.`, "good", true); } } // offline: the save itself checks again
   };
   let t = 0; inp.oninput = () => { clearTimeout(t); t = setTimeout(check, 250); };
   const close = () => { el.remove(); document.body.classList.remove("gated"); off(); onDone?.(); };
   const off = store.on((what) => { if (what === "account" && store.data?.username && document.getElementById("gate")) close(); });
   btn.onclick = async () => {
-    btn.disabled = true; btn.textContent = "Saving…";
-    try { const n = await setUsername(inp.value); toast(`Welcome, @${n}.`); close(); }
-    catch (e) { set(e.message || "Couldn't save. Check your connection and try again.", "bad", true); btn.textContent = "Continue"; }
+    const was = btn.textContent, login = held; btn.disabled = true; btn.textContent = login ? "Logging in…" : "Saving…";
+    try { const n = await (login ? loginUsername : setUsername)(inp.value); toast(login ? `Welcome back, @${n}.` : `Welcome, @${n}.`); close(); }
+    catch (e) { set(e.message || "Couldn't save. Check your connection and try again.", "bad", true); btn.textContent = was; }
   };
   setTimeout(() => inp.focus(), 200);
 }

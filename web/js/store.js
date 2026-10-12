@@ -62,7 +62,7 @@ async function loadFirebase() {
 // Start instantly: the feed draws from the copy saved on this phone (or the starter account on a first visit)
 // while Firebase signs in and loads the account in the background. No recovery code: an account belongs to this
 // device's anonymous sign-in, which Firebase keeps between visits.
-const LSACC = "pl.account", LSALERTS = "pl.accountAlerts";
+const LSACC = "pl.account", LSALERTS = "pl.accountAlerts", LSLINK = "pl.linked";
 let pending = {}, connecting = null;
 export async function init() {
   if (store.mode === "demo") {
@@ -85,8 +85,16 @@ export async function init() {
 export const connected = () => connecting || Promise.resolve();
 async function connect() {
   try { await loadFirebase(); } catch (e) { store.error = "Couldn't reach the server. Your changes are saved on this phone."; store.emit("error"); return; }
-  const { db, f, auth } = fb, id = auth.currentUser.uid, ref = f.doc(db, "accounts", id);
-  const snap = await f.getDoc(ref).catch(() => null);
+  const { db, f, auth } = fb;
+  // an account this phone logged into by username comes first; if it's gone, the phone's own sign-in is used
+  let id = auth.currentUser.uid, ref = f.doc(db, "accounts", id), snap = null;
+  const linked = ls.get(LSLINK);
+  if (linked && linked !== id) {
+    const ls2 = await f.getDoc(f.doc(db, "accounts", linked)).catch((e) => (/permission|insufficient/i.test(e.code || e.message || "") ? "gone" : null));
+    if (ls2 === null) return; // offline: keep the saved copy
+    if (ls2 !== "gone" && ls2.exists()) { id = linked; ref = ls2.ref; snap = ls2; } else ls.del(LSLINK);
+  }
+  snap ||= await f.getDoc(ref).catch(() => null);
   if (!snap) return;
   if (snap.exists()) {
     // fields from older versions of the app (indicator picks now live in settings.chart) are dropped once
@@ -283,6 +291,30 @@ export async function usernameFree(name) {
   const d = await fb.f.getDoc(fb.f.doc(fb.db, "usernames", name));
   // a name can also be free again if the account that held it no longer exists; the save finds out
   return !d.exists() || d.data().acct === store.id ? "free" : "held";
+}
+// Log in by username (MVP: the username alone opens the account; a password or Google sign-in comes later).
+// This phone's sign-in is added to the account's devices, and the rules let any listed device use the account.
+// A name whose account no longer exists is claimed for this phone instead, as a new username.
+export async function loginUsername(raw) {
+  const { name, error } = checkUsername(raw);
+  if (error) throw new Error(error);
+  if (store.mode === "demo") return setUsername(name);
+  await connected();
+  if (!fb) throw new Error("Couldn't reach the server. Try again in a moment.");
+  const { db, f, auth } = fb, me = auth.currentUser.uid;
+  const u = await f.getDoc(f.doc(db, "usernames", name));
+  if (!u.exists()) return setUsername(name);
+  const acct = u.data().acct, ref = f.doc(db, "accounts", acct);
+  if (acct !== me) {
+    try { await f.updateDoc(ref, { devices: f.arrayUnion(me) }); }
+    catch { return setUsername(name); } // the account is gone (the rules refuse): claim the name for this phone
+  }
+  const snap = await f.getDoc(ref);
+  if (!snap.exists()) return setUsername(name);
+  ls.set(LSLINK, acct); newId = null;
+  store.data = { ...DEFAULT_ACCOUNT(), ...snap.data() };
+  attach(acct, ref);
+  return name;
 }
 export async function setUsername(raw) {
   const { name, error } = checkUsername(raw);
