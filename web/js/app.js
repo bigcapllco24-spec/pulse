@@ -338,9 +338,10 @@ function openStory(st) {
 // ---------- details pane
 // How to use each part of the details pane, shown behind a small ⓘ. Educational only: what the number
 // describes and how people read it, never what to do.
+const SPAN = { "1D": "in 24h", "1W": "in 1W", "1M": "in 1M", "3M": "in 3M", "6M": "in 6M", "1Y": "in 1Y" };
 const HOW = {
   glance: "A short summary of the facts further down. It describes what has already happened; it doesn't predict what happens next.",
-  today: "Open is the first price of the day (UTC) and Close the latest. The bar shows where the price sits between the day's low and high. Volume compares today's trading with a usual day: a high number means more people traded than normal, often around news.",
+  today: "This is today's daily candle, which starts at midnight UTC (5:30 AM IST), so its move can differ from the 24-hour change at the top. Open is the first price of that day and Close the latest. The bar shows where the price sits between the day's low and high. Volume compares today's trading with a usual day: a high number means more people traded than normal, often around news.",
   perf: "Price change over each period up to the latest candle. Comparing short and long periods shows whether a move is recent or part of a longer run. Past performance doesn't tell you future returns.",
   trend: "A moving average is the average closing price over the last 20, 50 or 200 days, which smooths out daily noise. Price above an average means it is higher than its recent typical level. Many people watch the 50- and 200-day lines, so they're useful context, not signals.",
   vol: "The typical daily move is the 14-day Average True Range: how far the price usually travels in a day. Bigger numbers mean bigger swings, so the same news can move the price more. Comparing today's move with it shows whether today was unusual.",
@@ -358,16 +359,20 @@ function renderDetails(c, it) {
   if (!v) {
     html += `<div class="dhead"><div><h2>${esc(s.t)}</h2><span>${esc(s.n)}</span></div></div><div class="notice">Prices for ${esc(s.t)} haven't loaded yet.</div>`;
   } else {
-    const all = D.series[s.key].bars, b = all.at(-1), d = v.daily.now, chg = d.changePct, last = b.c;
+    const all = D.series[s.key].bars, b = all.at(-1), d = v.daily.now, last = b.c;
+    // the same move the card's chip shows: over the card's range (1D = the last 24 hours), so the two never disagree
+    const cs = chartSettings(s.key), cv = view(s.key, cs), day = view(s.key, { ...cs, range: "1D" });
+    const chg = day ? day.windowChange : d.changePct, dayLab = day ? "in 24h" : "today (UTC)";
+    const hv = cv ? cv.windowChange : chg, hLab = cv ? (SPAN[cs.range] || cs.range) : dayLab;
     const rng = (n) => { const w = all.slice(-n); const lo = Math.min(...w.map((x) => x.l)), hi = Math.max(...w.map((x) => x.h)); return { lo, hi, p: hi > lo ? ((last - lo) / (hi - lo)) * 100 : 50 }; };
     const yr = rng(Math.min(365, all.length)), typical = d.atrPct, moveX = typical ? Math.abs(chg) / typical : null;
     const avgs = [["20-day", d.sma20], ["50-day", d.sma50], ["200-day", d.sma200]].filter(([, x]) => x != null);
-    html += `<div class="dhead"><div><h2>${esc(s.t)}</h2><span>${esc(s.n)}</span></div><div class="r"><b>${esc(money(last, s.m))}</b><span class="${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)} today</span></div></div>`;
+    html += `<div class="dhead"><div><h2>${esc(s.t)}</h2><span>${esc(s.n)}</span></div><div class="r"><b>${esc(money(last, s.m))}</b><span class="${hv >= 0 ? "up" : "down"}">${arrow(hv)} ${pct(hv)} ${esc(hLab)}</span></div></div>`;
     // 1. at a glance: three or four plain facts
     const names = (ls) => (ls.length > 1 ? ls.slice(0, -1).map((l) => l.replace("-day", "")).join(", ") + " and " + ls.at(-1) : ls[0] || "");
     const above = names(avgs.filter(([, x]) => last > x).map(([l]) => l)), below = names(avgs.filter(([, x]) => last <= x).map(([l]) => l));
     const glance = [
-      `${chg >= 0 ? "Up" : "Down"} ${Math.abs(chg).toFixed(1)}% today${moveX != null ? `, ${moveX >= 1.5 ? "a bigger move than usual" : moveX <= 0.5 ? "a quiet day" : "a normal-sized move"}` : ""}${d.volRatio != null ? ` on ${fmt(d.volRatio, 1)}x the usual volume` : ""}.`,
+      `${chg >= 0 ? "Up" : "Down"} ${Math.abs(chg).toFixed(1)}% ${dayLab}${moveX != null ? `, ${moveX >= 1.5 ? "a bigger move than usual" : moveX <= 0.5 ? "a quiet day" : "a normal-sized move"}` : ""}${d.volRatio != null ? ` on ${fmt(d.volRatio, 1)}x the usual volume` : ""}.`,
       avgs.length ? `${above ? `Above its ${above}-day average${above.includes(" and ") ? "s" : ""}`.replace("-day-day", "-day") : ""}${above && below ? "; " : ""}${below ? `${above ? "below" : "Below"} its ${below}-day average${below.includes(" and ") ? "s" : ""}`.replace("-day-day", "-day") : ""}.` : "",
       `${yr.p >= 80 ? "Near the top" : yr.p <= 20 ? "Near the bottom" : yr.p >= 60 ? "In the upper part" : yr.p <= 40 ? "In the lower part" : "Around the middle"} of its ${all.length >= 365 ? "52-week" : `${all.length}-day`} range.`,
       d.rsi14 != null ? `RSI ${d.rsi14.toFixed(0)}: ${describe("rsi14", d, v.daily.prev).toLowerCase()}` : "",
@@ -375,7 +380,7 @@ function renderDetails(c, it) {
     html += sec("At a glance", "glance", `<ul class="glance">${glance.map((g) => `<li>${esc(g)}</li>`).join("")}</ul>`);
     // 2. today
     const dayP = b.h > b.l ? ((b.c - b.l) / (b.h - b.l)) * 100 : 50;
-    html += sec(`Today · ${esc(fmtDay(b.t))}`, "today", `<div class="stat-grid">${[["Open", b.o], ["High", b.h], ["Low", b.l], ["Close", b.c]].map(([k, x]) => `<div><span>${k}</span><b>${esc(money(x, s.m))}</b></div>`).join("")}</div>
+    html += sec(`Daily candle · ${esc(fmtDay(b.t))}`, "today", `<div class="stat-grid">${[["Open", b.o], ["High", b.h], ["Low", b.l], ["Close", b.c]].map(([k, x]) => `<div><span>${k}</span><b>${esc(money(x, s.m))}</b></div>`).join("")}</div>
       <div class="rangerow"><span>Day's range</span><span>closed ${dayP.toFixed(0)}% of the way up</span></div><div class="rangebar"><i style="left:${dayP.toFixed(1)}%"></i></div><div class="rangerow"><span>${esc(money(b.l, s.m))}</span><span>${esc(money(b.h, s.m))}</span></div>
       ${d.volRatio != null ? `<p class="dline">Volume was <b>${fmt(d.volRatio, 1)}x</b> a usual day.</p>` : ""}`);
     if (bigMove(v)) html += `<section class="dsec box" data-movebox>${moveHtml(s, v)}</section>`;
