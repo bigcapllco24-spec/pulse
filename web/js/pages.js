@@ -152,16 +152,17 @@ export function openSwitcher() {
 // ---------- dashboard: Predictions first (score, quick predict, open and scored calls), then Coins (your watchlists;
 // picking one also sets what the feed shows). A switch at the top, or a sideways swipe.
 export function renderDash() {
-  const el = $("dash"), view = APP.dashView === "coins" ? "coins" : "preds"; // predictions first; coins a tap or swipe away
+  const el = $("dash"), half = APP.dashView === "coins" ? "coins" : "preds"; // predictions first; coins a tap or swipe away
   const syms = currentSyms(), cs = chartSettings();
-  const upN = syms.filter((s) => (view_(s, cs)?.daily.now.changePct ?? 0) > 0).length, haveN = syms.filter((s) => view_(s, cs)).length;
+  const moveOf = (s) => { const rv = view_(s, cs) && view(s.key, chartSettings(s.key)); return rv ? rv.windowChange : view_(s, cs)?.daily.now.changePct; };
+  const upN = syms.filter((s) => (moveOf(s) ?? 0) > 0).length, haveN = syms.filter((s) => view_(s, cs)).length;
   const sc = myScore(), open = store.preds.length;
-  const tab = (k, title, meta) => `<button data-dv="${k}" aria-pressed="${view === k}"><b>${title}</b><span>${meta}</span></button>`;
+  const tab = (k, title, meta) => `<button data-dv="${k}" aria-pressed="${half === k}"><b>${title}</b><span>${meta}</span></button>`;
   el.innerHTML = `<h1>Dashboard</h1>
-    <div class="dswitch" role="tablist" aria-label="Dashboard">${tab("preds", "Predictions", `${sc?.score != null ? `Score ${sc.score}` : "No score yet"}${open ? ` · ${open} open` : ""}`)}${tab("coins", "Coins", haveN ? `${upN} of ${haveN} up today` : `${syms.length} coins`)}</div>
-    <div class="dview" data-view="${view}"></div>`;
+    <div class="dswitch" role="tablist" aria-label="Dashboard">${tab("preds", "Predictions", `${sc?.score != null ? `Score ${sc.score}` : "No score yet"}${open ? ` · ${open} open` : ""}`)}${tab("coins", "Coins", haveN ? `${upN} of ${haveN} up · ${esc(cs.range)}` : `${syms.length} coins`)}</div>
+    <div class="dview" data-view="${half}"></div>`;
   const body = el.querySelector(".dview");
-  if (view === "preds") predsView(body); else coinsView(body);
+  if (half === "preds") predsView(body); else coinsView(body);
   el.querySelectorAll("[data-dv]").forEach((b) => (b.onclick = () => { if (APP.dashView !== b.dataset.dv) { APP.dashView = b.dataset.dv; haptic(); renderDash(); el.parentElement.scrollTop = 0; } }));
 }
 const view_ = (s, cs) => view(s.key, dailyOf(cs));
@@ -181,22 +182,24 @@ export function initDashSwipe() {
 function coinsView(el) {
   const cs = chartSettings(), syms = currentSyms(), wl = watchlists();
   const cur = store.data?.settings?.list || "all", w = wl.find((x) => x.id === cur), editing = APP.dashEdit && w;
-  const withData = syms.map((s) => ({ s, v: view(s.key, dailyOf(cs)) })).filter((x) => x.v);
+  // each row's %, sparkline and colour all describe the same period: the one that coin's chart shows (1D = 24 hours)
+  const withData = syms.map((s) => { const v = view(s.key, dailyOf(cs)), rv = v && view(s.key, chartSettings(s.key));
+    return { s, v, rv, chg: rv ? rv.windowChange : v?.daily.now.changePct }; }).filter((x) => x.v);
   const noData = syms.filter((s) => !view(s.key, dailyOf(cs)));
   const sort = APP.dashSort || "move";
-  if (!editing) withData.sort((a, b) => sort === "az" ? a.s.t.localeCompare(b.s.t) : sort === "rsi" ? (a.v.now.rsi14 ?? 999) - (b.v.now.rsi14 ?? 999) : Math.abs(b.v.daily.now.changePct) - Math.abs(a.v.daily.now.changePct));
-  const ups = withData.filter((x) => x.v.daily.now.changePct > 0).length;
+  if (!editing) withData.sort((a, b) => sort === "az" ? a.s.t.localeCompare(b.s.t) : sort === "rsi" ? (a.v.now.rsi14 ?? 999) - (b.v.now.rsi14 ?? 999) : Math.abs(b.chg) - Math.abs(a.chg));
+  const ups = withData.filter((x) => x.chg > 0).length, per = cs.range;
   const today = new Date().toISOString().slice(0, 10), keys = new Set(syms.map((s) => s.key));
   const newsToday = (D.news.stories || []).filter((st) => st.date === today && st.syms.some((k) => keys.has(k))).length;
   const rulesToday = store.alerts.filter((a) => (a.at || "").slice(0, 10) === today).length;
   const chip = (id, name, n) => `<button class="wchip" data-l="${esc(id)}" aria-pressed="${id === cur}">${esc(name)} <span>${n}</span></button>`;
-  const row = ({ s, v }, i) => { const c = v.daily.now.changePct;
+  const row = ({ s, v, rv, chg: c }, i) => {
     return editing ? `<div class="row"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">${esc(s.n)}</span></span>
       <button class="btn ghost sm" data-up="${esc(s.key)}" ${i === 0 ? "disabled" : ""} aria-label="Move ${esc(s.t)} up">↑</button><button class="btn ghost sm" data-dn="${esc(s.key)}" ${i === withData.length - 1 ? "disabled" : ""} aria-label="Move ${esc(s.t)} down">↓</button><button class="btn ghost sm" data-rm="${esc(s.key)}" aria-label="Remove ${esc(s.t)}">✕</button></div>`
-    : `<button class="row" data-open="${esc(s.key)}"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">RSI ${fmt(v.now.rsi14, 1)} · ${storiesFor(s.key).length} stories</span></span>${sparkline(v.win.map((b) => b.c))}<span class="r"><b>${esc(money(v.lastBar.c, s.m))}</b><span class="${c >= 0 ? "up" : "down"}">${arrow(c)} ${pct(c)}</span></span></button>`; };
+    : `<button class="row" data-open="${esc(s.key)}"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">RSI ${fmt(v.now.rsi14, 1)} · ${storiesFor(s.key).length} stories</span></span>${sparkline((rv || v).win.map((b) => b.c), 80, 28, c >= 0)}<span class="r"><b>${esc(money((rv || v).lastBar.c, s.m))}</b><span class="${c >= 0 ? "up" : "down"}">${arrow(c)} ${pct(c)}<small> ${esc(rv ? rv.range : "1D")}</small></span></span></button>`; };
   el.innerHTML = `<div class="wchips" role="tablist" aria-label="Watchlists">${chip("all", "All", allSyms().length)}${wl.map((x) => chip(x.id, x.name, (x.syms || []).filter((s) => s.m === "CRYPTO").length)).join("")}<button class="wchip add" id="dNew">+ New</button></div>
     <div class="wbar"><b>${esc(w ? w.name : "All my coins")}</b><span>${w ? `${editing ? `<button class="btn ghost sm" id="dRen">Rename</button><button class="btn ghost sm danger" id="dDel">Delete</button><button class="btn sm" id="dDone">Done</button>` : `<button class="btn ghost sm" id="dEdit">Edit</button>`}` : ""}<button class="btn sm" id="dAdd">+ Add coins</button></span></div>
-    ${editing ? "" : `<div class="summary"><div><b>${ups}<span class="hint" style="font-size:14px">/${withData.length}</span></b><span>coins up today</span></div><div><b>${newsToday}</b><span>stories today</span></div><div><b>${rulesToday}</b><span>rules met today</span></div></div>`}
+    ${editing ? "" : `<div class="summary"><div><b>${ups}<span class="hint" style="font-size:14px">/${withData.length}</span></b><span>coins up · ${esc(per)}</span></div><div><b>${newsToday}</b><span>stories today</span></div><div><b>${rulesToday}</b><span>rules met today</span></div></div>`}
     ${withData.length ? `${editing ? `<p class="hint">Reorder or remove coins in “${esc(w.name)}”. The feed follows this order.</p>` : `<div class="opts" style="margin-bottom:10px">${[["move", "Biggest move"], ["rsi", "Lowest RSI"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-s="${k}" aria-pressed="${sort === k}">${l}</button>`).join("")}</div>`}
     <div class="list">${withData.map(row).join("")}</div>` : ""}
     ${noData.length ? `<p class="hint">Waiting for prices: ${noData.map((s) => esc(s.t)).join(", ")}.</p>` : ""}
@@ -225,14 +228,14 @@ const ICON = {
   alerts: '<path d="M4 4h16v12H5l-1 4z"/>', lists: '<circle cx="8" cy="9" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M2 20c1-4 4-5 6-5s5 1 6 5M14 20c.5-2.5 2-3.5 3.5-3.5S21 17.5 22 20"/>',
   account: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>', appearance: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z"/>',
   tour: '<path d="M5 3l14 9-14 9z"/>', feedback: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>', inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 2h6l1-2h5"/>', legal: '<path d="M7 3h8l4 4v14H7zM15 3v4h4M10 12h6M10 16h6"/>',
-  predictions: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.6"/>', how: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-1 .7-1.5 1.2-1.5 2.5M12 17h.01"/>',
+  predictions: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.6"/>',
 };
 const GROUPS = [
   ["Charts & learning", [["chart", "Chart style", "Time range, candles and lines"]]],
   ["Alerts", [["rules", "Alert rules", "Get told when your levels are hit"], ["alerts", "Alerts", "Everything that has fired"]]],
   ["Sharing", [["lists", "Shared lists", "Follow a list with friends"]]],
   ["Account & privacy", [["account", "Account", "Username, delete your data"], ["appearance", "Appearance", "Dark, light or match phone"]]],
-  ["Help", [["feedback", "Give feedback", "Hold anything for 5 seconds, or switch on tap-to-comment"], ["tour", "Show the app tour again", "Swipes, charts and watchlists in a minute"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]]],
+  ["Help", [["feedback", "Give feedback", "Hold anything for 3 seconds, or switch on tap-to-comment"], ["tour", "Show the app tour again", "Swipes, charts and watchlists in a minute"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]]],
 ];
 let admin = null; // whether this sign-in may read feedback (checked once, after connecting)
 const icon = (k) => `<svg class="pic" viewBox="0 0 24 24" aria-hidden="true">${ICON[k] || ""}</svg>`;
@@ -261,7 +264,7 @@ export function renderProfile(sub, arg) {
     }));
     return;
   }
-  const fn = { watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal, predictions: pPredictions, how: pHow, inbox: pInbox }[sub];
+  const fn = { watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal, predictions: pPredictions, inbox: pInbox }[sub];
   fn(el, back, arg);
   el.querySelector("#pBack").onclick = () => renderProfile();
   el.parentElement.scrollTop = 0;
@@ -544,7 +547,7 @@ function scoreCard(tappable) {
       <p class="hint">${s.provisional ? `${n} of ${PROVISIONAL_UNDER} predictions scored before it settles` : `Built on ${n} scored prediction${n === 1 ? "" : "s"}`}${o ? ` · ${o} open` : ""}</p>`
     : `<div class="pst"><span class="label">Prediction score</span></div>
       <div class="psn"><b class="muted">–</b><span>${o ? `${o} prediction${o === 1 ? "" : "s"} waiting to be scored` : "No score yet"}</span></div>
-      <p class="hint">${o ? `Your score appears once a prediction has been scored.` : `Pick a coin below, or tap <b>Predict</b> on any chart.`} Everyone starts at ${CHANCE}, about what guessing would score.</p>`;
+      <p class="hint">${o ? `Your score appears once a prediction has been scored.` : `Pick a coin above, or tap <b>Predict</b> on any chart.`} Everyone starts at ${CHANCE}, about what guessing would score.</p>`;
   return tappable ? `<button class="pscard" data-p="predictions">${body}</button>` : `<div class="pscard">${body}</div>`;
 }
 
@@ -616,15 +619,15 @@ function previewDue(open, rerender) {
 // The Predictions half of the dashboard.
 function predsView(el) {
   const coins = allSyms().filter((x) => D.series[x.key]?.bars?.length);
-  el.innerHTML = `${scoreCard(false)}
-    ${coins.length ? `<div class="label" style="margin:14px 0 8px">Make a prediction</div>
+  // the first thing on the page is the ask: pick a coin and call its price; it then joins the open predictions below
+  el.innerHTML = `${coins.length ? `<section class="pask"><h2>Where will the price be?</h2>
+      <p>Pick a coin and call its price in 30 minutes, 1 hour, 1 day or 1 year. Your call joins your open predictions below.</p>
       <div class="pchips">${coins.map((x) => { const n = store.preds.filter((p) => p.t === x.t).length, last = D.series[x.key].bars.at(-1).c;
-        return `<button class="pchip" data-pp="${esc(x.key)}"><b>${esc(x.t)}</b><span>${esc(money(last, x.m))}</span>${n ? `<i>${n} open</i>` : ""}</button>`; }).join("")}</div>` : ""}
-    <div data-plist></div>
-    <p style="margin-top:14px"><button class="btn ghost block" data-how>How the score works</button></p>`;
-  predsList(el.querySelector("[data-plist]"), () => APP.tab === "dash" && APP.dashView === "preds" && renderDash());
+        return `<button class="pchip" data-pp="${esc(x.key)}"><b>${esc(x.t)}</b><span>${esc(money(last, x.m))}</span>${n ? `<i>${n} open</i>` : ""}</button>`; }).join("")}</div></section>` : ""}
+    ${scoreCard(false)}
+    <div data-plist></div>`;
+  predsList(el.querySelector("[data-plist]"), () => APP.tab === "dash" && APP.dashView !== "coins" && renderDash());
   el.querySelectorAll("[data-pp]").forEach((b) => (b.onclick = () => { const x = allSyms().find((y) => y.key === b.dataset.pp); if (x) openPredictSheet(x, () => renderDash()); }));
-  el.querySelector("[data-how]").onclick = () => openSheet("How the score works", "", (body) => pHow(body, ""));
 }
 function pPredictions(el, back) { // older links into Profile land on the dashboard now
   APP.dashView = "preds"; setTimeout(() => showTab("dash"), 0); el.innerHTML = back;
@@ -639,7 +642,7 @@ function predsList(el, rerender) {
     ${open.length ? `<div class="list" data-preds>${open.map((p) => { const due = targetTime(p.createdAt, p.horizon), r = pv(p);
       if (r?.status === "scored") { const x = { ...p, ...r.patch }; return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · it was ${esc(m(x.actual))}</span></span><span class="r"><span class="pill ${LABEL_CLASS[x.label] || ""}">${esc(x.label)}</span><span class="hint">${esc(closenessText(x).split(" · ")[0])} · confirming</span></span></div>`; }
       return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · from ${p.p0 != null ? esc(m(p.p0)) : `about ${esc(m(p.clientP0))}`}</span></span><span class="r"><b>${esc(previews.get(pkey(p)) === "pending" ? "Checking…" : untilText(due))}</b><span class="hint">${esc(when(due, p.horizon))}</span></span></div>`; }).join("")}</div>`
-      : `<div class="empty">Nothing open. Pick a coin above, or tap <b>Predict</b> on any chart.</div>`}
+      : `<div class="empty">Nothing open yet. Pick a coin at the top to make your first call.</div>`}
     ${store.mode === "live" && open.length ? `<p class="hint">When a prediction's time is up you see the result here straight away (marked “confirming”); it becomes official within about 15 minutes, against the price at that exact minute.</p>` : ""}
     <h2>Scored${done.length ? ` · ${done.length}` : ""}</h2>
     ${done.length ? `<div class="list">${done.map((p) => p.status === "scored"
@@ -649,21 +652,6 @@ function predsList(el, rerender) {
     <p class="disclaimer">A game for learning how prices move. Predictions are private and are not advice.</p>`;
 }
 
-function pHow(el, back) {
-  el.innerHTML = `${back ? `${back}<h1>How the score works</h1>` : ""}
-    <p>Your prediction score runs from ${SCORE_MIN} to ${SCORE_MAX}, and it's worked out the same way for everyone, so scores can be compared.</p>
-    <h2>Each prediction</h2>
-    <p>You see how close you were: how far off in percent, and a label from <b>Spot on</b> to <b>Far off</b>. The label compares your miss with how much that coin usually moves in that time, so 3% off is far off for 30 minutes but spot on for a year.</p>
-    <h2>Your score</h2>
-    <p>Every scored prediction counts towards it:</p>
-    <ul class="glance"><li><b>Closeness</b> (45%): how close your calls land.</li><li><b>Consistency</b> (25%): landing close reliably, without big misses.</li><li><b>Direction</b> (15%): whether the price went the way you said.</li><li><b>Beating “no change”</b> (10%): doing better than just guessing today's price.</li><li><b>Range</b> (5%): different coins, periods and months.</li></ul>
-    <p><b>Longer calls count more.</b> Once you have them, 1-year predictions carry the most weight, then 1 day, 1 hour and 30 minutes.</p>
-    <p><b>Recent results count more.</b> Older results slowly count for less, starting from when they were scored.</p>
-    <h2>Starting out</h2>
-    <p>Everyone starts at ${CHANCE}, about what random guessing scores. Below ${CHANCE} is worse than guessing. Your score shows as provisional until ${PROVISIONAL_UNDER} predictions have been scored, and early on it moves slowly.</p>
-    <div class="opts">${BANDS.map(([min, name], i) => `<span class="pill">${esc(name)} ${min}${i ? `–${BANDS[i - 1][0] - 1}` : `–${SCORE_MAX}`}</span>`).join("")}</div>
-    <p class="disclaimer">A game for learning how prices move. No money, no prizes, and not advice.</p>`;
-}
 
 // ---------- onboarding (live mode, no account on this phone)
 

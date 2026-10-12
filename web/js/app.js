@@ -13,7 +13,7 @@ import { openPanels, withExpand } from "./panels.js";
 import { startTour, coachEvent } from "./coach.js";
 import { openFull } from "./full.js";
 import { initFeedback } from "./feedback.js";
-import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
+import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz, cancelPendingHold } from "./interact.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, krakenBars, INTRA, intraState, dailyOf, RANGE_LABEL } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, toast, haptic, openSheet, DISCLAIMER } from "./ui.js";
 import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, openPredictSheet, nameGate, checkPanelFit, initDashSwipe } from "./pages.js";
@@ -87,7 +87,7 @@ export function goCard(i, { v = 0 } = {}) {
 const stepFeed = (dir) => goCard((anim ? fTarget : Math.round(feed.scrollTop / feedH())) + dir);
 // Finger (and mouse) drags up and down. Sideways drags are handled per card in setupSwipe.
 initInteract(feed);
-initFeedback(); // press and hold anything for 5 seconds (or Feedback mode in Profile) to leave a note about that part
+initFeedback(); // press and hold anything for 3 seconds (or Feedback mode in Profile) to leave a note about that part
 let vd = null;
 feed.addEventListener("pointerdown", (e) => {
   if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -582,6 +582,8 @@ function wire(c, it) {
   c.querySelector("[data-fx]")?.addEventListener("click", (e) => { e.stopPropagation(); openIndicatorsSheet(() => redrawCards()); });
   c.querySelector("[data-lv]")?.addEventListener("click", (e) => { e.stopPropagation(); openLinesSheet(() => redrawCards()); });
   c.querySelector(".chartbox:not(.nodata)")?.addEventListener("click", () => { if (!justScrubbed()) chartTapHint(); });
+  // two fingers on a card's chart: open it full screen, where pinching zooms the chart
+  c.querySelector(".chartbox")?.addEventListener("touchstart", (e) => { if (e.touches.length === 2) { cancelPendingHold(); openFull(it.sym); } }, { passive: true });
   c.querySelector("[data-full]")?.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) { coachEvent("full"); openFull(it.sym); } });
   c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); coachEvent("tf"); openChartSheet(it.sym, () => redrawCards()); });
   c.querySelector("[data-pred]")?.addEventListener("click", (e) => { e.stopPropagation(); openPredictSheet(it.sym, () => redrawCards(it.sym.key)); });
@@ -603,7 +605,8 @@ export function redrawCards(key) {
   });
   APP.needsRebuild = true;
 }
-document.addEventListener("pulse-intra", (e) => redrawCards(e.detail));
+let dashT = 0;
+document.addEventListener("pulse-intra", (e) => { redrawCards(e.detail); if (APP.tab === "dash") { clearTimeout(dashT); dashT = setTimeout(() => { const pg = $("dash").parentElement, y = pg.scrollTop; renderDash(); pg.scrollTop = y; }, 300); } });
 // turning the phone changes how many panels fit, so cards redraw once the rotation settles
 let rzT = 0, lastFit = maxPanels();
 addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { if (maxPanels() !== lastFit) { lastFit = maxPanels(); redrawCards(); checkPanelFit(() => redrawCards()); } }, 250); });

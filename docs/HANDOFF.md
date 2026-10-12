@@ -56,7 +56,7 @@ web/                    the app (served as-is by GitHub Pages)
   js/describe.js        plain-language meaning of each reading
   js/store.js           account (Firebase or demo), saves, alerts, lists, username, predictions, feedback
   js/score.js, predict.js  prediction game (shared with the pipeline)
-  js/feedback.js        press-and-hold (5 s) / Feedback mode → note about the tapped part
+  js/feedback.js        press-and-hold (3 s) / Feedback mode → note about the tapped part
   js/coach.js, search.js, ui.js
 pipeline/               Node 22, run by GitHub Actions
   run.mjs               full data job: follows → prices → news → alerts + push → predictions
@@ -101,7 +101,7 @@ scripts/check.sh        all tests; tests/ = pipeline, levels, score, predict (No
 - **Daily recap card:** the % change since midnight, local time.
 - **Prediction game:** see section 5 for how the timelines and scoring work.
 - **Feedback loop:**
-  - Press and hold (5 s) anything, or turn on Profile → Give feedback, where every tap (buttons too) opens a note.
+  - Press and hold (3 s) anything, or turn on Profile → Give feedback, where every tap (buttons too) opens a note.
   - Each note is saved to Firestore `feedback` with where it was left (part, screen, coin, screen size).
   - Admins see Profile → Admin → **Feedback inbox**: filter by status, mark done or declined, and use
     **"Copy all open notes for Claude"**.

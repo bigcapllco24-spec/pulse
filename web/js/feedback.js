@@ -1,4 +1,4 @@
-// Feedback on any part of the app. Press and hold anything (text, a chart, a panel, a button) for 5 seconds to leave
+// Feedback on any part of the app. Press and hold anything (text, a chart, a panel, a button) for 3 seconds to leave
 // a note about that exact part; or switch on Feedback mode in Profile, where every tap (buttons too) opens the note instead of acting.
 // Notes go to Firestore "feedback" with where they were left, so whoever builds from them knows exactly what's meant.
 import { esc, openSheet, closeSheet, toast, haptic } from "./ui.js";
@@ -8,7 +8,7 @@ import { APP } from "./app.js";
 const VERSION = "pulse-web";
 const DAILY = 20; // notes per phone per day, so one person can't flood the list
 let mode = false, held = false, quietUntil = 0;
-const HOLD_MS = 5000;
+const HOLD_MS = 3000;
 
 // A readable name for what was tapped: the nearest labelled part, from the most specific to the screen.
 function describeTarget(el) {
@@ -37,7 +37,7 @@ function describeTarget(el) {
   };
 }
 
-// The question after a 5-second hold: about this part, yes or not now.
+// The question after a 3-second hold: about this part, yes or not now.
 function askFeedback(el) {
   const ctx = describeTarget(el);
   haptic();
@@ -92,7 +92,7 @@ export function initFeedback() {
     if (!mode || e.target.closest("#fbBar, .sheet, .backdrop, .toast, .tabbar")) return; // the tab bar still moves between screens
     e.preventDefault(); e.stopPropagation(); openFeedback(e.target);
   }, true);
-  // Press and hold anything still for 5 seconds: a small popup asks whether to leave a note about that part.
+  // Press and hold anything still for 3 seconds: a small popup asks whether to leave a note about that part.
   // (Triple-tapping clashed with buttons and with the phone's double-tap zoom.)
   let hold = null;
   const stop = () => { if (hold) { clearTimeout(hold.t); hold = null; } };

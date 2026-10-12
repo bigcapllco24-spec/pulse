@@ -657,3 +657,12 @@ input, textarea, [contenteditable] { -webkit-user-select: text; user-select: tex
 .fbask { gap: 10px; } .fbask .btn { flex: 1; }
 .addto { margin: 8px 0 4px; }
 .result .x { font-weight: 700; color: var(--accent); } .result.in .x { color: var(--up); }
+.pask { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius: 18px; padding: 14px; margin-bottom: 12px; }
+.pask h2 { margin: 0 0 4px; } .pask p { margin: 0 0 12px; font-size: var(--t-s); color: var(--muted); }
+.pask .pchip { background: var(--surface); }
+.r small { font-size: var(--t-xs); color: var(--muted); margin-left: 2px; }
+
+/* The app handles its own pinch and zoom: the page itself never zooms. On the full-screen chart a pinch was zooming the
+   whole page as well as the chart, so the two fought and hold-to-read stopped working. */
+html { touch-action: pan-x pan-y; }
+.full .fcard { touch-action: none; }

@@ -53,6 +53,32 @@ export function closeSheet() {
   const fn = onCloseFn; onCloseFn = null; fn?.();
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+// Swipe a sheet down to close it, like any phone sheet: from its top bar, or from its content once that's scrolled to
+// the top. A short drag springs back.
+{
+  let d = null;
+  document.addEventListener("touchstart", (e) => {
+    const sh = e.target.closest?.("#sheet"); if (!sh || e.touches.length > 1 || e.target.closest("input, textarea, select, .pchips, .fxchips, .opts")) return (d = null);
+    const body = sh.querySelector(".sh-body"), inBody = body?.contains(e.target);
+    d = { sh, y: e.touches[0].clientY, t: e.timeStamp, dy: 0, ok: !inBody || body.scrollTop <= 0 };
+  }, { passive: true });
+  document.addEventListener("touchmove", (e) => {
+    if (!d?.ok) return;
+    d.dy = e.touches[0].clientY - d.y;
+    if (d.dy <= 0) { d.sh.style.transform = ""; return; }
+    if (e.cancelable) e.preventDefault(); // the sheet follows the finger instead of the page bouncing
+    d.sh.style.transition = "none"; d.sh.style.transform = `translateY(${d.dy}px)`;
+  }, { passive: false });
+  const end = (e) => {
+    if (!d?.ok) return (d = null);
+    const { sh, dy, t } = d; d = null;
+    sh.style.transition = "";
+    if (dy > 110 || (dy > 40 && dy / Math.max(1, e.timeStamp - t) > 0.6)) { closeSheet(); requestAnimationFrame(() => (sh.style.transform = "")); } // slides on down from where it was let go
+    else sh.style.transform = "";
+  };
+  document.addEventListener("touchend", end, { passive: true });
+  document.addEventListener("touchcancel", end, { passive: true });
+}
 // With the phone keyboard up, keep the open sheet just above it and no taller than the space left, so typing a
 // note never pushes the page sideways or hides the text box.
 if (window.visualViewport) {

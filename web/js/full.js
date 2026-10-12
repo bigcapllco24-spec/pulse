@@ -146,6 +146,7 @@ function wireGestures(root) {
   root.addEventListener("pointerdown", (e) => {
     if (!st?.bars || !e.target.closest(".fcard") || e.target.closest("button")) return;
     stopFling();
+    if (e.isPrimary) pts.clear(); // a first finger down means no others are: drop any finger whose lift was missed (it made one finger zoom)
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pts.size === 2) { cancelPendingHold(); const [a, b] = [...pts.values()]; g = { kind: "pinch", d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, count0: st.count, end0: st.end, cx: (a.x + b.x) / 2 }; }
     else g = { kind: "maybe", x0: e.clientX, y0: e.clientY, end0: st.end, vx: 0, lx: e.clientX, lt: e.timeStamp };

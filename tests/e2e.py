@@ -474,7 +474,7 @@ def phone_tests(b):
     # feedback: hold any part still for 5 seconds, say yes, and leave a note about it; Feedback mode makes every tap a note
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(600)
     def hold5(x, y):
-        cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y}]}); p.wait_for_timeout(5300)
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y}]}); p.wait_for_timeout(3300)
         asked = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
         cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(700)
         return asked
@@ -485,13 +485,19 @@ def phone_tests(b):
     fs3 = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
     fsz = p.evaluate("parseFloat(getComputedStyle(document.getElementById('fbText')||document.body).fontSize)")
     if p.locator("#fbText").count(): p.fill("#fbText", "Held S/R for 5 seconds"); p.click("#fbSend"); p.wait_for_timeout(500)
-    check("phone: holding a button (S/R) for 5s asks to leave feedback, letting go doesn't press it, and the note is about S/R (16px+ box)", "Leave feedback?" in ask and "S/R button" in ask and still_ask and "S/R button" in fs3 and fsz >= 16, f"{ask[:50]!r} {still_ask} {fsz}")
+    check("phone: holding a button (S/R) for 3s asks to leave feedback, letting go doesn't press it, and the note is about S/R (16px+ box)", "Leave feedback?" in ask and "S/R button" in ask and still_ask and "S/R button" in fs3 and fsz >= 16, f"{ask[:50]!r} {still_ask} {fsz}")
     fbox = p.locator(".card.active .chartbox").bounding_box()
     ask2 = hold5(fbox["x"] + fbox["width"] * 0.5, fbox["y"] + fbox["height"] * 0.5)
     if p.is_visible("#sheet [data-fbno]"): p.click("#sheet [data-fbno]"); p.wait_for_timeout(500)
-    check("phone: holding the chart for 5s offers feedback about that coin's price chart, and Not now closes it", "Price chart" in ask2 and _re.search(r"Feed · [A-Z]{2,5}", ask2) and not p.is_visible("#sheet"), ask2[:80].replace("\n", " "))
+    check("phone: holding the chart for 3s offers feedback about that coin's price chart, and Not now closes it", "Price chart" in ask2 and _re.search(r"Feed · [A-Z]{2,5}", ask2) and not p.is_visible("#sheet"), ask2[:80].replace("\n", " "))
     p.click(".card.active [data-pexp]"); p.wait_for_timeout(600); np_ = p.locator("#sheet .pbig .lower").count(); p.click("#sheet [data-close]"); p.wait_for_timeout(500)
     check("phone: ⤢ opens the chart's indicator panels large in a sheet", np_ >= 1, str(np_))
+    p.click(".card.active [data-fx]"); p.wait_for_timeout(600)
+    hb = p.locator("#sheet .sh-head").bounding_box(); hx, hy = hb["x"] + hb["width"] / 2, hb["y"] + hb["height"] / 2
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": hx, "y": hy}]})
+    for k in range(1, 9): cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": hx, "y": hy + 30 * k}]}); time.sleep(0.02)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(700)
+    check("phone: a sheet closes by swiping it down", not p.is_visible("#sheet"), "")
     # more panels saved than fit: the app asks which to keep (the last ones added are pre-picked), and a 5th asks what to swap
     p.evaluate("(()=>{const k='pl.demoAccount', d=JSON.parse(localStorage.getItem(k)); d.settings=d.settings||{}; d.settings.chart=d.settings.chart||{}; d.settings.chart.lower='ADX,STOCH,MFI,CCI,RSI,MACD'; localStorage.setItem(k, JSON.stringify(d));})()")
     p.reload(); p.wait_for_timeout(3000)
@@ -603,11 +609,12 @@ def prediction_test(b):
     page = p.inner_text("#dash")
     check("predict: the hour-long call settled on the phone from 1-minute candles and shows how close it was", first.startswith("ETH · 1 hour") and "it was $" in first and _re.search(r"\d+\.\d% (above|below)", first) and any(l in first for l in ["Spot on", "Very close", "Close", "Off", "Far off"]), first.replace("\n", " "))
     check("predict: each prediction shows only how close it was, never a per-prediction score", "points" not in page.lower() and "trade" not in page.lower(), "")
-    p.click("#dash [data-how]"); p.wait_for_timeout(400)
-    how = p.inner_text("#sheet"); p.click("#sheet [data-close]"); p.wait_for_timeout(300)
-    check("predict: How the score works explains the parts, longer calls and the 550 start", all(x in how for x in ["Closeness", "Consistency", "Direction", "Longer calls count more", "550"]), "")
-    p.click("#dash [data-dv=coins]"); p.wait_for_timeout(400)
+    first_el = p.evaluate("document.querySelector('#dash .dview').firstElementChild?.className")
+    check("predict: the Predictions half starts with the ask (pick a coin, call its price), and has no 'How the score works'", first_el == "pask" and "How the score works" not in page and p.locator("#dash .pask [data-pp]").count() >= 1, str(first_el))
+    p.click("#dash [data-dv=coins]"); p.wait_for_timeout(600)
     check("dashboard: the switch goes back to the coins, with the watchlist chips", p.locator("#dash .wchips").count() == 1 and p.locator("#dash .pscard").count() == 0, "")
+    colours = p.evaluate("[...document.querySelectorAll('#dash .list [data-open]')].map(r => [r.querySelector('.r span').className, r.querySelector('.spark path').getAttribute('class')])")
+    check("dashboard: each coin's sparkline is red when its % is down and green when up (same period)", colours and all((c == "up") == (k == "lu") for c, k in colours), str(colours[:4]))
     check("predict: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 

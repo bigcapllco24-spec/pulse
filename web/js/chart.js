@@ -180,9 +180,9 @@ const LEG = { macd: "MACD", macdSignal: "signal", stochK: "%K", stochD: "%D", ad
 const rm = (k) => `<button class="orm lrm" data-rmstudy="${k}" aria-label="Remove ${esc(PANELS[k]?.name || k)}">✕</button>`;
 const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-export function sparkline(vals, w = 80, h = 28) {
+export function sparkline(vals, w = 80, h = 28, up = vals?.length ? vals[vals.length - 1] >= vals[0] : true) { // up: the colour, when the caller's % says which way
   if (!vals?.length) return "";
-  const lo = Math.min(...vals), hi = Math.max(...vals), up = vals[vals.length - 1] >= vals[0];
+  const lo = Math.min(...vals), hi = Math.max(...vals);
   const d = path(vals.map((v, i) => [(i / (vals.length - 1)) * w, h - 2 - ((v - lo) / (hi - lo || 1)) * (h - 4)]));
   return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="${d}" class="${up ? "lu" : "ld"}"/></svg>`;
 }
