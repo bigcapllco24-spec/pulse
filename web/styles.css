@@ -655,3 +655,5 @@ input, textarea, select, .input, .fbtext, .uname input { font-size: max(16px, 1e
 body { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
 .fbask { gap: 10px; } .fbask .btn { flex: 1; }
+.addto { margin: 8px 0 4px; }
+.result .x { font-weight: 700; color: var(--accent); } .result.in .x { color: var(--up); }

@@ -28,26 +28,42 @@ export function initPages() {
 // ---------- add-stock sheet: search, then choose watchlists
 export function openAddSheet(prefill = "") {
   const curList = store.data?.settings?.list;
-  openSheet("Add coins", "", (body) => { mountSearch(body, prefill); setTimeout(() => startTour("add"), 350); },
+  openSheet("Add a coin", "", (body) => { mountSearch(body, prefill); setTimeout(() => startTour("add"), 350); },
     () => { const added = APP.lastAdded; buildFeed({ keepKey: added || APP.seq[APP.active]?.sym?.key }); APP.lastAdded = null;
       if (added && !D.series[added]) doRefresh(false).then(() => { if (APP.tab === "dash") renderDash(); }); }); // fetch prices for a newly added coin
 
+  // One tap adds: a coin goes straight into the watchlist the feed is showing (or your first one), the sheet stays
+  // open for the next, and closing it takes the feed to the last coin added. Tap an added coin to change its lists.
+  function target() { const wl = watchlists(); return wl.find((w) => w.id === curList) || wl[0] || null; }
+  async function quickAdd(r, redraw) {
+    let w = target();
+    if (!w) { const id = await newWatchlist("My watchlist"); w = watchlists().find((x) => x.id === id); }
+    await setSymLists(symDoc(r), [...new Set([...listsOf(r.key), w.id])]);
+    APP.lastAdded = r.key; haptic(); redraw();
+    toast(`Added ${r.t} to ${w.name}`, { action: "Undo", onAction: async () => { await setSymLists(symDoc(r), listsOf(r.key).filter((id) => id !== w.id)); redraw(); } });
+  }
   function mountSearch(body, initial = "") {
-    body.innerHTML = `<input class="input" id="addQ" type="search" placeholder="Company, ticker, ETF or coin" autocomplete="off" spellcheck="false" value="${esc(initial)}" aria-label="Search">
-      <div id="addRes" style="margin-top:6px"></div>`;
+    const w = target();
+    body.innerHTML = `<input class="input" id="addQ" type="search" placeholder="Search coins, like “sol” or “dogecoin”" autocomplete="off" spellcheck="false" value="${esc(initial)}" aria-label="Search coins">
+      <p class="hint addto">Tap a coin to add it${w ? ` to <b>${esc(w.name)}</b>` : ""}. Tap again to change its watchlists.</p>
+      <div id="addRes"></div>`;
     const q = body.querySelector("#addQ");
     let rows = [];
-    const draw = (extra = "") => {
-      const text = q.value.trim(), inAny = new Set(allSyms().map((s) => s.key));
-      body.querySelector("#addRes").innerHTML = !text ? `<p class="hint">Search coins by name or symbol, like “bitcoin”, “eth” or “sol”.</p>${starterHtml()}` :
-        (rows.map((r, i) => `<button class="result ${inAny.has(r.key) ? "in" : ""}" data-i="${i}"><span class="t">${esc(r.t)}</span><span class="n">${esc(r.n)}</span><span class="x">${inAny.has(r.key) ? "Added" : esc(MKLABEL[r.m] + " · " + TYLABEL[r.ty])}</span></button>`).join("") ||
-          `<p class="hint">No listing matches “${esc(text)}”.</p>`) + extra +
-        "";
-      body.querySelectorAll("[data-i]").forEach((b) => (b.onclick = () => chooseLists(rows[+b.dataset.i], () => mountSearch(body))));
+    const draw = () => {
+      const text = q.value.trim(), inAny = new Set(allSyms().map((s) => s.key)), idx = symbolIndex() || [];
+      const pop = POPULAR.map((k) => idx.find((r) => r.key === k)).filter(Boolean).sort((x, y) => inAny.has(x.key) - inAny.has(y.key)); // not-yet-added first
+      const btn = (r, i, src) => `<button class="result ${inAny.has(r.key) ? "in" : ""}" data-${src}="${i}"><span class="t">${esc(r.t)}</span><span class="n">${esc(r.n)}</span><span class="x">${inAny.has(r.key) ? "✓ Added" : "+ Add"}</span></button>`;
+      body.querySelector("#addRes").innerHTML = !text
+        ? `${pop.length ? `<div class="label" style="margin:10px 0 6px">Most traded coins</div>${pop.map((r, i) => btn(r, i, "p")).join("")}` : ""}${starterHtml()}`
+        : rows.map((r, i) => btn(r, i, "i")).join("") || `<p class="hint">No coin matches “${esc(text)}”.</p>`;
+      const pick = (r) => (inAny.has(r.key) ? chooseLists(r, () => mountSearch(body, q.value)) : quickAdd(r, draw));
+      body.querySelectorAll("[data-i]").forEach((b) => (b.onclick = () => pick(rows[+b.dataset.i])));
+      body.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => pick(pop[+b.dataset.p])));
       body.querySelectorAll("[data-starter]").forEach((b) => (b.onclick = () => addStarter(b.dataset.starter)));
     };
     let t;
     q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(async () => { await loadSymbols().catch(() => {}); rows = searchSymbols(q.value, 8); draw(); }, 60); });
+    q.addEventListener("keydown", (e) => { if (e.key === "Enter" && rows[0]) { e.preventDefault(); body.querySelector("[data-i='0']")?.click(); } });
     loadSymbols().then(() => { if (q.value) rows = searchSymbols(q.value, 8); draw(); }).catch(() => draw());
     setTimeout(() => q.focus(), 280);
   }
@@ -77,6 +93,8 @@ export function openAddSheet(prefill = "") {
   }
 }
 
+// Shown before typing: the largest, most traded coins (by market size, not a recommendation), one tap to add.
+const POPULAR = ["CRYPTO:BTC", "CRYPTO:ETH", "CRYPTO:SOL", "CRYPTO:XRP", "CRYPTO:BNB", "CRYPTO:DOGE", "CRYPTO:ADA", "CRYPTO:TRX", "CRYPTO:LINK", "CRYPTO:AVAX", "CRYPTO:LTC", "CRYPTO:DOT"];
 // One-tap starter watchlists, built from published groupings only (index membership, coin size). Never picks.
 const STARTERS = {
   top10: { name: "Top 10 coins by market cap", keys: ["CRYPTO:BTC", "CRYPTO:ETH", "CRYPTO:BNB", "CRYPTO:XRP", "CRYPTO:SOL", "CRYPTO:TRX", "CRYPTO:ZEC", "CRYPTO:HYPE", "CRYPTO:DOGE", "CRYPTO:LINK"] },
@@ -131,16 +149,16 @@ export function openSwitcher() {
   }, () => buildFeed());
 }
 
-// ---------- dashboard: two equal halves, Coins (your watchlists; picking one also sets what the feed shows) and
-// Predictions (the prediction game: score, quick predict, open and scored calls). A switch at the top, or a swipe.
+// ---------- dashboard: Predictions first (score, quick predict, open and scored calls), then Coins (your watchlists;
+// picking one also sets what the feed shows). A switch at the top, or a sideways swipe.
 export function renderDash() {
-  const el = $("dash"), view = APP.dashView === "preds" ? "preds" : "coins";
+  const el = $("dash"), view = APP.dashView === "coins" ? "coins" : "preds"; // predictions first; coins a tap or swipe away
   const syms = currentSyms(), cs = chartSettings();
   const upN = syms.filter((s) => (view_(s, cs)?.daily.now.changePct ?? 0) > 0).length, haveN = syms.filter((s) => view_(s, cs)).length;
   const sc = myScore(), open = store.preds.length;
   const tab = (k, title, meta) => `<button data-dv="${k}" aria-pressed="${view === k}"><b>${title}</b><span>${meta}</span></button>`;
   el.innerHTML = `<h1>Dashboard</h1>
-    <div class="dswitch" role="tablist" aria-label="Dashboard">${tab("coins", "Coins", haveN ? `${upN} of ${haveN} up today` : `${syms.length} coins`)}${tab("preds", "Predictions", `${sc?.score != null ? `Score ${sc.score}` : "No score yet"}${open ? ` · ${open} open` : ""}`)}</div>
+    <div class="dswitch" role="tablist" aria-label="Dashboard">${tab("preds", "Predictions", `${sc?.score != null ? `Score ${sc.score}` : "No score yet"}${open ? ` · ${open} open` : ""}`)}${tab("coins", "Coins", haveN ? `${upN} of ${haveN} up today` : `${syms.length} coins`)}</div>
     <div class="dview" data-view="${view}"></div>`;
   const body = el.querySelector(".dview");
   if (view === "preds") predsView(body); else coinsView(body);
@@ -153,8 +171,8 @@ export function initDashSwipe() {
   const root = $("dash"); let st = null;
   const go = (dx, dy, ms) => {
     if (ms > 600 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    const next = dx < 0 ? "preds" : "coins";
-    if ((APP.dashView || "coins") !== next) { APP.dashView = next; haptic(); renderDash(); root.parentElement.scrollTop = 0; }
+    const next = dx < 0 ? "coins" : "preds";
+    if ((APP.dashView || "preds") !== next) { APP.dashView = next; haptic(); renderDash(); root.parentElement.scrollTop = 0; }
   };
   root.addEventListener("touchstart", (e) => { const t = e.touches[0]; st = e.touches.length > 1 || e.target.closest(".wchips, .pchips, .opts") ? null : { x: t.clientX, y: t.clientY, at: e.timeStamp }; }, { passive: true });
   root.addEventListener("touchend", (e) => { if (!st) return; const t = e.changedTouches[0], s0 = st; st = null; go(t.clientX - s0.x, t.clientY - s0.y, e.timeStamp - s0.at); }, { passive: true });

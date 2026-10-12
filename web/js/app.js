@@ -496,7 +496,7 @@ function loadSince9(ref) {
 function doneHtml(round) {
   return `<div class="special done" style="align-items:flex-start"><svg class="done-ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="34"/><path d="M26 41l9 9 19-20"/></svg>
     <h1>You're all caught up.</h1><p>You've seen all ${APP.syms.length} in ${esc(listName())}${round > 1 ? ` (round ${round})` : ""}. Prices refresh each time you open the app.</p>
-    ${quizHtml(round)}<p class="hint">Keep scrolling to go round again.</p></div>`;
+    ${quizHtml(round)}<p><button class="btn" data-act="add">+ Add a coin</button></p><p class="hint">Keep scrolling to go round again.</p></div>`;
 }
 function emptyHtml() {
   return `<div class="special"><h1>Nothing here yet.</h1><p>Add coins to ${esc(listName())} to fill your feed.</p><button class="btn primary" data-act="add">Add coins</button></div>`;

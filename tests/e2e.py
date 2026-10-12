@@ -295,11 +295,14 @@ def phone_tests(b):
     p.fill("#addQ", "cardano"); p.wait_for_timeout(600)
     first = p.locator(".result").first.inner_text() if p.locator(".result").count() else ""
     check("phone: search finds Cardano (ADA)", "ADA" in first, first.replace("\n", " "))
-    p.locator(".result").first.click(); p.wait_for_timeout(300)
+    p.locator(".result").first.click(); p.wait_for_timeout(500)
+    toast1 = p.inner_text("#toast") if p.is_visible("#toast") else ""; added1 = p.locator(".result").first.inner_text()
+    check("phone: one tap adds the coin to the feed's watchlist, with Undo, and the sheet stays open for the next", "Added ADA" in toast1 and "Undo" in toast1 and "added" in added1.lower() and p.locator("#addQ").count() == 1, f"{toast1!r} / {added1!r}")
+    p.locator(".result").first.click(); p.wait_for_timeout(300)  # tap again: choose its watchlists
     p.fill("#newWl", "Altcoins"); p.click("#doAdd"); p.wait_for_timeout(700)
     toast = p.inner_text("#toast") if p.is_visible("#toast") else ""
-    check("phone: adding to a new watchlist confirms with Undo", "Altcoins" in toast and "Undo" in toast, toast)
-    check("phone: sheet returns to search for the next stock", p.locator("#addQ").count() == 1)
+    check("phone: tapping an added coin changes its watchlists (here a new one), confirmed with Undo", "Altcoins" in toast and "Undo" in toast, toast)
+    check("phone: sheet returns to search for the next coin", p.locator("#addQ").count() == 1)
     p.click("#sheet [data-close]"); p.wait_for_timeout(900)
     check("phone: feed jumps to the newly added stock", active(p)[0] == "ADA", str(active(p)))
 
@@ -318,6 +321,9 @@ def phone_tests(b):
 
     # dashboard
     p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(800)
+    first_dv = p.get_attribute("#dash [data-dv][aria-pressed=true]", "data-dv"); dv_order = p.locator("#dash [data-dv]").evaluate_all("bs => bs.map(b => b.dataset.dv)")
+    check("phone: the dashboard opens on Predictions (first in the switch), with Coins next to it", first_dv == "preds" and dv_order == ["preds", "coins"] and p.locator("#dash .pscard").count() == 1, f"{first_dv} {dv_order}")
+    p.click("#dash [data-dv=coins]"); p.wait_for_timeout(500)
     rows = p.locator("#dash .list [data-open]").count()
     check("phone: dashboard lists coins with data and the other symbols", rows >= len(ORDER), f"rows={rows}")
     p.locator("#dash [data-open='CRYPTO:XRP']").click(); p.wait_for_timeout(1300)
@@ -631,11 +637,11 @@ def tour_test(b):
     p.click("#sheet [data-close]"); p.wait_for_timeout(500)
     p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(900)
     d = [step()]
-    for _ in range(5):
+    for _ in range(3):
         if p.locator("#coach [data-next]").count(): p.click("#coach [data-next]"); p.wait_for_timeout(250)
     d.append(step())
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(400); p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(900); d.append(step())
-    check("tour: the dashboard explains its two halves and watchlists once, in 5 steps, and not again", d == ["1 / 5", "none", "none"], str(d))
+    check("tour: the dashboard explains predictions and the switch once, in 3 steps, and not again", d == ["1 / 3", "none", "none"], str(d))
     p.reload(); p.wait_for_timeout(2500)
     check("tour: never shown again after it is finished", step() == "none")
     ctx.close()
