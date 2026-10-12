@@ -558,3 +558,9 @@ body.fbmode .card, body.fbmode .page, body.fbmode .tabbar { outline: 2px dashed 
 .fbitem > p { margin: 8px 0; font-size: var(--t-m); line-height: 1.5; white-space: pre-wrap; }
 .fbact { display: flex; gap: 8px; align-items: center; }
 code.uid { font-size: var(--t-s); word-break: break-all; }
+/* first step for a new account: choose a username (can't be skipped) */
+.gate { position: fixed; inset: 0; z-index: 95; background: var(--bg); display: grid; place-items: center; padding: calc(24px + var(--safe-t)) 22px calc(24px + var(--safe-b)); overflow-y: auto; }
+.gatein { width: 100%; max-width: 420px; display: grid; gap: 12px; }
+.gatein h1 { margin: 0; } .gatein p { margin: 0; color: var(--muted); }
+.gatein .field { margin: 6px 0 0; }
+body.gated .tabbar, body.gated .topbar { visibility: hidden; }

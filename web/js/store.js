@@ -258,6 +258,14 @@ export function checkUsername(raw) {
   if (RESERVED.test(name)) return { name, error: "That name is reserved." };
   return { name, error: null };
 }
+// Whether a name is free (or already this account's). Demo mode has no other users.
+export async function usernameFree(name) {
+  if (store.mode === "demo") return true;
+  await connected();
+  if (!fb) throw new Error("offline");
+  const d = await fb.f.getDoc(fb.f.doc(fb.db, "usernames", name));
+  return !d.exists() || d.data().acct === store.id;
+}
 export async function setUsername(raw) {
   const { name, error } = checkUsername(raw);
   if (error) throw new Error(error);

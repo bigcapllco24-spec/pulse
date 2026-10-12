@@ -50,6 +50,11 @@ def binance_route(route):
 def active(p):
     return p.evaluate("(()=>{const c=document.querySelector('.card.active');return c?[c.getAttribute('aria-label'),c.dataset.view||'main',+c.dataset.i]:[null,null,-1]})()")
 
+def pass_gate(p, name="chart_fan"):
+    """A new account must choose a username first; fill it in and continue."""
+    if p.locator("#gate").count():
+        p.fill("#gIn", name); p.wait_for_timeout(400); p.click("#gGo"); p.wait_for_timeout(600)
+
 def phone_tests(b):
     ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
     ctx.route("https://api.kraken.com/**", kraken_route); ctx.route("https://data-api.binance.vision/**", binance_route); demo_mode(ctx)
@@ -57,6 +62,11 @@ def phone_tests(b):
     p = ctx.new_page(); errs = []
     p.on("pageerror", lambda e: errs.append(str(e)))
     p.goto(BASE); p.wait_for_timeout(2500)
+    gate = p.locator("#gate").count() == 1 and p.is_visible("#gate")
+    p.fill("#gIn", "ab"); p.wait_for_timeout(400); g_bad = p.inner_text("#gMsg"); g_dis = p.is_disabled("#gGo")
+    gtxt = p.inner_text("#gate")
+    p.fill("#gIn", "chart_fan"); p.wait_for_timeout(400); p.click("#gGo"); p.wait_for_timeout(700)
+    check("phone: a new account must pick a username first, told it can be changed only twice", gate and "3 to 20" in g_bad and g_dis and "2 times" in gtxt and not p.locator("#gate").count(), f"gate={gate} {g_bad} disabled={g_dis}")
     cdp = ctx.new_cdp_session(p)
 
     def swipe(x0, y0, x1, y1, steps=12, dur=0.25, settle=900):
@@ -347,14 +357,13 @@ def phone_tests(b):
     p.click("#full [data-fclose]"); p.wait_for_timeout(400)
     check("phone: hold-to-read works in full screen, and ✕ closes it back to the feed", "Open" in fcard and p.evaluate("document.getElementById('full').hidden") and active(p)[0] == "BTC", fcard[:60].replace("\n", " "))
 
-    # profile: grouped settings and a username that can be changed only twice
+    # profile: grouped settings; the username chosen at the start can be changed only twice
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
     groups = p.locator("#profile h2.pg").all_inner_texts()
-    no_nag = p.locator("#pName").count() == 0 and "username" not in p.inner_text("#profile .phead").lower()
+    lefts = [p.inner_text("#profile .phead b") + " | " + (p.inner_text("#profile .pleft") if p.locator("#profile .pleft").count() else "")]
     p.click("[data-p=account]"); p.wait_for_timeout(300); p.click("#aName"); p.wait_for_timeout(400)
-    p.fill("#uIn", "ab"); bad1 = p.inner_text("#uMsg"); p.fill("#uIn", "pulse98765432"); bad2 = p.inner_text("#uMsg")
-    names, lefts = ["chart_fan", "chart_fan2", "chart.fan3"], []
-    for n in names:
+    p.fill("#uIn", "pulse98765432"); bad2 = p.inner_text("#uMsg")
+    for n in ["chart_fan2", "chart.fan3"]:
         if not p.is_visible("#sheet"):
             (p.click("#pName") if p.locator("#pName").count() else p.click("#aName")); p.wait_for_timeout(400)
         p.fill("#uIn", n); p.click("#uSave"); p.wait_for_timeout(500)
@@ -362,9 +371,9 @@ def phone_tests(b):
         lefts.append(p.inner_text("#profile .phead b") + " | " + (p.inner_text("#profile .pleft") if p.locator("#profile .pleft").count() else ""))
     p.click("#pName"); p.wait_for_timeout(500)
     blocked = (p.inner_text("#toast") if p.is_visible("#toast") else "") and not p.is_visible("#sheet")
-    check("phone: profile is grouped (Prediction game, Charts, Alerts, Sharing, Account, Help, and Admin for admins) and doesn't push a username", len(groups) in (6, 7) and groups[0].lower() == "prediction game" and groups[5].lower() == "help" and no_nag, " | ".join(groups))
-    check("phone: username rejects bad names (too short, phone-like numbers)", "3 to 20" in bad1 and "phone" in bad2, f"{bad1} / {bad2}")
-    check("phone: username can be set, then changed twice, then no more", lefts[0].startswith("@chart_fan |") and "2 username changes left" in lefts[0] and "1 username change left" in lefts[1] and "No username changes left" in lefts[2] and bool(blocked), " ; ".join(lefts))
+    check("phone: profile is grouped (Prediction game, Charts, Alerts, Sharing, Account, Help, and Admin for admins)", len(groups) in (6, 7) and groups[0].lower() == "prediction game" and groups[5].lower() == "help", " | ".join(groups))
+    check("phone: username rejects phone-like numbers", "phone" in bad2, bad2)
+    check("phone: the starting username can be changed twice, then no more", lefts[0].startswith("@chart_fan |") and "2 username changes left" in lefts[0] and "1 username change left" in lefts[1] and "No username changes left" in lefts[2] and bool(blocked), " ; ".join(lefts))
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(600)
 
     # watchlists live on the dashboard: chips switch lists (and the feed), Edit removes a coin
@@ -499,7 +508,7 @@ def prediction_test(b):
     ctx.route("https://api.kraken.com/**", steady_kraken_route); demo_mode(ctx); ctx.add_init_script(NOCOACH)
     p = ctx.new_page(); errs = []
     p.on("pageerror", lambda e: errs.append(str(e)))
-    p.goto(BASE); p.wait_for_timeout(2500)
+    p.goto(BASE); p.wait_for_timeout(2500); pass_gate(p)
     p.keyboard.press("ArrowDown"); p.wait_for_timeout(1200)
     chip = p.locator(".card.active [data-pred]")
     check("predict: every coin card has a Predict chip", chip.count() == 1 and "Predict" in chip.inner_text(), str(active(p)))
@@ -548,7 +557,7 @@ def tour_test(b):
     # A brand-new user: the feed teaches itself step by step, each step finishing when the gesture is done.
     ctx = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
     ctx.route("https://api.kraken.com/**", kraken_route); ctx.route("https://data-api.binance.vision/**", binance_route); demo_mode(ctx)
-    p = ctx.new_page(); p.goto(BASE); p.wait_for_timeout(2500); cdp = ctx.new_cdp_session(p)
+    p = ctx.new_page(); p.goto(BASE); p.wait_for_timeout(2500); pass_gate(p); p.wait_for_timeout(900); cdp = ctx.new_cdp_session(p)
     def swipe(x0, y0, x1, y1, settle=1100):
         cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x0, "y": y0}]})
         for i in range(1, 11):
@@ -594,7 +603,7 @@ def desktop_tests(b):
     p = b.new_page(viewport={"width": 1280, "height": 800}); errs = []
     p.route("https://api.kraken.com/**", kraken_route); p.add_init_script(NOCOACH); demo_mode(p)
     p.on("pageerror", lambda e: errs.append(str(e)))
-    p.goto(BASE); p.wait_for_timeout(2500)
+    p.goto(BASE); p.wait_for_timeout(2500); pass_gate(p)
     p.mouse.move(640, 450)
     p.mouse.wheel(0, 100); p.wait_for_timeout(1100)
     check("desktop: one mouse-wheel notch moves to the next card", active(p)[0] == ORDER[0], str(active(p)))

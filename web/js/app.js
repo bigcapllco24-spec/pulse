@@ -15,7 +15,7 @@ import { initFeedback } from "./feedback.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, krakenBars, INTRA, intraState, IV_LABEL, resolveInterval, dailyOf } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, openPredictSheet } from "./pages.js";
+import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, openPredictSheet, nameGate } from "./pages.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
 
@@ -677,8 +677,10 @@ export function applyTheme() {
   });
   $("alertDot").hidden = !store.alerts.some((a) => !a.read);
   buildFeed();
+  const named = new Promise((r) => nameGate(r)); // a new account picks its username first
   await doRefresh(false);
-  setTimeout(() => APP.tab === "feed" && startTour("feed"), 700);
+  await named;
+  setTimeout(() => APP.tab === "feed" && startTour("feed"), 500);
   setTimeout(() => ls.set("pl.lastOpen", new Date().toISOString()), 4000);
   loadSymbols().catch(() => {});
 })();

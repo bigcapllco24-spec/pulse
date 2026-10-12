@@ -1,6 +1,6 @@
 // Dashboard, Profile, sheets (add stocks, watchlists, switcher) and onboarding.
 import { CONFIG } from "../config.js";
-import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
+import { store, save, chartSettings, setUsername, checkUsername, usernameFree, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
   markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList,
   enablePush, signOutDevice, deleteAccount, makePrediction, myScore, isAdmin, listFeedback, setFeedbackStatus, myUid } from "./store.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
@@ -402,6 +402,42 @@ async function joinFlow(id) {
   });
 }
 // A username is only asked for when it's needed: shared lists show members by username.
+// Every account starts by choosing its username: a full-screen first step that can't be skipped. It's the name
+// on the prediction game and in shared lists; it can be changed twice later. Closes by itself if the account
+// turns out to have one already (for example once the server copy loads).
+export function nameGate(onDone) {
+  if (store.data?.username) return onDone?.();
+  let el = document.getElementById("gate");
+  if (el) return;
+  el = document.createElement("div"); el.id = "gate"; el.className = "gate"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true");
+  el.innerHTML = `<div class="gatein"><div class="label">Welcome to ${esc(CONFIG.appName)}</div>
+    <h1>Pick your username</h1>
+    <p>It's how you show up in the prediction game and in shared lists, and your score stays with it.</p>
+    <label class="field"><span>Username</span><div class="uname"><span>@</span><input id="gIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="e.g. chartwatcher"></div></label>
+    <p class="hint" id="gMsg">3–20 letters, numbers, dots or underscores.</p>
+    <div class="notice">You can change it only <b>${USERNAME_CHANGES} times</b> after this, so choose one you'll keep. Don't use your real name, email or phone number.</div>
+    <button class="btn primary block" id="gGo" disabled>Continue</button></div>`;
+  document.body.appendChild(el); document.body.classList.add("gated");
+  const inp = el.querySelector("#gIn"), msg = el.querySelector("#gMsg"), btn = el.querySelector("#gGo");
+  let seq = 0;
+  const set = (t, cls, ok) => { msg.textContent = t; msg.className = "hint " + (cls || ""); btn.disabled = !ok; };
+  const check = async () => {
+    const { name, error } = checkUsername(inp.value), my = ++seq;
+    if (error) return set(inp.value ? error : "3–20 letters, numbers, dots or underscores.", inp.value ? "bad" : "", false);
+    set(`Checking @${name}…`, "", false);
+    try { const free = await usernameFree(name); if (my === seq) set(free ? `@${name} is free.` : `@${name} is taken. Try another.`, free ? "good" : "bad", free); }
+    catch { if (my === seq) set(`@${name} looks good.`, "good", true); } // offline: the save itself checks again
+  };
+  let t = 0; inp.oninput = () => { clearTimeout(t); t = setTimeout(check, 250); };
+  const close = () => { el.remove(); document.body.classList.remove("gated"); off(); onDone?.(); };
+  const off = store.on((what) => { if (what === "account" && store.data?.username && document.getElementById("gate")) close(); });
+  btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = "Saving…";
+    try { const n = await setUsername(inp.value); toast(`Welcome, @${n}.`); close(); }
+    catch (e) { set(e.message || "Couldn't save. Check your connection and try again.", "bad", true); btn.textContent = "Continue"; }
+  };
+  setTimeout(() => inp.focus(), 200);
+}
 function withUsername(fn) {
   if (store.data?.username) return fn();
   openUsernameSheet(fn, "Shared lists show members by username, so pick one first.");
@@ -412,7 +448,7 @@ function pAccount(el, back) {
   el.innerHTML = `${back}<h1>Account</h1>
     <p>Your account has no name, email or phone number. It belongs to this app on this phone${store.mode === "demo" ? " (demo mode)" : ""}.</p>
     <p class="hint">Uninstalling the app or clearing the browser's site data starts a fresh account. Moving to another phone will come later.</p>
-    <h2>Username</h2><p class="dline">${n ? `@${esc(n)} · ${usernameChangesLeft()} change${usernameChangesLeft() === 1 ? "" : "s"} left` : "Not set. You only need one for shared lists."} <button class="btn ghost sm" id="aName">${n ? "Change" : "Add"}</button></p>
+    <h2>Username</h2><p class="dline">${n ? `@${esc(n)} · ${usernameChangesLeft()} change${usernameChangesLeft() === 1 ? "" : "s"} left` : "Not set yet."} <button class="btn ghost sm" id="aName">${n ? "Change" : "Add"}</button></p>
     <h2>Delete</h2><button class="btn danger" id="del">Delete my account and all its data</button>
     <h2>Sign-in id</h2><p class="dline"><code class="uid">${esc(myUid() || "connecting…")}</code> <button class="btn ghost sm" id="aUid">Copy</button></p><p class="hint">Only needed if you help run the app: an admin adds this id to give access to the feedback inbox.</p>`;
   el.querySelector("#aUid").onclick = () => navigator.clipboard?.writeText(myUid() || "").then(() => toast("Copied."), () => toast("Couldn't copy."));
@@ -429,7 +465,7 @@ function pLegal(el, back) {
     <h2>Not investment advice</h2><p>${esc(DISCLAIMER)} Check facts and consult a registered adviser before investing.</p>
     <h2>Prediction game</h2><p>Predicting a coin's price is a game for learning how markets move. There is no money, no prizes and nothing to buy. Your predictions are private: nobody else sees them, and the app never publishes price calls. A prediction or a score is not advice and says nothing about where prices will go.</p>
     <h2>Fact tags and sorting</h2><p>Tags such as “Volume 2.1x usual” or “New 50-day high” state facts about the latest data. Sorting by move, news or RSI orders your own list by that fact. Neither is a signal or a ranking of investments.</p>
-    <h2>Privacy</h2><p>We don't ask for or store your name, email, phone number, location or contacts, and use no tracking or advertising cookies. We keep a random account ID for this app on this phone, the username you choose (if any), your watchlists, chart style, rules and indicator choices, list nicknames and, if you turn on alerts, a push token. You can delete everything from Account.</p>
+    <h2>Privacy</h2><p>We don't ask for or store your name, email, phone number, location or contacts, and use no tracking or advertising cookies. We keep a random account ID for this app on this phone, the username you chose, your watchlists, chart style, rules and indicator choices, list nicknames and, if you turn on alerts, a push token. You can delete everything from Account.</p>
     <h2>Data sources</h2><p>Coin prices from Kraken's public data, checked against CoinGecko. News found via the GDELT Project and linked to each publisher.</p>
     <h2>Age</h2><p>For people aged 18 and over.</p>
     <h2>Grievance contact</h2><p>${esc(CONFIG.companyName)} · <a href="mailto:${esc(CONFIG.grievanceEmail)}">${esc(CONFIG.grievanceEmail)}</a>. Complaints acknowledged within 24 hours, resolved within 15 days.</p>
