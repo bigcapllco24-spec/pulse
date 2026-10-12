@@ -58,6 +58,9 @@ def pass_gate(p, name="chart_fan", three_months=True):
         p.evaluate("(()=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.settings.chart={...a.settings.chart, range:'3M', v6:1}; localStorage.setItem('pl.demoAccount', JSON.stringify(a))})()")
         p.reload(); p.wait_for_timeout(2500)
 
+def full_range(p, r):
+    p.click("#full [data-frange]"); p.wait_for_timeout(350); p.click(f".sheet [data-fr='{r}']")
+
 def phone_tests(b):
     ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
     ctx.route("https://api.kraken.com/**", kraken_route); ctx.route("https://data-api.binance.vision/**", binance_route); demo_mode(ctx)
@@ -197,8 +200,8 @@ def phone_tests(b):
     glance = p.locator(".card.active [data-pane=details] .glance li").count()
     right()
     check("phone: each analysis section has an ⓘ that opens a short how-to note; At a glance gives 3-4 facts", nb >= 8 and hid0 == 0 and "doesn't predict" in howt and 3 <= glance <= 4, f"i={nb} hidden0={hid0} glance={glance} '{howt[:50]}'")
-    want = ["AT A GLANCE", "TODAY", "PERFORMANCE", "TREND", "VOLATILITY", "READINGS", "WHERE THE PRICE SITS", "YOUR ALERTS", "WATCHLISTS", "ABOUT"]
-    check("phone: details are in sections: At a glance, Today, Performance, Trend, Volatility, Readings, Ranges, Alerts, Watchlists, About", all(any(t.upper().startswith(w) for t in secs) for w in want), " | ".join(secs))
+    want = ["AT A GLANCE", "DAILY CANDLE", "PERFORMANCE", "TREND", "VOLATILITY", "INDICATORS", "WHERE THE PRICE SITS", "YOUR ALERTS", "WATCHLISTS", "ABOUT"]
+    check("phone: details are in sections: At a glance, Daily candle, Performance, Trend, Volatility, Indicators, Ranges, Alerts, Watchlists, About", all(any(t.upper().startswith(w) for t in secs) for w in want), " | ".join(secs))
 
     # the day's move sits next to the coin's name
     hd = p.evaluate("(()=>{const c=document.querySelector('.card.active'); return !!c.querySelector('.tkrow .tk') && !!c.querySelector('.tkrow .chg')})()")
@@ -323,18 +326,18 @@ def phone_tests(b):
     # full-screen chart for one coin over longer periods
     p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
     p.click(".card.active [data-full]"); p.wait_for_timeout(800)
-    fs = p.evaluate("(()=>{const f=document.getElementById('full'); return {open: !!f && !f.hidden, range: f?.querySelector('[data-fr][aria-pressed=true]')?.textContent, rects: f?.querySelectorAll('.chartbox svg rect').length||0, tk: f?.querySelector('.tk')?.textContent}})()")
-    p.click("#full [data-fr='Max']"); p.wait_for_timeout(1500)
-    f5 = p.evaluate("(()=>{const f=document.getElementById('full'); return {range: f.querySelector('[data-fr][aria-pressed=true]').textContent, note: f.querySelector('.fnote')?.textContent||'', rects: f.querySelectorAll('.chartbox svg rect').length}})()")
+    fs = p.evaluate("(()=>{const f=document.getElementById('full'); return {open: !!f && !f.hidden, range: f?.querySelector('[data-frange] b')?.textContent, rects: f?.querySelectorAll('.chartbox svg rect').length||0, tk: f?.querySelector('.tk')?.textContent}})()")
+    full_range(p, "Max"); p.wait_for_timeout(1500)
+    f5 = p.evaluate("(()=>{const f=document.getElementById('full'); return {range: f.querySelector('[data-frange] b').textContent, note: f.querySelector('.fnote')?.textContent||'', rects: f.querySelectorAll('.chartbox svg rect').length}})()")
     check("phone: expand opens a full-screen chart of that coin over a longer range (3M feed → 6M), and Max loads weekly history",
           fs["open"] and fs["tk"] == "BTC" and fs["range"] == "6M" and fs["rects"] > 20 and f5["range"] == "Max" and "Weekly" in f5["note"] and f5["rects"] > 100, f"{fs} {f5}")
     # 4Y: daily candles reach back about 4 years (older ones joined on from Binance), and RSI/MACD panels get a grid
-    p.click("#full [data-fr='4Y']"); p.wait_for_timeout(1800)
+    full_range(p, "4Y"); p.wait_for_timeout(1800)
     f4 = p.evaluate("(()=>{const f=document.getElementById('full'); return {note: f.querySelector('.fnote').textContent, grid: f.querySelectorAll('.flowers .lfull .grid').length, axes: f.querySelectorAll('.flowers .lfull .ax').length}})()")
     yr = _re.search(r"(20\d\d)", f4["note"])
     check("phone: full-screen 4Y shows about 4 years of daily candles, with gridded, labelled RSI/MACD panels",
           "Daily" in f4["note"] and yr and int(yr.group(1)) <= 2023 and f4["grid"] >= 6 and f4["axes"] >= 3, str(f4))
-    p.click("#full [data-fr='6M']"); p.wait_for_timeout(600)
+    full_range(p, "6M"); p.wait_for_timeout(600)
     fb = p.evaluate("(()=>{const r=document.querySelector('#full .chartbox').getBoundingClientRect();return [r.left+r.width/2, r.top+r.height/2]})()")
     cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": fb[0], "y": fb[1]}]}); p.wait_for_timeout(650)
     cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": fb[0] - 50, "y": fb[1]}]}); p.wait_for_timeout(150)
@@ -363,10 +366,13 @@ def phone_tests(b):
     import datetime as _dt
     pd = lambda t: _dt.datetime.strptime(t.strip(), "%d %b %Y")
     check("phone: zoomed in, dragging right goes back in time", pd(d1) < pd(d0), f"{d0} -> {d1}")
-    p.click("#full [data-fr='1D']"); p.wait_for_timeout(1200); d1 = p.evaluate("document.querySelector('#full .fnote').textContent")
-    p.click("#full [data-fr='1W']"); p.wait_for_timeout(1200); w1 = p.evaluate("document.querySelector('#full .fnote').textContent")
+    full_range(p, "1D"); p.wait_for_timeout(1200); d1 = p.evaluate("document.querySelector('#full .fnote').textContent")
+    full_range(p, "1W"); p.wait_for_timeout(1200); w1 = p.evaluate("document.querySelector('#full .fnote').textContent")
     ax1 = p.locator("#full .xaxis span").all_inner_texts()
     check("phone: 1D and 1W ranges show 15-minute and 1-hour candles with times or dates on the axis", "15-minute" in d1 and "1-hour" in w1 and len(ax1) >= 2, f"{d1[:40]} / {w1[:40]} / {ax1}")
+    hdr = p.evaluate("[document.querySelector('#full .fhead .chg').textContent.replace(/[^0-9.]/g,''), document.querySelector('#full .fnote span').textContent.replace(/[^0-9.]/g,'')]")
+    p.click("#full [data-ffx]"); p.wait_for_timeout(400); fxs = p.is_visible("#sheet .fxrow"); p.click("#sheet [data-close]"); p.wait_for_timeout(400)
+    check("phone: full screen has the feed's range chip and ƒx button, and its % is the move on screen", fxs and hdr[0] and abs(float(hdr[0]) - float(hdr[1])) < 0.06, f"fx={fxs} {hdr}")
     p.click("#full [data-fclose]"); p.wait_for_timeout(400)
     check("phone: hold-to-read works in full screen, and ✕ closes it back to the feed", "Open" in fcard and p.evaluate("document.getElementById('full').hidden") and active(p)[0] == "BTC", fcard[:60].replace("\n", " "))
 
@@ -613,6 +619,25 @@ def ios_homescreen_test(b):
     check("iOS Home Screen: tab bar and feed reach the real bottom of the screen (no empty strip)", abs(r[0] - 844) < 1 and r[1] == 844, str(r))
     ctx.close()
 
+def landscape_test(b):
+    # a phone on its side: vertical swipes page the feed from the first page and between coins
+    ctx = b.new_context(viewport={"width": 844, "height": 390}, device_scale_factor=2, is_mobile=True, has_touch=True)
+    ctx.route("https://api.kraken.com/**", kraken_route); ctx.route("https://data-api.binance.vision/**", binance_route); demo_mode(ctx)
+    ctx.add_init_script("localStorage.setItem('pl.coach', JSON.stringify({feed:1,dash:1,profile:1,add:1}))")
+    p = ctx.new_page(); p.goto(BASE); p.wait_for_timeout(1500); pass_gate(p, "sideways1", three_months=False); p.wait_for_timeout(1500)
+    cdp = ctx.new_cdp_session(p)
+    def vs(y0, y1, x=300):
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y0}]})
+        for k in range(1, 11): cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x, "y": y0 + (y1 - y0) * k / 10}]}); time.sleep(0.016)
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(800)
+    at = lambda: round(p.evaluate("document.getElementById('feed').scrollTop/document.getElementById('feed').clientHeight"), 2)
+    seq = []
+    for x in (300, 300, 700): vs(300, 80, x); seq.append(at())
+    vs(80, 300); seq.append(at())
+    pr = p.evaluate("(()=>{const a=document.querySelector('.card.active .price').getBoundingClientRect(), b=document.querySelector('.card.active [data-pred]').getBoundingClientRect(), c=document.querySelector('.card.active [data-tf]').getBoundingClientRect(); return [b.left < c.left - 4 || b.top > c.bottom, Math.abs(b.top - a.bottom) < 60]})()")
+    check("landscape: swipes page the feed from the first page and over the side panels, and Predict sits by the price without overlap", seq == [1, 2, 3, 2] and all(pr), f"{seq} {pr}")
+    ctx.close()
+
 def desktop_tests(b):
     p = b.new_page(viewport={"width": 1280, "height": 800}); errs = []
     p.route("https://api.kraken.com/**", kraken_route); p.add_init_script(NOCOACH); demo_mode(p)
@@ -675,6 +700,8 @@ with sync_playwright() as pw:
     except Exception as e: check("iOS Home Screen: test ran", False, repr(e)[:300])
     try: phone_tests(b)
     except Exception as e: check("phone: suite ran to the end", False, repr(e)[:300])
+    try: landscape_test(b)
+    except Exception as e: check("landscape: test ran", False, repr(e)[:300])
     try: desktop_tests(b)
     except Exception as e: check("desktop: suite ran to the end", False, repr(e)[:300])
     try: prediction_test(b)

@@ -91,7 +91,8 @@ export function mainChart(win, ov, opts) {
   const ticks = timeTicks(win, opts.days || 91);
   for (const t of ticks) body += `<line x1="${X(t.i).toFixed(1)}" x2="${X(t.i).toFixed(1)}" y1="${PT}" y2="${H - PB}" class="grid vgrid"/>`;
   const xaxis = `<div class="xaxis" aria-hidden="true">${ticks.map((t) => `<span class="${t.major ? "maj" : ""}" style="left:${((X(t.i) / W) * 100).toFixed(2)}%">${t.label}</span>`).join("")}</div>`;
-  const labels = `<span class="ax" style="top:${top(PT)}">${f(hi - pad)}</span><span class="ax" style="top:${top(H - PB)}">${f(lo + pad)}</span>` +
+  const near = (y) => Math.abs(y - ly) < 14; // the latest-price tag wins over a high/low label it would cover
+  const labels = `${near(PT) ? "" : `<span class="ax" style="top:${top(PT)}">${f(hi - pad)}</span>`}${near(H - PB) ? "" : `<span class="ax" style="top:${top(H - PB)}">${f(lo + pad)}</span>`}` +
     `<span class="axlast ${up ? "pu" : "pd"}" style="top:${top(ly)}">${f(last)}</span>`;
   const gridLabels = opts.full ? gl.filter((g) => Math.abs(PT + g * (H - PT - PB) - ly) > 9).map((g) => `<span class="ax gl" style="top:${top(PT + g * (H - PT - PB))}">${f(hi - g * (hi - lo))}</span>`).join("") : "";
   if (sh || opts.count) body = `<clipPath id="pclip"><rect x="0" y="0" width="${pw}" height="${H}"/></clipPath><g clip-path="url(#pclip)">${body}</g>`;

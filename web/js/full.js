@@ -11,8 +11,8 @@ import { levelsFor } from "./levels.js";
 import { chartSettings, store, save } from "./store.js";
 import { initInteract, openLearn, cancelPendingHold } from "./interact.js";
 import { APP, buildFeed } from "./app.js";
-import { setLines } from "./pages.js";
-import { esc, money, pct, arrow, haptic, fmtDay, toast } from "./ui.js";
+import { openIndicatorsSheet, openLinesSheet } from "./pages.js";
+import { esc, money, pct, arrow, haptic, fmtDay, toast, openSheet, closeSheet } from "./ui.js";
 
 // range → candle size (Kraken minutes, or "d" for the app's daily candles) and how much time to show first
 const RANGES = { "1D": [15, 1], "1W": [60, 7], "1M": ["d", 30], "3M": ["d", 91], "6M": ["d", 182], "1Y": ["d", 365], "2Y": ["d", 730], "4Y": ["d", 1461], Max: [10080, 1e6] };
@@ -119,8 +119,10 @@ function draw() {
   const geo = { count: v.count, shift: v.shift, days: spanDays, full: true };
   box.innerHTML = mainChart(v.win, v.ov, { type: s.type, interval: v.interval, levels: s.levels === "off" ? [] : s.lv || [], over: s.over, ...geo });
   el.querySelector(".flowers").innerHTML = s.lower.map((k) => lowerChart(v.win, v.ov, k, geo)).join("");
-  const chg = ((v.win[v.win.length - 1].c - v.win[0].c) / v.win[0].c) * 100, older = Math.floor(s.end - s.count);
+  const chg = ((v.win[v.win.length - 1].c - v.win[0].o) / v.win[0].o) * 100, older = Math.floor(s.end - s.count);
   const when = (t) => (t.length > 10 ? fmtDay(t) : new Date(t + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }));
+  const hc = el.querySelector(".fhead .chg"); // the header shows the same move as the note: the period on screen
+  if (hc) { hc.className = `chg ${chg >= 0 ? "up" : "down"}`; hc.innerHTML = `${arrow(chg)} ${pct(chg)}`; }
   el.querySelector(".fnote").innerHTML = `${IVLABEL[s.iv]} candles · ${esc(when(v.win[0].t))} – ${esc(when(v.win[v.win.length - 1].t))} · <span class="${chg >= 0 ? "up" : "down"}">${pct(chg, 1)}</span>${s.note ? " · " + esc(s.note) : ""}<br><span class="hint">${older > 0 ? "Drag right for older prices" : "Start of the history"} · pinch or scroll to zoom · double-tap to reset · hold still to read</span>`;
   const card = el.querySelector(".card"); card._v = { ...v, picks: { over: s.over, lower: s.lower } }; card._sym = s.sym;
   el.querySelectorAll(".flowers [data-learn]").forEach((p) => (p.onclick = (e) => { e.stopPropagation(); openLearn(p.dataset.learn, v); }));
@@ -200,25 +202,37 @@ function wireGestures(root) {
 
 // ---------- header and range buttons
 function shell(body) {
-  const { sym, range, levels, daily } = st, bars = st.bars, chg = daily?.changePct;
+  const { sym, range, levels } = st, bars = st.bars, n = st.over.length + st.lower.length;
   const last = bars?.[bars.length - 1]?.c ?? D.series[sym.key]?.bars?.at(-1)?.c;
+  // the same three buttons as on a feed card: time range, indicators (ƒx) and lines (S/R)
   return `<div class="fbar"><button class="fclose" data-fclose aria-label="Close full-screen chart">✕</button>
-      <div class="fhead"><span class="row1"><span class="tk">${esc(sym.t)}</span>${chg != null ? `<span class="chg ${chg >= 0 ? "up" : "down"}">${arrow(chg)} ${pct(chg)}</span>` : `<span class="chg"></span>`}</span>
-        <span class="price">${last != null ? esc(money(last, sym.m)) : ""}</span></div></div>
-    <div class="franges" role="group" aria-label="Time range">${OPTS.map((r) => `<button class="opt" data-fr="${r}" aria-pressed="${r === range}">${r}</button>`).join("")}
-      <button class="lvbtn" data-flv aria-pressed="${levels !== "off"}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${levels === "pivots" ? "Pivots" : "S/R"}</button></div>
+      <div class="fhead"><span class="row1"><span class="tk">${esc(sym.t)}</span><span class="chg"></span></span>
+        <span class="price">${last != null ? esc(money(last, sym.m)) : ""}</span></div>
+      <div class="fctl"><button class="tfbtn" data-frange aria-label="Time range: ${esc(range)}"><b>${esc(range)}</b><span>${esc(IVLABEL[RANGES[range][0]])}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
+        <button class="lvbtn fxchip" data-ffx aria-label="Indicators: ${n} on"><i>ƒx</i>${n || "Add"}</button>
+        <button class="lvbtn" data-flv aria-pressed="${levels !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${levels === "pivots" ? "Pivots" : "S/R"}</button></div></div>
     <div class="card fcard"><div class="pane main" data-pane="main">${body}</div></div>`;
+}
+const SPAN = { "1D": "Last 24 hours", "1W": "Last 7 days", "1M": "Last 30 days", "3M": "Last 3 months", "6M": "Last 6 months", "1Y": "Last year", "2Y": "Last 2 years", "4Y": "Last 4 years", Max: "All history" };
+function openRanges() {
+  openSheet("Time range", `<div class="frgrid">${OPTS.map((r) => `<button class="choice" data-fr="${r}" aria-pressed="${r === st.range}"><b>${r}</b><span>${SPAN[r]} · ${IVLABEL[RANGES[r][0]].toLowerCase()} candles</span></button>`).join("")}</div>
+    <p class="hint">Drag the chart to go further back, pinch to zoom.</p>`, (body) => {
+    body.querySelectorAll("[data-fr]").forEach((b) => (b.onclick = () => { closeSheet(); if (!st) return; stopFling(); st.range = b.dataset.fr; haptic(); load(); }));
+  });
 }
 function wireBar() {
   el.querySelector("[data-fclose]").onclick = closeFull;
-  el.querySelectorAll("[data-fr]").forEach((b) => (b.onclick = () => { stopFling(); st.range = b.dataset.fr; load(); }));
-  el.querySelector("[data-flv]").onclick = async (e) => { // the same lines as the feed, for every coin
-    const pick = store.data?.settings?.levelsPick || "sr"; st.levels = st.levels === "off" ? pick : "off";
-    e.currentTarget.setAttribute("aria-pressed", st.levels !== "off"); e.currentTarget.lastChild.textContent = st.levels === "pivots" ? "Pivots" : "S/R";
-    st.lvKey = null; st.changed = true; if (st.bars) redraw();
-    await setLines(st.levels);
-  };
-
+  el.querySelector("[data-frange]").onclick = openRanges;
+  el.querySelector("[data-ffx]").onclick = () => openIndicatorsSheet(() => { // the same sheet as the feed; one choice for every coin
+    if (!st) return; const pk = picks(store.data?.settings?.chart); st.over = pk.over; st.lower = pk.lower.slice(0, maxPanels()); st.changed = true;
+    const b = el.querySelector("[data-ffx]"), n = st.over.length + st.lower.length; b.innerHTML = `<i>ƒx</i>${n || "Add"}`; b.setAttribute("aria-label", `Indicators: ${n} on`);
+    if (st.bars) redraw();
+  });
+  el.querySelector("[data-flv]").onclick = () => openLinesSheet(() => { // the same lines as the feed, for every coin
+    if (!st) return; st.levels = store.data?.settings?.chart?.levels || "off"; st.lvKey = null; st.changed = true;
+    const b = el.querySelector("[data-flv]"); b.setAttribute("aria-pressed", st.levels !== "off"); b.lastChild.textContent = st.levels === "pivots" ? "Pivots" : "S/R";
+    if (st.bars) redraw();
+  });
 }
 
 // ---------- indicators: add or remove, one shared choice for every coin's chart

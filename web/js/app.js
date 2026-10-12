@@ -243,11 +243,11 @@ function renderMain(c, it) {
     const pk = picks(store.data?.settings?.chart), shown = pk.lower.slice(0, maxPanels()), ov = studyWindow(v.bars, v.ov, v.bars.length - v.win.length, v.bars.length, [...pk.over, ...shown]);
     c._v = { ...v, ov, picks: { over: pk.over, lower: shown } }; // what hold-to-read and the panel guides read from
     main.innerHTML = `<div class="head"><div class="hl"><div class="tkrow"><span class="tk">${esc(s.t)}</span><span class="chg ${chg >= 0 ? "up" : "down"}" title="Change over ${esc(RANGE_LABEL[v.range] || v.range)}">${arrow(chg)} ${pct(chg)}<small>${esc(v.range)}</small></span></div>
-      <div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span></div></div>
+      <div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span></div>${predChip(s)}</div>
       <div class="hr"><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${esc(v.ivLabel.toLowerCase())} candles"><b>${esc(v.range)}</b><span>${esc(v.ivLabel)}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button>
       <div class="hr2"><button class="lvbtn fxchip" data-fx aria-label="Indicators: ${pk.over.length + pk.lower.length} on"><i>ƒx</i>${pk.over.length + pk.lower.length || "Add"}</button><button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div></div>
       <div class="chartbox"><button class="fxbtn" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: pk.over, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
-      ${shown.length ? `<div class="lowers${shown.length > 2 ? " g2" : ""}">${shown.map((k) => lowerChart(v.win, ov, k)).join("")}</div>` : ""}<div class="cfoot"><i></i>${dots}${predChip(s)}</div>`;
+      ${shown.length ? `<div class="lowers${shown.length > 2 ? " g2" : ""}">${shown.map((k) => lowerChart(v.win, ov, k)).join("")}</div>` : ""}<div class="cfoot">${dots}</div>`;
   } else {
     c._v = null;
     main.innerHTML = `<div class="head"><div class="hl"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div><div class="hr"><button class="tfbtn" data-tf aria-label="Chart settings for ${esc(s.t)}"><b>${esc(cs.range)}</b><span>${esc(IV_LABEL[resolveInterval(cs)] || "")}</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button></div></div>
@@ -345,7 +345,7 @@ const HOW = {
   perf: "Price change over each period up to the latest candle. Comparing short and long periods shows whether a move is recent or part of a longer run. Past performance doesn't tell you future returns.",
   trend: "A moving average is the average closing price over the last 20, 50 or 200 days, which smooths out daily noise. Price above an average means it is higher than its recent typical level. Many people watch the 50- and 200-day lines, so they're useful context, not signals.",
   vol: "The typical daily move is the 14-day Average True Range: how far the price usually travels in a day. Bigger numbers mean bigger swings, so the same news can move the price more. Comparing today's move with it shows whether today was unusual.",
-  readings: "One reading for each indicator on your chart, with what today's number means in plain words. Add or remove indicators with the ƒx button on any card. Tap a reading for its guide.",
+  readings: "One reading for each indicator on your chart, worked out on daily candles, with what the number means in plain words. The chart on the card can use shorter candles (15-minute on 1D), so its values can differ. Add or remove indicators with the ƒx button on any card. Tap a reading for its guide.",
   ranges: "Where today's price sits between the lowest and highest prices of the period. The nearest support and resistance are prices where the chart turned more than once before. They describe the past, not where the price will go.",
   alerts: "Get told when a price or reading crosses a level you choose. Quickest way: hold the chart, slide to a price and tap the alert button.",
 };
@@ -375,7 +375,7 @@ function renderDetails(c, it) {
       `${chg >= 0 ? "Up" : "Down"} ${Math.abs(chg).toFixed(1)}% ${dayLab}${moveX != null ? `, ${moveX >= 1.5 ? "a bigger move than usual" : moveX <= 0.5 ? "a quiet day" : "a normal-sized move"}` : ""}${d.volRatio != null ? ` on ${fmt(d.volRatio, 1)}x the usual volume` : ""}.`,
       avgs.length ? `${above ? `Above its ${above}-day average${above.includes(" and ") ? "s" : ""}`.replace("-day-day", "-day") : ""}${above && below ? "; " : ""}${below ? `${above ? "below" : "Below"} its ${below}-day average${below.includes(" and ") ? "s" : ""}`.replace("-day-day", "-day") : ""}.` : "",
       `${yr.p >= 80 ? "Near the top" : yr.p <= 20 ? "Near the bottom" : yr.p >= 60 ? "In the upper part" : yr.p <= 40 ? "In the lower part" : "Around the middle"} of its ${all.length >= 365 ? "52-week" : `${all.length}-day`} range.`,
-      d.rsi14 != null ? `RSI ${d.rsi14.toFixed(0)}: ${describe("rsi14", d, v.daily.prev).toLowerCase()}` : "",
+      d.rsi14 != null ? `Daily RSI ${d.rsi14.toFixed(0)}: ${describe("rsi14", d, v.daily.prev).toLowerCase()}` : "",
     ].filter(Boolean);
     html += sec("At a glance", "glance", `<ul class="glance">${glance.map((g) => `<li>${esc(g)}</li>`).join("")}</ul>`);
     // 2. today
@@ -396,7 +396,15 @@ function renderDetails(c, it) {
     // readings for the indicators on your chart, in plain words
     const pkr = picks(store.data?.settings?.chart), seenM = new Set();
     const rows = [...pkr.over.map((k) => OVERLAYS[k]), ...pkr.lower.map((k) => PANELS[k])].filter((x) => x?.metric && !seenM.has(x.metric) && seenM.add(x.metric)).map((x) => ({ i: { id: Object.keys(OVERLAYS).find((k) => OVERLAYS[k] === x) || Object.keys(PANELS).find((k) => PANELS[k] === x) }, m: x.metric }));
-    html += sec("Readings", "readings", rows.length ? `<div class="readings">${rows.map(({ i, m }) => { const meta = METRICS[m] || { label: m, digits: 2 }; return `<button class="reading" data-ind="${esc(i.id)}"><span class="k">${esc(meta.label)}</span><span class="v">${fmt(d[m], meta.digits)}${meta.unit && d[m] != null ? esc(meta.unit) : ""}</span><span class="d">${esc(describe(m, d, v.daily.prev))}</span></button>`; }).join("")}</div>` : `<p class="hint">No indicators on your chart. Tap ƒx on any card to add some.</p>`);
+    html += sec("Indicators · daily candles", "readings", rows.length ? `<div class="inds">${rows.map(({ i, m }) => {
+      const meta = METRICS[m] || { label: m, digits: 2 }, x = d[m], st = PANELS[i.id] || OVERLAYS[i.id], [a, z] = st?.range || [];
+      let g = "";
+      if (x != null && a != null && z != null) { // a small gauge for indicators with a fixed scale, with the usual reference zone shaded
+        const at = (n) => Math.max(0, Math.min(100, ((n - a) / (z - a)) * 100)), [r1, r2] = st.refs?.length === 2 ? st.refs : [];
+        g = `<span class="gauge" aria-hidden="true">${r1 != null ? `<i style="left:${at(r1)}%;width:${at(r2) - at(r1)}%"></i>` : ""}<b style="left:${at(x)}%"></b></span>`;
+      }
+      return `<button class="ind" data-ind="${esc(i.id)}"><span class="ik">${esc(meta.label)}</span><span class="iv${!g && x != null && st?.zero ? (x >= 0 ? " up" : " down") : ""}">${fmt(x, meta.digits)}${meta.unit && x != null ? esc(meta.unit) : ""}</span>${g}<span class="idesc">${esc(describe(m, d, v.daily.prev))}</span></button>`;
+    }).join("")}</div>` : `<p class="hint">No indicators on your chart. Tap ƒx on any card to add some.</p>`);
     // 7. ranges and the nearest past turning points
     const lv = swingLevels({ bars: all, win: all.slice(-Math.min(182, all.length)), interval: "1D" }, { perSide: 1 });
     const r1 = lv.find((l) => l.kind === "R"), s1 = lv.find((l) => l.kind === "S");
