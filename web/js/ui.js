@@ -49,9 +49,19 @@ export function closeSheet() {
   const sh = $("sheet"), bd = $("backdrop");
   if (sh.hidden) return;
   sh.classList.remove("on"); bd.classList.remove("on");
-  closeTimer = setTimeout(() => { closeTimer = null; sh.hidden = true; bd.hidden = true; sh.innerHTML = ""; }, 260);
+  closeTimer = setTimeout(() => { closeTimer = null; sh.hidden = true; bd.hidden = true; sh.innerHTML = ""; sh.style.bottom = sh.style.maxHeight = ""; }, 260);
   const fn = onCloseFn; onCloseFn = null; fn?.();
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+// With the phone keyboard up, keep the open sheet just above it and no taller than the space left, so typing a
+// note never pushes the page sideways or hides the text box.
+if (window.visualViewport) {
+  const vv = window.visualViewport, fit = () => {
+    const sh = $("sheet"); if (!sh || sh.hidden) return;
+    const kb = Math.max(0, innerHeight - vv.height - vv.offsetTop);
+    sh.style.bottom = kb > 60 ? `${kb}px` : ""; sh.style.maxHeight = kb > 60 ? `${Math.round(vv.height - 12)}px` : "";
+  };
+  vv.addEventListener("resize", fit); vv.addEventListener("scroll", fit);
+}
 
 export const haptic = () => { try { navigator.vibrate?.(6); } catch {} };

@@ -7,7 +7,7 @@ import { APP } from "./app.js";
 
 const VERSION = "pulse-web";
 const DAILY = 20; // notes per phone per day, so one person can't flood the list
-let mode = false, taps = [];
+let mode = false, taps = [], quietUntil = 0;
 
 // A readable name for what was tapped: the nearest labelled part, from the most specific to the screen.
 function describeTarget(el) {
@@ -18,7 +18,7 @@ function describeTarget(el) {
   const screen = t("#full") ? "Full-screen chart" : t(".sheet") ? "Sheet" : t("#sDash") ? "Dashboard" : t("#sProfile") ? "Profile" : t(".tabbar") ? "Tab bar" : t(".topbar") ? "Top bar" : "Feed";
   const parts = [
     [".lower[data-learn]", (n) => `${n.dataset.learn} panel`], [".oli", (n) => `${txt(n).split(" ")[0]} line`], [".lvtag", () => "Support/resistance label"],
-    [".scrubcard", () => "Hold-to-read card"], ["[data-fx]", () => "ƒx (indicators) button"], ["[data-lv]", () => "S/R button"], ["[data-tf]", () => "Time range chip"],
+    [".scrubcard", () => "Hold-to-read card"], ["[data-fx]", () => "ƒx (indicators) button"], ["[data-lv]", () => "S/R button"], ["[data-tf]", () => "Time range chip"], [".head .chg", () => "Change % next to the coin name"],
     ["[data-pred]", () => "Predict button"], ["[data-full]", () => "Full-screen button"], [".chartbox", () => "Price chart"], [".story", (n) => `News story: ${txt(n.querySelector(".h"))}`],
     [".nsec", (n) => `News section: ${txt(n)}`], [".pev", () => "Price event"], [".dsec", (n) => `Details · ${txt(n.querySelector("h3"))}`], [".reading", (n) => `Reading: ${txt(n.querySelector(".k"))}`],
     [".srow", (n) => `Indicator: ${txt(n.querySelector(".t"))}`], [".sset", (n) => `Quick set: ${txt(n.querySelector("b"))}`], [".choice", (n) => `Option: ${txt(n.querySelector("b"))}`],
@@ -88,7 +88,13 @@ export function initFeedback() {
     const now = e.timeStamp;
     taps = taps.filter((t) => now - t.at < 550 && Math.hypot(t.x - e.clientX, t.y - e.clientY) < 30);
     taps.push({ at: now, x: e.clientX, y: e.clientY, el: e.target });
-    // the note is about what the first tap landed on (a button's own sheet may have opened since)
-    if (taps.length >= 3) { const el = taps[0].el; taps = []; setTimeout(() => openFeedback(el), 60); }
+    // The note is about what the first tap landed on. A button acts on the first tap (its sheet may be opening or
+    // closing under the next taps), so after the third tap every click is swallowed for a moment, whatever opened
+    // is put away, and the note opens once that has settled.
+    if (taps.length >= 3) {
+      const el = taps[0].el; taps = []; quietUntil = now + 500;
+      setTimeout(() => { closeSheet(); setTimeout(() => openFeedback(el), 300); }, 30);
+    }
   }, true);
+  addEventListener("click", (e) => { if (e.timeStamp < quietUntil) { e.preventDefault(); e.stopPropagation(); } }, true);
 }

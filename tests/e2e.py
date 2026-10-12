@@ -472,6 +472,13 @@ def phone_tests(b):
     p.wait_for_timeout(700); fs1 = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
     p.fill("#fbText", "Chart could use a crosshair hint"); p.click("#fbSend"); p.wait_for_timeout(500)
     check("phone: triple-tapping the chart opens a feedback box about the price chart of that coin", "Price chart" in fs1 and _re.search(r"Feed · [A-Z]{2,5}", fs1), fs1[:80].replace("\n", " "))
+    # a button acts on the first tap; three quick taps on it still end in a note about that button
+    sb = p.locator(".card.active [data-lv]").bounding_box(); sx, sy = sb["x"] + sb["width"] / 2, sb["y"] + sb["height"] / 2
+    for _ in range(3): p.touchscreen.tap(sx, sy); p.wait_for_timeout(90)
+    p.wait_for_timeout(900); fs3 = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+    fsz = p.evaluate("parseFloat(getComputedStyle(document.getElementById('fbText')||document.body).fontSize)")
+    if p.is_visible("#sheet"): p.click("#sheet [data-close]"); p.wait_for_timeout(500)
+    check("phone: triple-tapping a button (S/R) opens a note about it, and the note box is 16px+ so iPhones don't zoom", "S/R button" in fs3 and fsz >= 16, f"{fs3[:60]!r} {fsz}")
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500); p.click("#pBack") if p.locator("#pBack").count() else None
     p.click("[data-p=feedback]"); p.wait_for_timeout(600)
     p.click(".card.active [data-lv]"); p.wait_for_timeout(600); fs2 = p.inner_text("#sheet") if p.is_visible("#sheet") else ""

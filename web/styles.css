@@ -621,3 +621,7 @@ body.gated .tabbar, body.gated .topbar { visibility: hidden; }
   .full .fctl .tfbtn { margin-right: 0; }
   .frgrid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
+
+/* text boxes at 16px or more: smaller makes iPhones zoom the whole page when the keyboard opens */
+input, textarea, select, .input, .fbtext, .uname input { font-size: max(16px, 1em); }
+.fbtext { font-size: 16px; }
