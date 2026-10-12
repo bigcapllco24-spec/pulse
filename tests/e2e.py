@@ -156,7 +156,7 @@ def phone_tests(b):
         p.wait_for_timeout(1300)
         info = p.evaluate("""(()=>{const c=document.querySelector('.card.active'); const svg=c.querySelector('.chartbox svg.chart');
           return {svg: !!svg, rects: svg? svg.querySelectorAll('rect').length:0, last: c.querySelector('.axlast')?.textContent||'', price: c.querySelector('.price')?.textContent||'',
-          lower: c.querySelectorAll('.lower svg').length, lowerText: [...c.querySelectorAll('.lower-label')].map(x=>x.textContent).join(' | '), frames: document.querySelectorAll('iframe').length}})()""")
+          lower: c.querySelectorAll('.lower svg.chart').length, lowerText: [...c.querySelectorAll('.lower-label')].map(x=>x.textContent).join(' | '), frames: document.querySelectorAll('iframe').length}})()""")
         if name in COINS:
             ok = info["svg"] and info["rects"] >= 40 and info["last"] and info["price"] and info["lower"] == 2 and "RSI" in info["lowerText"] and "MACD" in info["lowerText"]
             chart_ok &= bool(ok)
@@ -287,7 +287,7 @@ def phone_tests(b):
     tabs = p.evaluate("[...document.querySelectorAll('.tabbar button')].map(b=>b.dataset.tab).join(',')")
     tb = p.evaluate("(()=>{const r=document.querySelector('.tabbar').getBoundingClientRect();return [r.bottom, innerHeight]})()")
     check("phone: tab bar is Dashboard, Feed (centre), Profile and sits on the bottom edge", tabs == "dash,feed,profile" and abs(tb[0] - tb[1]) < 1, f"{tabs} {tb}")
-    ov = p.evaluate("""(()=>{const c=document.querySelector('.card.active'); return [...c.querySelectorAll('.lower')].every(l=>l.querySelector('.lower-label').getBoundingClientRect().bottom <= l.querySelector('svg').getBoundingClientRect().top + 0.5)})()""")
+    ov = p.evaluate("""(()=>{const c=document.querySelector('.card.active'); return [...c.querySelectorAll('.lower')].every(l=>l.querySelector('.lower-label').getBoundingClientRect().bottom <= l.querySelector('svg.chart').getBoundingClientRect().top + 0.5)})()""")
     check("phone: RSI and MACD labels sit above their lines, not on them", ov)
 
     # add-stock sheet with a new watchlist
@@ -390,7 +390,7 @@ def phone_tests(b):
         lefts.append(p.inner_text("#profile .phead b") + " | " + (p.inner_text("#profile .pleft") if p.locator("#profile .pleft").count() else ""))
     p.click("#pName"); p.wait_for_timeout(500)
     blocked = (p.inner_text("#toast") if p.is_visible("#toast") else "") and not p.is_visible("#sheet")
-    check("phone: profile is grouped (Prediction game, Charts, Alerts, Sharing, Account, Help, and Admin for admins)", len(groups) in (6, 7) and groups[0].lower() == "prediction game" and groups[5].lower() == "help", " | ".join(groups))
+    check("phone: profile is grouped (Charts, Alerts, Sharing, Account, Help, and Admin for admins); predictions moved to the dashboard", len(groups) in (5, 6) and groups[0].lower().startswith("charts") and groups[4].lower() == "help" and not p.locator("#profile .pscard").count(), " | ".join(groups))
     check("phone: username rejects phone-like numbers", "phone" in bad2, bad2)
     check("phone: the starting username can be changed twice, then no more", lefts[0].startswith("@chart_fan |") and "2 username changes left" in lefts[0] and "1 username change left" in lefts[1] and "No username changes left" in lefts[2] and bool(blocked), " ; ".join(lefts))
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(600)
@@ -414,7 +414,7 @@ def phone_tests(b):
     # profile pages
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
     pages_ok, bad = True, []
-    for sub in ["predictions", "how", "chart", "rules", "alerts", "lists", "account", "appearance", "legal"]:
+    for sub in ["chart", "rules", "alerts", "lists", "account", "appearance", "legal"]:
         p.click(f"[data-p={sub}]"); p.wait_for_timeout(350)
         h = p.inner_text("#profile h1")
         if not h: pages_ok = False; bad.append(sub)
@@ -465,22 +465,42 @@ def phone_tests(b):
     check("phone: the feed card shows the same indicators, and details read them in plain words", "BB" in fd["leg"] and fd["panels"] == "RSI,STOCH" and "Bollinger" in txt and "Stochastic" in txt, f"{fd} / {'Bollinger' in txt} {'Stochastic' in txt}")
     right()
 
-    # feedback: triple-tap any part to leave a note about it; Feedback mode makes every tap (buttons too) a note
+    # feedback: hold any part still for 5 seconds, say yes, and leave a note about it; Feedback mode makes every tap a note
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(600)
-    fbox = p.locator(".card.active .chartbox").bounding_box(); fx, fy = fbox["x"] + fbox["width"] * 0.5, fbox["y"] + fbox["height"] * 0.5
-    for _ in range(3): p.touchscreen.tap(fx, fy); p.wait_for_timeout(90)
-    p.wait_for_timeout(700); fs1 = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
-    p.fill("#fbText", "Chart could use a crosshair hint"); p.click("#fbSend"); p.wait_for_timeout(500)
-    check("phone: triple-tapping the chart opens a feedback box about the price chart of that coin", "Price chart" in fs1 and _re.search(r"Feed · [A-Z]{2,5}", fs1), fs1[:80].replace("\n", " "))
-    # a button acts on the first tap; three quick taps on it still end in a note about that button
-    sb = p.locator(".card.active [data-lv]").bounding_box(); sx, sy = sb["x"] + sb["width"] / 2, sb["y"] + sb["height"] / 2
-    for _ in range(3): p.touchscreen.tap(sx, sy); p.wait_for_timeout(90)
-    p.wait_for_timeout(900); fs3 = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+    def hold5(x, y):
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y}]}); p.wait_for_timeout(5300)
+        asked = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(700)
+        return asked
+    sb = p.locator(".card.active [data-lv]").bounding_box()
+    ask = hold5(sb["x"] + sb["width"] / 2, sb["y"] + sb["height"] / 2)
+    still_ask = p.is_visible("#sheet [data-fbyes]")  # letting go didn't press S/R underneath
+    if still_ask: p.click("#sheet [data-fbyes]"); p.wait_for_timeout(500)
+    fs3 = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
     fsz = p.evaluate("parseFloat(getComputedStyle(document.getElementById('fbText')||document.body).fontSize)")
-    if p.is_visible("#sheet"): p.click("#sheet [data-close]"); p.wait_for_timeout(500)
-    check("phone: triple-tapping a button (S/R) opens a note about it, and the note box is 16px+ so iPhones don't zoom", "S/R button" in fs3 and fsz >= 16, f"{fs3[:60]!r} {fsz}")
+    if p.locator("#fbText").count(): p.fill("#fbText", "Held S/R for 5 seconds"); p.click("#fbSend"); p.wait_for_timeout(500)
+    check("phone: holding a button (S/R) for 5s asks to leave feedback, letting go doesn't press it, and the note is about S/R (16px+ box)", "Leave feedback?" in ask and "S/R button" in ask and still_ask and "S/R button" in fs3 and fsz >= 16, f"{ask[:50]!r} {still_ask} {fsz}")
+    fbox = p.locator(".card.active .chartbox").bounding_box()
+    ask2 = hold5(fbox["x"] + fbox["width"] * 0.5, fbox["y"] + fbox["height"] * 0.5)
+    if p.is_visible("#sheet [data-fbno]"): p.click("#sheet [data-fbno]"); p.wait_for_timeout(500)
+    check("phone: holding the chart for 5s offers feedback about that coin's price chart, and Not now closes it", "Price chart" in ask2 and _re.search(r"Feed · [A-Z]{2,5}", ask2) and not p.is_visible("#sheet"), ask2[:80].replace("\n", " "))
     p.click(".card.active [data-pexp]"); p.wait_for_timeout(600); np_ = p.locator("#sheet .pbig .lower").count(); p.click("#sheet [data-close]"); p.wait_for_timeout(500)
     check("phone: ⤢ opens the chart's indicator panels large in a sheet", np_ >= 1, str(np_))
+    # more panels saved than fit: the app asks which to keep (the last ones added are pre-picked), and a 5th asks what to swap
+    p.evaluate("(()=>{const k='pl.demoAccount', d=JSON.parse(localStorage.getItem(k)); d.settings=d.settings||{}; d.settings.chart=d.settings.chart||{}; d.settings.chart.lower='ADX,STOCH,MFI,CCI,RSI,MACD'; localStorage.setItem(k, JSON.stringify(d));})()")
+    p.reload(); p.wait_for_timeout(3000)
+    fit_t = p.inner_text("#shTitle") if p.is_visible("#sheet") else ""; pre = p.locator("#sheet [data-keep][aria-pressed=true]").all_inner_texts()
+    if fit_t: p.click("#sheet #kGo"); p.wait_for_timeout(1200)
+    p.evaluate("document.getElementById('feed').scrollTo(0, document.getElementById('feed').clientHeight)"); p.wait_for_timeout(1200)
+    shown_ = p.locator(".card.active .lowers .lower").count(); labs = " ".join(p.locator(".card.active .lowers .lower-label").all_inner_texts())
+    check("phone: 6 saved panels on a 4-panel screen asks which 4 to keep, pre-picking the latest (RSI, MACD), then shows them", fit_t.startswith("Pick 4") and len(pre) == 4 and shown_ == 4 and "RSI" in labs and "MACD" in labs, f"{fit_t!r} {len(pre)} {shown_} {labs[:80]}")
+    p.click(".card.active [data-fx]"); p.wait_for_timeout(500)
+    p.click("#sheet [data-fxtab=lower]"); p.wait_for_timeout(200); p.click("#sheet .fxtog[data-stog=OBV]"); p.wait_for_timeout(300)
+    sw = p.inner_text("#sheet .fxswap") if p.locator("#sheet .fxswap").count() else ""
+    gone = p.inner_text("#sheet .fxswap [data-swap] >> nth=0") if sw else ""
+    if sw: p.click("#sheet .fxswap [data-swap] >> nth=0"); p.wait_for_timeout(300)
+    now_ = p.inner_text("#sheet .fxnow"); p.click("#sheet [data-close]"); p.wait_for_timeout(800)
+    check("phone: adding a 5th panel asks which one to swap, then swaps it", "Swap one for" in sw and "On-Balance" in now_ and gone and gone not in now_, f"{sw[:60]!r} / {gone} / {now_[:80]!r}")
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500); p.click("#pBack") if p.locator("#pBack").count() else None
     p.click("[data-p=feedback]"); p.wait_for_timeout(600)
     p.click(".card.active [data-lv]"); p.wait_for_timeout(600); fs2 = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
@@ -489,7 +509,7 @@ def phone_tests(b):
     p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(700); p.click("[data-p=inbox]"); p.wait_for_timeout(700)
     ib = p.inner_text("#profile")
     p.click(".fbitem [data-fset=done] >> nth=0"); p.wait_for_timeout(500); ib2 = p.inner_text("#profile .seg")
-    check("phone: the feedback inbox lists both notes with where they were left, and marking one done moves it", "Price chart" in ib and "S/R button" in ib and "Open 1" in ib2 and "Done 1" in ib2, ib2)
+    check("phone: the feedback inbox lists both notes with where they were left, and marking one done moves it", "Held S/R for 5 seconds" in ib and "What does S/R mean?" in ib and "S/R button" in ib and "Open 1" in ib2 and "Done 1" in ib2, ib2)
     p.click("#pBack"); p.wait_for_timeout(300)
 
     # rules make alerts (demo mode checks rules on the phone)
@@ -557,9 +577,9 @@ def prediction_test(b):
     one_open = p.is_disabled(".pseg [data-h='1d']") and "open" in p.inner_text(".pseg [data-h='1d']") and p.get_attribute(".pseg [aria-pressed=true]", "data-h") != "1d"
     p.click("[data-close]"); p.wait_for_timeout(400)
     check("predict: locking in confirms it, the chip counts it, and 1 day can't be predicted again while it's open", "Locked in" in toast_txt and "1" in badge and one_open, f"{toast_txt} / {badge!r}")
-    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
-    card0 = p.inner_text("#profile .pscard"); row0 = p.inner_text("[data-p=predictions] .s")
-    check("predict: before anything is scored the profile has no score yet and counts the open prediction", "waiting to be scored" in card0 and "1 open" in row0, f"{card0!r} / {row0!r}")
+    p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(500); p.click("#dash [data-dv=preds]"); p.wait_for_timeout(500)
+    card0 = p.inner_text("#dash .pscard"); row0 = p.inner_text("#dash [data-dv=preds]")
+    check("predict: predictions live on the dashboard: before anything is scored there's no score yet and the switch counts the open one", "waiting to be scored" in card0 and "1 open" in row0, f"{card0!r} / {row0!r}")
     # an hour-long call made 3 hours ago (settled on the phone from 1-minute candles) and 11 earlier scored results
     p.evaluate("""(async()=>{const d=JSON.parse(localStorage.getItem('pl.demoPreds')), made=Date.now()-3*3600e3;
       const j=await (await fetch('https://api.kraken.com/0/public/OHLC?pair=ETHUSD&interval=1')).json(), r=j.result.ETHUSD.filter(x=>x[0]*1000<=made).pop();
@@ -568,17 +588,20 @@ def prediction_test(b):
         d.results.push({id:'X'+i,coin:'CRYPTO:SOL',t:'SOL',horizon:h,target:t,p0:100,sigmaD:.03,actual:a,createdAt:new Date(at).toISOString(),resolvedAt:new Date(at+3600e3).toISOString(),status:'scored',pctOff:(t/a-1)*100,label:'Close'});});
       localStorage.setItem('pl.demoPreds', JSON.stringify(d));})()""")
     p.reload(); p.wait_for_timeout(3500)
-    p.click(".tabbar [data-tab=profile]"); p.wait_for_timeout(500)
-    card = p.inner_text("#profile .pscard"); score = int(p.inner_text("#profile .pscard .psn b"))
-    check("predict: with 12 scored predictions the profile shows one score between 300 and 900, with its band", 300 <= score <= 900 and any(bnd in card for bnd in ["Exceptional", "Very good", "Good", "Fair", "Building"]) and "Provisional" not in card and "12 scored" in card, card.replace("\n", " "))
-    p.click("#profile .pscard"); p.wait_for_timeout(500)
-    first = p.inner_text("#profile .list:last-of-type .row >> nth=0") if p.locator("#profile .list").count() > 1 else ""
-    page = p.inner_text("#profile")
+    p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(500)
+    if p.get_attribute("#dash [data-dv][aria-pressed=true]", "data-dv") != "preds": p.click("#dash [data-dv=preds]"); p.wait_for_timeout(500)
+    card = p.inner_text("#dash .pscard"); score = int(p.inner_text("#dash .pscard .psn b"))
+    check("predict: with 12 scored predictions the dashboard shows one score between 300 and 900, with its band", 300 <= score <= 900 and any(bnd in card for bnd in ["Exceptional", "Very good", "Good", "Fair", "Building"]) and "Provisional" not in card and "12 scored" in card, card.replace("\n", " "))
+    p.wait_for_timeout(2500)
+    first = p.inner_text("#dash .list:last-of-type .row >> nth=0") if p.locator("#dash .list").count() > 1 else ""
+    page = p.inner_text("#dash")
     check("predict: the hour-long call settled on the phone from 1-minute candles and shows how close it was", first.startswith("ETH · 1 hour") and "it was $" in first and _re.search(r"\d+\.\d% (above|below)", first) and any(l in first for l in ["Spot on", "Very close", "Close", "Off", "Far off"]), first.replace("\n", " "))
     check("predict: each prediction shows only how close it was, never a per-prediction score", "points" not in page.lower() and "trade" not in page.lower(), "")
-    p.click("#pBack"); p.wait_for_timeout(300); p.click("[data-p=how]"); p.wait_for_timeout(300)
-    how = p.inner_text("#profile")
+    p.click("#dash [data-how]"); p.wait_for_timeout(400)
+    how = p.inner_text("#sheet"); p.click("#sheet [data-close]"); p.wait_for_timeout(300)
     check("predict: How the score works explains the parts, longer calls and the 550 start", all(x in how for x in ["Closeness", "Consistency", "Direction", "Longer calls count more", "550"]), "")
+    p.click("#dash [data-dv=coins]"); p.wait_for_timeout(400)
+    check("dashboard: the switch goes back to the coins, with the watchlist chips", p.locator("#dash .wchips").count() == 1 and p.locator("#dash .pscard").count() == 0, "")
     check("predict: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
@@ -608,11 +631,11 @@ def tour_test(b):
     p.click("#sheet [data-close]"); p.wait_for_timeout(500)
     p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(900)
     d = [step()]
-    for _ in range(4):
+    for _ in range(5):
         if p.locator("#coach [data-next]").count(): p.click("#coach [data-next]"); p.wait_for_timeout(250)
     d.append(step())
     p.click(".tabbar [data-tab=feed]"); p.wait_for_timeout(400); p.click(".tabbar [data-tab=dash]"); p.wait_for_timeout(900); d.append(step())
-    check("tour: the dashboard explains watchlists once, in 4 steps, and not again", d == ["1 / 4", "none", "none"], str(d))
+    check("tour: the dashboard explains its two halves and watchlists once, in 5 steps, and not again", d == ["1 / 5", "none", "none"], str(d))
     p.reload(); p.wait_for_timeout(2500)
     check("tour: never shown again after it is finished", step() == "none")
     ctx.close()

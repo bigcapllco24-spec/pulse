@@ -45,7 +45,7 @@ web/                    the app (served as-is by GitHub Pages)
   styles.css            all styles; type scale tokens --t-xs/s/m/l/xl/xxl in :root; landscape block at the end
   data/                 candles.json + news.json (written by the data job), indicators.json (guides), symbols.json
   js/app.js             feed: cards, swipes, details pane, news pane, daily recap, redrawCards()
-  js/pages.js           dashboard, profile pages, sheets (chart chip, ƒx indicators, lines/S/R), predictions, feedback inbox
+  js/pages.js           dashboard (Coins | Predictions), profile pages, panel-fit chooser, sheets (chart chip, ƒx indicators, lines/S/R), predictions, feedback inbox
   js/data.js            prices: cache, Kraken daily, intraday (krakenBars, INTRA 1D/1W), view() per chart settings, dailyOf()
   js/indicators.js      indicator maths (buildSeries, compute, extendedSeries, METRICS) – shared with the pipeline
   js/studies.js         what can be drawn: OVERLAYS (11), PANELS (18), quick SETS, picks(), maxPanels(), panelFact()
@@ -56,7 +56,7 @@ web/                    the app (served as-is by GitHub Pages)
   js/describe.js        plain-language meaning of each reading
   js/store.js           account (Firebase or demo), saves, alerts, lists, username, predictions, feedback
   js/score.js, predict.js  prediction game (shared with the pipeline)
-  js/feedback.js        triple-tap / Feedback mode → note about the tapped part
+  js/feedback.js        press-and-hold (5 s) / Feedback mode → note about the tapped part
   js/coach.js, search.js, ui.js
 pipeline/               Node 22, run by GitHub Actions
   run.mjs               full data job: follows → prices → news → alerts + push → predictions
@@ -101,12 +101,12 @@ scripts/check.sh        all tests; tests/ = pipeline, levels, score, predict (No
 - **Daily recap card:** the % change since midnight, local time.
 - **Prediction game:** see section 5 for how the timelines and scoring work.
 - **Feedback loop:**
-  - Triple-tap anything, or turn on Profile → Give feedback, where every tap (buttons too) opens a note.
+  - Press and hold (5 s) anything, or turn on Profile → Give feedback, where every tap (buttons too) opens a note.
   - Each note is saved to Firestore `feedback` with where it was left (part, screen, coin, screen size).
   - Admins see Profile → Admin → **Feedback inbox**: filter by status, mark done or declined, and use
     **"Copy all open notes for Claude"**.
 - **Also:**
-  - Dashboard with watchlists.
+  - Dashboard with two halves (switch or sideways swipe): Coins (watchlists) and Predictions (score card, tap-a-coin to predict, open and scored calls, how the score works).
   - Alert rules, with push notifications once enabled in the app.
   - Shared lists.
   - **Username required:** every account picks one first, on a full-screen step that can't be skipped, with a live availability check. It can be changed 2 times after that.
@@ -195,7 +195,7 @@ The prediction game is what turns the app from something people read into someth
 - The Predict chip on each card (with how many are open).
 - The prediction sheet: the four periods, the price now, and the range that counts.
 - The score card on Profile.
-- Profile → Your predictions: open ones, then scored ones with labels.
+- Dashboard → Predictions: score card, quick predict chips, open ones, then scored ones with labels. (Moved out of Profile on 12 Oct.)
 - Profile → How the score works.
 
 **Gamification ideas to build next (not built):**

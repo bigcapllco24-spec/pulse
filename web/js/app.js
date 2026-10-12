@@ -3,7 +3,7 @@
 import { CONFIG } from "../config.js";
 import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists, settleDemoPredictions } from "./store.js";
 import { krakenRows } from "./predict.js";
-import { loadSymbols, TYLABEL, findSymbol } from "./search.js";
+import { loadSymbols, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { describe } from "./describe.js";
 import { mainChart, lowerChart } from "./chart.js";
@@ -14,9 +14,9 @@ import { startTour, coachEvent } from "./coach.js";
 import { openFull } from "./full.js";
 import { initFeedback } from "./feedback.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz } from "./interact.js";
-import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, krakenBars, INTRA, intraState, IV_LABEL, resolveInterval, dailyOf, RANGE_LABEL } from "./data.js";
-import { $, esc, money, pct, arrow, fmtDay, hhmm, ago, toast, haptic, openSheet, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openIndicator, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, openPredictSheet, nameGate } from "./pages.js";
+import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, krakenBars, INTRA, intraState, dailyOf, RANGE_LABEL } from "./data.js";
+import { $, esc, money, pct, arrow, fmtDay, hhmm, toast, haptic, openSheet, DISCLAIMER } from "./ui.js";
+import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, openPredictSheet, nameGate, checkPanelFit, initDashSwipe } from "./pages.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
 
@@ -87,7 +87,7 @@ export function goCard(i, { v = 0 } = {}) {
 const stepFeed = (dir) => goCard((anim ? fTarget : Math.round(feed.scrollTop / feedH())) + dir);
 // Finger (and mouse) drags up and down. Sideways drags are handled per card in setupSwipe.
 initInteract(feed);
-initFeedback(); // triple-tap anything (or Feedback mode in Profile) to leave a note about that part
+initFeedback(); // press and hold anything for 5 seconds (or Feedback mode in Profile) to leave a note about that part
 let vd = null;
 feed.addEventListener("pointerdown", (e) => {
   if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -161,6 +161,7 @@ export function buildFeed({ keepKey } = {}) {
   setActive(target);
   syncCards();
   APP.built = true;
+  setTimeout(() => APP.tab === "feed" && checkPanelFit(() => buildFeed({ keepKey: APP.seq[APP.active]?.sym?.key })), 700);
 }
 function pushRound(round) {
   if (!APP.syms.length) { APP.seq.push({ type: "empty" }); return; }
@@ -605,7 +606,7 @@ export function redrawCards(key) {
 document.addEventListener("pulse-intra", (e) => redrawCards(e.detail));
 // turning the phone changes how many panels fit, so cards redraw once the rotation settles
 let rzT = 0, lastFit = maxPanels();
-addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { if (maxPanels() !== lastFit) { lastFit = maxPanels(); redrawCards(); } }, 250); });
+addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { if (maxPanels() !== lastFit) { lastFit = maxPanels(); redrawCards(); checkPanelFit(() => redrawCards()); } }, 250); });
 
 // ---------- tabs and refresh
 export function showTab(tab, sub, arg) {
@@ -694,14 +695,13 @@ export function applyTheme() {
   if (ch && !ch.v2) save({ settings: { ...store.data.settings, chart: { ...ch, type: "candles", mas: [], lower: "RSI,MACD", v2: 1, v4: 1 } } }).catch(() => {});
   applyTheme();
   initPages();
+  initDashSwipe();
   store.on((what) => {
     $("alertDot").hidden = !store.alerts.some((a) => !a.read);
     if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") renderDash(); if (store.ready && !store.data?.username) nameGate(); }
     if (what === "preds") APP.needsRebuild = true; // the Predict chips show open counts
-    // the profile's score card and predictions page follow new and scored predictions
-    if ((what === "preds" || what === "account") && APP.tab === "profile" && (!APP.profileSub || APP.profileSub === "predictions")) {
-      const pg = $("profile").parentElement, y = pg.scrollTop; renderProfile(APP.profileSub); pg.scrollTop = y;
-    }
+    // the dashboard's switch and Predictions half follow new and scored predictions
+    if (what === "preds" && APP.tab === "dash") { const pg = $("dash").parentElement, y = pg.scrollTop; renderDash(); pg.scrollTop = y; }
   });
   $("alertDot").hidden = !store.alerts.some((a) => !a.read);
   buildFeed();

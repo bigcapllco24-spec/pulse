@@ -1,8 +1,6 @@
 // Dashboard, Profile, sheets (add stocks, watchlists, switcher) and onboarding.
 import { CONFIG } from "../config.js";
-import { store, save, chartSettings, setUsername, loginUsername, checkUsername, usernameFree, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist,
-  markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList,
-  enablePush, signOutDevice, deleteAccount, makePrediction, myScore, isAdmin, listFeedback, setFeedbackStatus, myUid } from "./store.js";
+import { store, save, chartSettings, setUsername, loginUsername, checkUsername, usernameFree, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, makePrediction, myScore, isAdmin, listFeedback, setFeedbackStatus, myUid } from "./store.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { HORIZONS, BANDS, CHANCE, SCORE_MIN, SCORE_MAX, PROVISIONAL_UNDER, checkPrediction, canPredict, allowedRange, dailyVol, targetTime, closenessText } from "./score.js";
 import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
@@ -14,7 +12,7 @@ import { $, esc, money, pct, arrow, fmtDay, ago, toast, haptic, openSheet, setSh
 import { startTour, resetTours } from "./coach.js";
 import { openLearn } from "./interact.js";
 import { setFeedbackMode } from "./feedback.js";
-import { APP, buildFeed, showTab, currentSyms, listName, applyTheme, doRefresh } from "./app.js";
+import { APP, buildFeed, showTab, currentSyms, applyTheme, doRefresh } from "./app.js";
 
 const symDoc = (r) => ({ key: r.key, t: r.t, n: r.n, m: r.m, ty: r.ty });
 
@@ -133,9 +131,37 @@ export function openSwitcher() {
   }, () => buildFeed());
 }
 
-// ---------- dashboard: your watchlists live here. Picking one also sets what the feed shows.
+// ---------- dashboard: two equal halves, Coins (your watchlists; picking one also sets what the feed shows) and
+// Predictions (the prediction game: score, quick predict, open and scored calls). A switch at the top, or a swipe.
 export function renderDash() {
-  const el = $("dash"), cs = chartSettings(), syms = currentSyms(), wl = watchlists();
+  const el = $("dash"), view = APP.dashView === "preds" ? "preds" : "coins";
+  const syms = currentSyms(), cs = chartSettings();
+  const upN = syms.filter((s) => (view_(s, cs)?.daily.now.changePct ?? 0) > 0).length, haveN = syms.filter((s) => view_(s, cs)).length;
+  const sc = myScore(), open = store.preds.length;
+  const tab = (k, title, meta) => `<button data-dv="${k}" aria-pressed="${view === k}"><b>${title}</b><span>${meta}</span></button>`;
+  el.innerHTML = `<h1>Dashboard</h1>
+    <div class="dswitch" role="tablist" aria-label="Dashboard">${tab("coins", "Coins", haveN ? `${upN} of ${haveN} up today` : `${syms.length} coins`)}${tab("preds", "Predictions", `${sc?.score != null ? `Score ${sc.score}` : "No score yet"}${open ? ` · ${open} open` : ""}`)}</div>
+    <div class="dview" data-view="${view}"></div>`;
+  const body = el.querySelector(".dview");
+  if (view === "preds") predsView(body); else coinsView(body);
+  el.querySelectorAll("[data-dv]").forEach((b) => (b.onclick = () => { if (APP.dashView !== b.dataset.dv) { APP.dashView = b.dataset.dv; haptic(); renderDash(); el.parentElement.scrollTop = 0; } }));
+}
+const view_ = (s, cs) => view(s.key, dailyOf(cs));
+// sideways swipe on the dashboard switches halves (rows that scroll sideways keep their own swipe)
+export function initDashSwipe() {
+  // touch events, not pointer ones: the page scrolls up and down, and the browser cancels pointers once it scrolls
+  const root = $("dash"); let st = null;
+  const go = (dx, dy, ms) => {
+    if (ms > 600 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const next = dx < 0 ? "preds" : "coins";
+    if ((APP.dashView || "coins") !== next) { APP.dashView = next; haptic(); renderDash(); root.parentElement.scrollTop = 0; }
+  };
+  root.addEventListener("touchstart", (e) => { const t = e.touches[0]; st = e.touches.length > 1 || e.target.closest(".wchips, .pchips, .opts") ? null : { x: t.clientX, y: t.clientY, at: e.timeStamp }; }, { passive: true });
+  root.addEventListener("touchend", (e) => { if (!st) return; const t = e.changedTouches[0], s0 = st; st = null; go(t.clientX - s0.x, t.clientY - s0.y, e.timeStamp - s0.at); }, { passive: true });
+  root.addEventListener("touchcancel", () => (st = null), { passive: true });
+}
+function coinsView(el) {
+  const cs = chartSettings(), syms = currentSyms(), wl = watchlists();
   const cur = store.data?.settings?.list || "all", w = wl.find((x) => x.id === cur), editing = APP.dashEdit && w;
   const withData = syms.map((s) => ({ s, v: view(s.key, dailyOf(cs)) })).filter((x) => x.v);
   const noData = syms.filter((s) => !view(s.key, dailyOf(cs)));
@@ -150,8 +176,7 @@ export function renderDash() {
     return editing ? `<div class="row"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">${esc(s.n)}</span></span>
       <button class="btn ghost sm" data-up="${esc(s.key)}" ${i === 0 ? "disabled" : ""} aria-label="Move ${esc(s.t)} up">↑</button><button class="btn ghost sm" data-dn="${esc(s.key)}" ${i === withData.length - 1 ? "disabled" : ""} aria-label="Move ${esc(s.t)} down">↓</button><button class="btn ghost sm" data-rm="${esc(s.key)}" aria-label="Remove ${esc(s.t)}">✕</button></div>`
     : `<button class="row" data-open="${esc(s.key)}"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">RSI ${fmt(v.now.rsi14, 1)} · ${storiesFor(s.key).length} stories</span></span>${sparkline(v.win.map((b) => b.c))}<span class="r"><b>${esc(money(v.lastBar.c, s.m))}</b><span class="${c >= 0 ? "up" : "down"}">${arrow(c)} ${pct(c)}</span></span></button>`; };
-  el.innerHTML = `<h1>Dashboard</h1>
-    <div class="wchips" role="tablist" aria-label="Watchlists">${chip("all", "All", allSyms().length)}${wl.map((x) => chip(x.id, x.name, (x.syms || []).filter((s) => s.m === "CRYPTO").length)).join("")}<button class="wchip add" id="dNew">+ New</button></div>
+  el.innerHTML = `<div class="wchips" role="tablist" aria-label="Watchlists">${chip("all", "All", allSyms().length)}${wl.map((x) => chip(x.id, x.name, (x.syms || []).filter((s) => s.m === "CRYPTO").length)).join("")}<button class="wchip add" id="dNew">+ New</button></div>
     <div class="wbar"><b>${esc(w ? w.name : "All my coins")}</b><span>${w ? `${editing ? `<button class="btn ghost sm" id="dRen">Rename</button><button class="btn ghost sm danger" id="dDel">Delete</button><button class="btn sm" id="dDone">Done</button>` : `<button class="btn ghost sm" id="dEdit">Edit</button>`}` : ""}<button class="btn sm" id="dAdd">+ Add coins</button></span></div>
     ${editing ? "" : `<div class="summary"><div><b>${ups}<span class="hint" style="font-size:14px">/${withData.length}</span></b><span>coins up today</span></div><div><b>${newsToday}</b><span>stories today</span></div><div><b>${rulesToday}</b><span>rules met today</span></div></div>`}
     ${withData.length ? `${editing ? `<p class="hint">Reorder or remove coins in “${esc(w.name)}”. The feed follows this order.</p>` : `<div class="opts" style="margin-bottom:10px">${[["move", "Biggest move"], ["rsi", "Lowest RSI"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-s="${k}" aria-pressed="${sort === k}">${l}</button>`).join("")}</div>`}
@@ -185,12 +210,11 @@ const ICON = {
   predictions: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.6"/>', how: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-1 .7-1.5 1.2-1.5 2.5M12 17h.01"/>',
 };
 const GROUPS = [
-  ["Prediction game", [["predictions", "Your predictions", ""], ["how", "How the score works", "Closeness, consistency and longer calls"]]],
   ["Charts & learning", [["chart", "Chart style", "Time range, candles and lines"]]],
   ["Alerts", [["rules", "Alert rules", "Get told when your levels are hit"], ["alerts", "Alerts", "Everything that has fired"]]],
   ["Sharing", [["lists", "Shared lists", "Follow a list with friends"]]],
   ["Account & privacy", [["account", "Account", "Username, delete your data"], ["appearance", "Appearance", "Dark, light or match phone"]]],
-  ["Help", [["feedback", "Give feedback", "Tap anything in the app to comment on it"], ["tour", "Show the app tour again", "Swipes, charts and watchlists in a minute"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]]],
+  ["Help", [["feedback", "Give feedback", "Hold anything for 5 seconds, or switch on tap-to-comment"], ["tour", "Show the app tour again", "Swipes, charts and watchlists in a minute"], ["legal", "Legal and disclaimer", "Terms, privacy, grievance contact"]]],
 ];
 let admin = null; // whether this sign-in may read feedback (checked once, after connecting)
 const icon = (k) => `<svg class="pic" viewBox="0 0 24 24" aria-hidden="true">${ICON[k] || ""}</svg>`;
@@ -207,7 +231,6 @@ export function renderProfile(sub, arg) {
         ${u ? `<button class="btn sm" id="pName">Change</button>` : ""}
       </div>
       ${u ? `<p class="hint pleft">${left > 0 ? `${left} username change${left === 1 ? "" : "s"} left` : "No username changes left"}</p>` : ""}
-      ${scoreCard(true)}
 
       ${(admin ? [...GROUPS, ["Admin", [["inbox", "Feedback inbox", "Everyone's notes, newest first"]]]] : GROUPS).map(([g, rows]) => `<h2 class="pg">${g}</h2><div class="list pgl">${rows.map(([k, l, d]) => `<button class="row" data-p="${k}">${icon(k)}<span class="main"><span class="t">${l}${k === "alerts" && unread ? ` <span class="pill confirmed">${unread} new</span>` : ""}</span><span class="s">${k === "predictions" ? esc(predCounts()) : d}</span></span><span class="chev">›</span></button>`).join("")}</div>`).join("")}
       <p class="disclaimer">${esc(DISCLAIMER)}</p>`;
@@ -503,7 +526,7 @@ function scoreCard(tappable) {
       <p class="hint">${s.provisional ? `${n} of ${PROVISIONAL_UNDER} predictions scored before it settles` : `Built on ${n} scored prediction${n === 1 ? "" : "s"}`}${o ? ` · ${o} open` : ""}</p>`
     : `<div class="pst"><span class="label">Prediction score</span></div>
       <div class="psn"><b class="muted">–</b><span>${o ? `${o} prediction${o === 1 ? "" : "s"} waiting to be scored` : "No score yet"}</span></div>
-      <p class="hint">${o ? `Your score appears once a prediction has been scored.` : `Tap <b>Predict</b> on any coin's chart.`} Everyone starts at ${CHANCE}, about what guessing would score.</p>`;
+      <p class="hint">${o ? `Your score appears once a prediction has been scored.` : `Pick a coin below, or tap <b>Predict</b> on any chart.`} Everyone starts at ${CHANCE}, about what guessing would score.</p>`;
   return tappable ? `<button class="pscard" data-p="predictions">${body}</button>` : `<div class="pscard">${body}</div>`;
 }
 
@@ -519,7 +542,7 @@ export function openPredictSheet(sym, onDone) {
       if (!horizon) {
         body.innerHTML = `<p>You have an open prediction on every period for ${esc(sym.t)}. Each one can be made again once it has been scored.</p>
           <button class="btn block" id="pSee">See your predictions</button>`;
-        body.querySelector("#pSee").onclick = () => { closeSheet(); showTab("profile", "predictions"); };
+        body.querySelector("#pSee").onclick = () => { closeSheet(); APP.dashView = "preds"; showTab("dash"); };
         return;
       }
       const r = allowedRange({ horizon, p0, sigmaD }), due = targetTime(new Date().toISOString(), horizon);
@@ -572,18 +595,33 @@ function previewDue(open, rerender) {
     settle(p, { now, rows: previewRows }).then((r) => { previews.set(k, r); rerender(); }).catch(() => previews.delete(k));
   }
 }
-function pPredictions(el, back) {
+// The Predictions half of the dashboard.
+function predsView(el) {
+  const coins = allSyms().filter((x) => D.series[x.key]?.bars?.length);
+  el.innerHTML = `${scoreCard(false)}
+    ${coins.length ? `<div class="label" style="margin:14px 0 8px">Make a prediction</div>
+      <div class="pchips">${coins.map((x) => { const n = store.preds.filter((p) => p.t === x.t).length, last = D.series[x.key].bars.at(-1).c;
+        return `<button class="pchip" data-pp="${esc(x.key)}"><b>${esc(x.t)}</b><span>${esc(money(last, x.m))}</span>${n ? `<i>${n} open</i>` : ""}</button>`; }).join("")}</div>` : ""}
+    <div data-plist></div>
+    <p style="margin-top:14px"><button class="btn ghost block" data-how>How the score works</button></p>`;
+  predsList(el.querySelector("[data-plist]"), () => APP.tab === "dash" && APP.dashView === "preds" && renderDash());
+  el.querySelectorAll("[data-pp]").forEach((b) => (b.onclick = () => { const x = allSyms().find((y) => y.key === b.dataset.pp); if (x) openPredictSheet(x, () => renderDash()); }));
+  el.querySelector("[data-how]").onclick = () => openSheet("How the score works", "", (body) => pHow(body, ""));
+}
+function pPredictions(el, back) { // older links into Profile land on the dashboard now
+  APP.dashView = "preds"; setTimeout(() => showTab("dash"), 0); el.innerHTML = back;
+}
+function predsList(el, rerender) {
   const open = [...store.preds].sort((a, b) => Date.parse(targetTime(a.createdAt, a.horizon)) - Date.parse(targetTime(b.createdAt, b.horizon)));
-  previewDue(open, () => { if (el.isConnected && el.querySelector("[data-preds]")) { pPredictions(el, back); const b = el.querySelector("#pBack"); if (b) b.onclick = () => renderProfile(); } });
+  previewDue(open, () => { if (el.isConnected) rerender(); });
   const pv = (p) => { const r = previews.get(pkey(p)); return r && r !== "pending" ? r : null; };
   const done = [...store.results].sort((a, b) => Date.parse(b.resolvedAt || 0) - Date.parse(a.resolvedAt || 0));
   const m = (x) => money(x, "CRYPTO");
-  el.innerHTML = `${back}<h1>Your predictions</h1>${scoreCard(false)}
-    <h2>Open${open.length ? ` · ${open.length}` : ""}</h2>
+  el.innerHTML = `<h2>Open${open.length ? ` · ${open.length}` : ""}</h2>
     ${open.length ? `<div class="list" data-preds>${open.map((p) => { const due = targetTime(p.createdAt, p.horizon), r = pv(p);
       if (r?.status === "scored") { const x = { ...p, ...r.patch }; return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · it was ${esc(m(x.actual))}</span></span><span class="r"><span class="pill ${LABEL_CLASS[x.label] || ""}">${esc(x.label)}</span><span class="hint">${esc(closenessText(x).split(" · ")[0])} · confirming</span></span></div>`; }
       return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">You said ${esc(m(p.target))} · from ${p.p0 != null ? esc(m(p.p0)) : `about ${esc(m(p.clientP0))}`}</span></span><span class="r"><b>${esc(previews.get(pkey(p)) === "pending" ? "Checking…" : untilText(due))}</b><span class="hint">${esc(when(due, p.horizon))}</span></span></div>`; }).join("")}</div>`
-      : `<div class="empty">Nothing open. Tap <b>Predict</b> on any coin's chart.</div>`}
+      : `<div class="empty">Nothing open. Pick a coin above, or tap <b>Predict</b> on any chart.</div>`}
     ${store.mode === "live" && open.length ? `<p class="hint">When a prediction's time is up you see the result here straight away (marked “confirming”); it becomes official within about 15 minutes, against the price at that exact minute.</p>` : ""}
     <h2>Scored${done.length ? ` · ${done.length}` : ""}</h2>
     ${done.length ? `<div class="list">${done.map((p) => p.status === "scored"
@@ -594,7 +632,7 @@ function pPredictions(el, back) {
 }
 
 function pHow(el, back) {
-  el.innerHTML = `${back}<h1>How the score works</h1>
+  el.innerHTML = `${back ? `${back}<h1>How the score works</h1>` : ""}
     <p>Your prediction score runs from ${SCORE_MIN} to ${SCORE_MAX}, and it's worked out the same way for everyone, so scores can be compared.</p>
     <h2>Each prediction</h2>
     <p>You see how close you were: how far off in percent, and a label from <b>Spot on</b> to <b>Far off</b>. The label compares your miss with how much that coin usually moves in that time, so 3% off is far off for 30 minutes but spot on for a year.</p>
@@ -617,6 +655,7 @@ function pHow(el, back) {
 let fxTab = "lower";
 export function openIndicatorsSheet(onChange) {
   const pk = picks(store.data?.settings?.chart);
+  let swap = null; // full up: the indicator waiting to replace one already on
   const persist = () => {
     const ch = store.data?.settings?.chart || {};
     save({ settings: { ...store.data.settings, chart: { ...ch, over: [...pk.over], lower: pk.lower.join(",") || "none", mas: [] } } }).catch(() => {});
@@ -635,7 +674,13 @@ export function openIndicatorsSheet(onChange) {
         <button class="fxtog" data-stog="${code}" aria-pressed="${on}" aria-label="${on ? "Remove" : "Add"} ${esc(x.name)}">${on ? "✓" : "+"}</button></div>`;
     }).join("")}</div>`).join("");
   };
-  const body = () => `<div class="fxnow"><div class="cap">On your charts · ${pk.over.length + pk.lower.length}</div><div class="fxchips">${chips()}</div></div>
+  const swapBox = () => {
+    if (!swap) return "";
+    const isOver = !!OVERLAYS[swap], l = isOver ? pk.over : pk.lower, max = isOver ? MAX_OVERLAYS : maxPanels();
+    return `<div class="fxswap" role="alert"><b>${isOver ? `Up to ${max} on the price chart` : `Your screen fits ${max} panels`}. Swap one for ${esc(nameOf(swap))}?</b>
+      <div class="fxchips">${l.map((c) => `<button class="opt" data-swap="${c}">${esc(nameOf(c))}</button>`).join("")}<button class="opt" data-swap="">Cancel</button></div></div>`;
+  };
+  const body = () => `${swapBox()}<div class="fxnow"><div class="cap">On your charts · ${pk.over.length + pk.lower.length}</div><div class="fxchips">${chips()}</div></div>
     <div class="fxsets">${SETS.map((x) => `<button class="opt" data-sset="${x.id}" aria-pressed="${x.over.join() === pk.over.join() && x.lower.slice(0, maxPanels()).join() === pk.lower.join()}">${esc(x.name)}</button>`).join("")}<button class="opt" data-sset="none">Clear</button></div>
     <div class="seg fxseg" role="tablist">${[["lower", "Panels below", pk.lower.length, maxPanels()], ["over", "On the price", pk.over.length, MAX_OVERLAYS]].map(([k, l, n, m]) => `<button data-fxtab="${k}" aria-pressed="${fxTab === k}">${l} <small>${n}/${m}</small></button>`).join("")}</div>
     ${list()}
@@ -645,15 +690,47 @@ export function openIndicatorsSheet(onChange) {
     root.querySelectorAll("[data-stog]").forEach((b) => (b.onclick = () => {
       const code = b.dataset.stog, isOver = !!OVERLAYS[code], l = isOver ? pk.over : pk.lower, i = l.indexOf(code), max = isOver ? MAX_OVERLAYS : maxPanels();
       if (i >= 0) l.splice(i, 1);
-      else if (l.length >= max) return toast(`Up to ${max} ${isOver ? "on the price chart" : "panels"} at a time. Remove one first.`);
+      else if (l.length >= max) { swap = code; root.innerHTML = body(); wire(root); root.scrollTop = 0; return; } // full: ask which one it replaces
       else l.push(code);
-      persist(); redo();
+      swap = null; persist(); redo();
+    }));
+    root.querySelectorAll("[data-swap]").forEach((b) => (b.onclick = () => {
+      if (b.dataset.swap) { const l = OVERLAYS[swap] ? pk.over : pk.lower; l.splice(l.indexOf(b.dataset.swap), 1, swap); persist(); haptic(); }
+      swap = null; redo();
     }));
     root.querySelectorAll("[data-fxtab]").forEach((b) => (b.onclick = () => { fxTab = b.dataset.fxtab; root.innerHTML = body(); wire(root); }));
     root.querySelectorAll("[data-sset]").forEach((b) => (b.onclick = () => { const x = SETS.find((y) => y.id === b.dataset.sset) || { over: [], lower: [] }; pk.over.splice(0, 99, ...x.over); pk.lower.splice(0, 99, ...x.lower.slice(0, maxPanels())); persist(); redo(); }));
     root.querySelectorAll("[data-sguide]").forEach((b) => (b.onclick = () => openIndicator(b.dataset.sguide)));
   };
   openSheet("Indicators", body(), wire);
+}
+
+// More panels saved than this screen fits (a smaller phone, or picks from before the limit): ask once which to keep,
+// rather than quietly dropping the last ones added.
+const askedFit = new Set();
+export function checkPanelFit(onDone) {
+  const pk = picks(store.data?.settings?.chart), max = maxPanels(), sig = `${pk.lower.join()}|${max}`;
+  if (pk.lower.length <= max || askedFit.has(sig) || !$("sheet").hidden || document.getElementById("gate")) return;
+  askedFit.add(sig);
+  let keep = pk.lower.slice(-max); // the most recently added, which are the ones that were being cut
+  openSheet(`Pick ${max} panels`, "", (body) => {
+    const draw = () => {
+      body.innerHTML = `<p class="hint">You've chosen ${pk.lower.length} panels, and this screen fits ${max} under the price. Which ${max} should show? The others come off (add them back any time with ƒx).</p>
+        <div class="choices">${pk.lower.map((k) => `<button class="choice" data-keep="${k}" aria-pressed="${keep.includes(k)}"><b>${esc(PANELS[k].name)}</b><span>${esc(PANELS[k].short)}</span></button>`).join("")}</div>
+        <p style="margin-top:12px"><button class="btn primary block" id="kGo" ${keep.length ? "" : "disabled"}>Show ${keep.length === 1 ? "this one" : `these ${keep.length}`}</button></p>`;
+      body.querySelectorAll("[data-keep]").forEach((b) => (b.onclick = () => {
+        const k = b.dataset.keep, i = keep.indexOf(k);
+        if (i >= 0) keep.splice(i, 1); else { if (keep.length >= max) keep.shift(); keep.push(k); }
+        haptic(); draw();
+      }));
+      body.querySelector("#kGo").onclick = async () => {
+        const order = pk.lower.filter((k) => keep.includes(k)), ch = store.data?.settings?.chart || {};
+        closeSheet(); await save({ settings: { ...store.data.settings, chart: { ...ch, lower: order.join(",") || "none" } } }).catch(() => {});
+        APP.needsRebuild = true; onDone?.();
+      };
+    };
+    draw();
+  });
 }
 
 // ---------- lines on the chart (S/R button on every card): one choice for every coin

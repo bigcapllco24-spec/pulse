@@ -1,5 +1,5 @@
-// Feedback on any part of the app. Triple-tap anything (text, a chart, a panel, a card) to leave a note about that
-// exact part; or switch on Feedback mode in Profile, where every tap (buttons too) opens the note instead of acting.
+// Feedback on any part of the app. Press and hold anything (text, a chart, a panel, a button) for 5 seconds to leave
+// a note about that exact part; or switch on Feedback mode in Profile, where every tap (buttons too) opens the note instead of acting.
 // Notes go to Firestore "feedback" with where they were left, so whoever builds from them knows exactly what's meant.
 import { esc, openSheet, closeSheet, toast, haptic } from "./ui.js";
 import { sendFeedback, ls } from "./store.js";
@@ -7,7 +7,8 @@ import { APP } from "./app.js";
 
 const VERSION = "pulse-web";
 const DAILY = 20; // notes per phone per day, so one person can't flood the list
-let mode = false, taps = [], quietUntil = 0;
+let mode = false, held = false, quietUntil = 0;
+const HOLD_MS = 5000;
 
 // A readable name for what was tapped: the nearest labelled part, from the most specific to the screen.
 function describeTarget(el) {
@@ -36,6 +37,16 @@ function describeTarget(el) {
   };
 }
 
+// The question after a 5-second hold: about this part, yes or not now.
+function askFeedback(el) {
+  const ctx = describeTarget(el);
+  haptic();
+  openSheet("Leave feedback?", `<p class="fbwhere"><span class="cap">About</span><b>${esc(ctx.where)}</b><span>${esc(ctx.screen)}${ctx.coin ? ` · ${esc(ctx.coin)}` : ""}</span></p>
+    <div class="fbrow fbask"><button class="btn ghost" data-fbno>Not now</button><button class="btn primary" data-fbyes>Add feedback</button></div>`, (body) => {
+    body.querySelector("[data-fbno]").onclick = closeSheet;
+    body.querySelector("[data-fbyes]").onclick = () => openFeedback(el);
+  });
+}
 export function openFeedback(el) {
   const ctx = describeTarget(el);
   const day = new Date().toISOString().slice(0, 10), sent = ls.get("pl.fbDay", {});
@@ -74,7 +85,6 @@ export function setFeedbackMode(on) {
   }
   if (!on) bar?.remove();
 }
-export const feedbackMode = () => mode;
 
 export function initFeedback() {
   // capture phase, so in feedback mode a tap never reaches the button underneath
@@ -82,19 +92,19 @@ export function initFeedback() {
     if (!mode || e.target.closest("#fbBar, .sheet, .backdrop, .toast, .tabbar")) return; // the tab bar still moves between screens
     e.preventDefault(); e.stopPropagation(); openFeedback(e.target);
   }, true);
-  // triple-tap: three taps within about half a second, close together, outside text boxes
-  addEventListener("pointerup", (e) => {
-    if (mode || e.target.closest("input, textarea, select, #fbBar")) return;
-    const now = e.timeStamp;
-    taps = taps.filter((t) => now - t.at < 550 && Math.hypot(t.x - e.clientX, t.y - e.clientY) < 30);
-    taps.push({ at: now, x: e.clientX, y: e.clientY, el: e.target });
-    // The note is about what the first tap landed on. A button acts on the first tap (its sheet may be opening or
-    // closing under the next taps), so after the third tap every click is swallowed for a moment, whatever opened
-    // is put away, and the note opens once that has settled.
-    if (taps.length >= 3) {
-      const el = taps[0].el; taps = []; quietUntil = now + 500;
-      setTimeout(() => { closeSheet(); setTimeout(() => openFeedback(el), 300); }, 30);
-    }
+  // Press and hold anything still for 5 seconds: a small popup asks whether to leave a note about that part.
+  // (Triple-tapping clashed with buttons and with the phone's double-tap zoom.)
+  let hold = null;
+  const stop = () => { if (hold) { clearTimeout(hold.t); hold = null; } };
+  addEventListener("pointerdown", (e) => {
+    stop();
+    if (mode || e.button > 0 || e.target.closest("input, textarea, select, #fbBar, .sheet, .backdrop, #gate")) return;
+    const el = e.target, x = e.clientX, y = e.clientY;
+    hold = { x, y, t: setTimeout(() => { hold = null; held = true; askFeedback(el); }, HOLD_MS) };
   }, true);
+  addEventListener("pointermove", (e) => { if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 12) stop(); }, true);
+  // letting go after the popup appeared must not also press the button underneath
+  addEventListener("pointerup", (e) => { stop(); if (held) { held = false; quietUntil = e.timeStamp + 500; } }, true);
+  addEventListener("pointercancel", stop, true);
   addEventListener("click", (e) => { if (e.timeStamp < quietUntil) { e.preventDefault(); e.stopPropagation(); } }, true);
 }

@@ -152,7 +152,6 @@ p { margin: 6px 0; }
 .pill { font-size: var(--t-xs); font-weight: 700; border-radius: 999px; padding: 2px 8px; }
 .pill.confirmed { background: var(--up-soft); color: var(--up); } .pill.single { background: var(--surface2); color: var(--muted); } .pill.company { background: var(--accent-soft); color: var(--accent); } .pill.official { background: var(--accent-soft); color: var(--accent); }
 .dotpin { width: 8px; height: 8px; border-radius: 50%; background: var(--pin); display: inline-block; }
-.ai { font-size: var(--t-xs); color: var(--muted); margin-top: 6px; }
 .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
 .stat-grid div { background: var(--surface); padding: 10px; }
 .stat-grid b { display: block; font-size: var(--t-m); }
@@ -210,7 +209,6 @@ button.row, a.row { width: 100%; background: none; border-left: 0; border-right:
 .switch input:checked + span::after { transform: translateX(20px); }
 .empty { text-align: center; color: var(--muted); padding: 30px 10px; }
 .notice { font-size: var(--t-s); padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); margin: 8px 0; }
-.notice.warn { background: var(--warn-soft); }
 .disclaimer { font-size: var(--t-xs); color: var(--muted); margin: 18px 2px 4px; line-height: 1.5; }
 .code { font-family: ui-monospace, Menlo, monospace; font-size: var(--t-l); letter-spacing: .04em; background: var(--surface2); border-radius: 12px; padding: 14px; text-align: center; font-weight: 700; word-break: break-all; }
 
@@ -362,8 +360,6 @@ h2.pg { font-size: var(--t-s); text-transform: uppercase; letter-spacing: .07em;
 .scrubcard .sc-i { flex-wrap: wrap; row-gap: 2px; margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--muted); display: flex; gap: 6px; align-items: center; }
 .scrubcard .sc-i b { color: var(--text); } .scrubcard .sc-i i { width: 3px; height: 3px; border-radius: 50%; background: var(--muted); }
 /* expand to full screen */
-.chartbox .fxbtn { position: absolute; top: 0; left: 0; z-index: 3; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--bg) 70%, transparent); color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; }
-.chartbox .fxbtn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .chartbox .plot { margin-left: 0; }
 .full { position: fixed; inset: 0; bottom: calc(-1 * var(--gapb)); z-index: 70; background: var(--bg); display: flex; flex-direction: column; padding: calc(10px + var(--safe-t)) 14px calc(12px + var(--safe-b)); }
 .full[hidden] { display: none; }
@@ -426,17 +422,12 @@ body.fullopen .backdrop { z-index: 80; } body.fullopen .sheet { z-index: 81; } b
 .orm { border: 0; background: none; color: var(--muted); font-size: var(--t-xs); padding: 0 2px; cursor: pointer; line-height: 1; }
 .lower { position: relative; } .lower .lrm { position: absolute; top: 0; right: 0; padding: 2px 6px; font-size: var(--t-s); }
 .lnone { margin: 0; font-size: var(--t-s); color: var(--muted); padding: 12px 0; }
-.shd { display: flex; justify-content: space-between; font-size: var(--t-m); margin: 16px 0 4px; } .shd span { color: var(--muted); font-weight: 600; font-size: var(--t-s); }
 .sgroup { font-size: var(--t-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 0 4px; }
 .srow { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
-.sinfo { flex: 1; min-width: 0; text-align: left; background: none; border: 0; color: var(--text); padding: 0; cursor: pointer; font: inherit; }
-.sinfo .t { display: block; font-weight: 700; font-size: var(--t-m); } .sinfo .s { display: block; font-size: var(--t-s); color: var(--muted); margin-top: 2px; line-height: 1.35; }
 .stog { flex: none; min-width: 58px; border-radius: 999px; padding: 7px 12px; font: inherit; font-size: var(--t-s); font-weight: 700; cursor: pointer; border: 1px solid var(--line); background: none; color: var(--text); }
 .stog[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.fxbtn + .plot .olegend { left: 44px; top: 8px; }
 .full .fhead { flex-direction: column; align-items: flex-start; gap: 0; min-width: 0; }
 .full .fhead .row1 { display: flex; align-items: center; gap: 8px; } .full .fhead .price { font-size: var(--t-l); }
-.ssets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 4px; }
 .sset { text-align: left; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; background: none; color: var(--text); font: inherit; cursor: pointer; }
 .sset b { display: block; font-size: var(--t-m); } .sset span { display: block; font-size: var(--t-s); color: var(--muted); margin-top: 2px; line-height: 1.3; }
 .sset[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
@@ -452,18 +443,17 @@ body.fullopen .backdrop { z-index: 80; } body.fullopen .sheet { z-index: 81; } b
 
 /* ---------- type hierarchy: the same five roles on every page and sheet ---------- */
 /* 1. section headings */
-h2, .sheet h3, .gsec h3, .shd { font-size: var(--t-l); font-weight: 800; letter-spacing: -.01em; line-height: 1.3; }
-.shd { margin: 20px 0 6px; } .shd span { font-size: var(--t-s); font-weight: 600; color: var(--muted); }
+h2, .sheet h3, .gsec h3 { font-size: var(--t-l); font-weight: 800; letter-spacing: -.01em; line-height: 1.3; }
 .gsec { margin: 16px 0 0; } .gsec h3 { margin: 0 0 4px; } .gsec p { margin: 0; }
 /* 2. small caps labels that group things */
 .label, .cap, .sgroup, .dsec h3 { font-size: var(--t-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .cap { display: block; }
 /* 3. item titles */
-.row .t, .sinfo .t, .story a.h, .sset b { font-size: var(--t-m); font-weight: 700; line-height: 1.35; }
+.row .t, .story a.h, .sset b { font-size: var(--t-m); font-weight: 700; line-height: 1.35; }
 /* 4. body text */
 .sheet p, .page p, .special p, .det p { font-size: var(--t-m); line-height: 1.5; }
 /* 5. secondary text */
-.hint, .row .s, .sinfo .s, .sset span, .lfact, .dsec .how, .learnnow p, .story .meta, .gsrc { font-size: var(--t-s); line-height: 1.45; }
+.hint, .row .s, .sset span, .lfact, .dsec .how, .learnnow p, .story .meta, .gsrc { font-size: var(--t-s); line-height: 1.45; }
 .sheet p.hint, .page p.hint, .det p.hint { font-size: var(--t-s); }
 .disclaimer, .sheet p.disclaimer, .page p.disclaimer { font-size: var(--t-xs); line-height: 1.5; }
 /* chart text: labels a step up from axis numbers */
@@ -647,3 +637,21 @@ input, textarea, select, .input, .fbtext, .uname input { font-size: max(16px, 1e
 .head .hr1 { display: flex; gap: 6px; align-items: center; }
 .head .fxbtn.hfull { position: static; width: 36px; height: 34px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); display: grid; place-items: center; padding: 0; cursor: pointer; margin-top: 2px; }
 .head .fxbtn.hfull svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.fxswap { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 14px; padding: 10px 12px; margin-bottom: 12px; }
+.fxswap b { display: block; font-size: var(--t-s); margin-bottom: 8px; }
+
+/* dashboard: Coins | Predictions, two equal halves */
+.dswitch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); margin: 4px 0 14px; }
+.dswitch button { border: 0; background: none; color: var(--muted); border-radius: 12px; padding: 9px 10px; text-align: left; cursor: pointer; font: inherit; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.dswitch button b { font-size: var(--t-m); color: inherit; }
+.dswitch button span { font-size: var(--t-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dswitch button[aria-pressed="true"] { background: var(--surface2); color: var(--text); box-shadow: 0 1px 0 var(--line); }
+.dswitch button[aria-pressed="true"] span { color: var(--muted); }
+.pchips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; margin: 0 -2px; }
+.pchips::-webkit-scrollbar { display: none; }
+.pchip { flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 14px; padding: 9px 12px; cursor: pointer; font: inherit; min-width: 84px; }
+.pchip b { font-size: var(--t-m); } .pchip span { font-size: var(--t-xs); color: var(--muted); } .pchip i { font-style: normal; font-size: var(--t-xs); color: var(--accent); font-weight: 700; }
+/* holding a finger still (5 s = feedback) shouldn't pop the phone's text-selection or link menus */
+body { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
+.fbask { gap: 10px; } .fbask .btn { flex: 1; }

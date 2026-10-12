@@ -25,7 +25,6 @@ export function loadSymbols() {
   return loading;
 }
 export const symbolIndex = () => IDX;
-export const findSymbol = (key) => IDX?.find((r) => r.key === key) || null;
 
 function score(r, q, qc, toks) {
   let s = 0;
