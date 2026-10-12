@@ -51,7 +51,10 @@ async function loadFirebase() {
   ]);
   const app = initializeApp(CONFIG.firebase);
   const auth = authMod.getAuth(app);
-  await authMod.signInAnonymously(auth);
+  // Wait for this browser's saved sign-in to load before deciding anything: signing in straight away made a brand-new
+  // anonymous account on every visit, so people lost their predictions and their username after a refresh.
+  await auth.authStateReady();
+  if (!auth.currentUser) await authMod.signInAnonymously(auth);
   fb = { app, auth, authMod, db: f.getFirestore(app), f, unsubs: [] };
   return fb;
 }
