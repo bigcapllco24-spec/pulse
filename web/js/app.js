@@ -9,7 +9,7 @@ import { describe } from "./describe.js";
 import { mainChart, lowerChart } from "./chart.js";
 import { levelsFor, swingLevels } from "./levels.js";
 import { picks, studyWindow, maxPanels, OVERLAYS, PANELS } from "./studies.js";
-import { openPanels, expandBtn } from "./panels.js";
+import { openPanels, withExpand } from "./panels.js";
 import { startTour, coachEvent } from "./coach.js";
 import { openFull } from "./full.js";
 import { initFeedback } from "./feedback.js";
@@ -248,7 +248,7 @@ function renderMain(c, it) {
       <div class="hr"><div class="hr1"><button class="fxbtn hfull" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${esc(v.ivLabel.toLowerCase())} candles"><b>${esc(v.range)}</b><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button></div>
       <div class="hr2"><button class="lvbtn fxchip" data-fx aria-label="Indicators: ${pk.over.length + pk.lower.length} on"><i>ƒx</i>${pk.over.length + pk.lower.length || "Add"}</button><button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div></div>
       <div class="chartbox">${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: pk.over, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
-      ${shown.length ? `<div class="lowers${shown.length > 2 ? " g2" : ""}">${expandBtn(shown.length)}${shown.map((k) => lowerChart(v.win, ov, k)).join("")}</div>` : ""}<div class="cfoot">${dots}</div>`;
+      ${shown.length ? `<div class="lowers${shown.length > 2 ? " g2" : ""}">${withExpand(shown.map((k) => lowerChart(v.win, ov, k)).join(""), shown.length)}</div>` : ""}<div class="cfoot">${dots}</div>`;
   } else {
     c._v = null;
     main.innerHTML = `<div class="head"><div class="hl"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div><div class="hr"><button class="tfbtn" data-tf aria-label="Chart settings for ${esc(s.t)}"><b>${esc(cs.range)}</b><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button></div></div>

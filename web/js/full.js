@@ -12,7 +12,7 @@ import { chartSettings, store, save } from "./store.js";
 import { initInteract, openLearn, cancelPendingHold } from "./interact.js";
 import { APP, buildFeed } from "./app.js";
 import { openIndicatorsSheet, openLinesSheet } from "./pages.js";
-import { openPanels, expandBtn } from "./panels.js";
+import { openPanels, withExpand } from "./panels.js";
 import { esc, money, pct, arrow, haptic, fmtDay, toast, openSheet, closeSheet } from "./ui.js";
 
 // range → candle size (Kraken minutes, or "d" for the app's daily candles) and how much time to show first
@@ -119,7 +119,7 @@ function draw() {
   if (s.lvKey !== lk && !s.moving) { s.lvKey = lk; s.lv = levelsFor(v, s.levels); }
   const geo = { count: v.count, shift: v.shift, days: spanDays, full: true };
   box.innerHTML = mainChart(v.win, v.ov, { type: s.type, interval: v.interval, levels: s.levels === "off" ? [] : s.lv || [], over: s.over, ...geo });
-  el.querySelector(".flowers").innerHTML = expandBtn(s.lower.length) + s.lower.map((k) => lowerChart(v.win, v.ov, k, geo)).join("");
+  el.querySelector(".flowers").innerHTML = withExpand(s.lower.map((k) => lowerChart(v.win, v.ov, k, geo)).join(""), s.lower.length);
   const pe = el.querySelector("[data-pexp]"); if (pe) pe.onclick = (e) => { e.stopPropagation(); openPanels({ ...v, ivLabel: IVLABEL[s.iv], picks: { lower: s.lower } }, s.sym, spanDays); };
   const chg = ((v.win[v.win.length - 1].c - v.win[0].o) / v.win[0].o) * 100, older = Math.floor(s.end - s.count);
   const when = (t) => (t.length > 10 ? fmtDay(t) : new Date(t + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }));

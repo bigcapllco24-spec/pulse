@@ -633,12 +633,12 @@ input, textarea, select, .input, .fbtext, .uname input { font-size: max(16px, 1e
 .head .price { line-height: 1.05; }
 .chartbox { margin: 4px 0 2px; }
 .lowers { position: relative; }
-.pexp { position: absolute; top: -2px; right: 0; z-index: 2; width: 28px; height: 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); display: grid; place-items: center; padding: 0; cursor: pointer; }
-.pexp svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.8; }
-.lowers .lower:first-of-type .lower-label, .lowers.g2 .lower:nth-of-type(2) .lower-label { padding-right: 34px; }
+.pexp { display: inline-grid; place-items: center; vertical-align: -3px; width: 22px; height: 18px; margin-left: 6px; border: 0; border-radius: 6px; background: var(--surface2); color: var(--muted); padding: 0; cursor: pointer; }
+.pexp svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2; }
 .full .flowers { position: relative; }
 .pbig { display: grid; gap: 14px; margin-top: 6px; }
 .pbig .lower.lfull .lplot { height: 130px; }
+.pbig.g2 { grid-template-columns: 1fr 1fr; column-gap: 12px; } .pbig.g2 .lower.lfull .lplot { height: 110px; } .pbig.g2 .lfact { font-size: var(--t-xs); }
 .pbig .lrm { display: none; }
 @media (orientation: landscape) and (max-height: 520px) {
   .pane.main { padding-top: 52px; }
