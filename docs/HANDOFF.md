@@ -109,7 +109,7 @@ scripts/check.sh        all tests; tests/ = pipeline, levels, score, predict (No
   - Dashboard with watchlists.
   - Alert rules, with push notifications once enabled in the app.
   - Shared lists.
-  - Optional username (2 changes).
+  - **Username required:** every account picks one first, on a full-screen step that can't be skipped, with a live availability check. It can be changed 2 times after that.
   - Light and dark themes.
   - First-time tours.
   - Landscape layouts.
@@ -214,7 +214,7 @@ The prediction game is what turns the app from something people read into someth
   levels), rules, lists, fcm, username, and `pscore` (written by the job only). Subcollections: `alerts` (job
   only), `predictions` (app creates), `results` (job only).
 - `follows/{sym}`: which coins anyone follows, so the job knows what to fetch.
-- `usernames/{name}`: reserved usernames.
+- `usernames/{name}`: a "taken by account X" marker that keeps names unique. The name itself is the `username` field on the account.
 - `lists/{id}`: shared lists.
 - `feedback/{id}`: anyone signed in can create; only admins can read or update. Fields: text, where, screen,
   coin, detail, ctx, uid, status (open/done/declined), createdAt, note, doneAt.
@@ -227,6 +227,8 @@ The prediction game is what turns the app from something people read into someth
 2. In the console go to Firestore → Rules. The editor is CodeMirror 6, so set the text with
    `document.querySelector('.cm-content').cmView.view.dispatch({changes:{from:0,to:view.state.doc.length,insert:RULES}})`.
 3. Close any tip popup, then click **Publish**. Publishing changes live configuration, so ask Veer first.
+
+**Sign-in:** the app waits for the saved anonymous sign-in (`auth.authStateReady()`) before signing in, so a refresh keeps the same account. Before 12 Oct, every visit made a new account.
 
 **Never** turn on anonymous-account auto-cleanup: it would delete people's accounts. A few old accounts with
 64-character ids (from the old recovery-code version) are harmless; deleting data is Veer's decision.
