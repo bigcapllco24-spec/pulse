@@ -284,11 +284,13 @@ export function checkUsername(raw) {
   return { name, error: null };
 }
 // Whether a name is free (or already this account's). Demo mode has no other users.
+// gives up after ms, so a slow or stuck network never leaves a spinner on screen
+const within = (p, ms = 8000) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("timeout")), ms))]);
 export async function usernameFree(name) {
   if (store.mode === "demo") return "free";
-  await connected();
-  if (!fb) throw new Error("offline");
-  const d = await fb.f.getDoc(fb.f.doc(fb.db, "usernames", name));
+  // only needs the sign-in, not the whole account load, so the check is quick on a first open
+  await within(loadFirebase());
+  const d = await within(fb.f.getDoc(fb.f.doc(fb.db, "usernames", name)));
   // a name can also be free again if the account that held it no longer exists; the save finds out
   return !d.exists() || d.data().acct === store.id ? "free" : "held";
 }
@@ -299,7 +301,7 @@ export async function loginUsername(raw) {
   const { name, error } = checkUsername(raw);
   if (error) throw new Error(error);
   if (store.mode === "demo") return setUsername(name);
-  await connected();
+  try { await within(connected(), 15000); } catch {}
   if (!fb) throw new Error("Couldn't reach the server. Try again in a moment.");
   const { db, f, auth } = fb, me = auth.currentUser.uid;
   const u = await f.getDoc(f.doc(db, "usernames", name));

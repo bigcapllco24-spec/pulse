@@ -429,7 +429,9 @@ export function nameGate(onDone) {
       const st = await usernameFree(name); if (my !== seq) return;
       held = st !== "free"; btn.textContent = held ? `Log in as @${name}` : "Continue";
       held ? set(`@${name} already has an account. If it's yours, log in to open it on this phone.`, "", true) : set(`@${name} is free.`, "good", true);
-    } catch { if (my === seq) { held = false; btn.textContent = "Continue"; set(`@${name} looks good.`, "good", true); } } // offline: the save itself checks again
+    } catch { // slow or offline: let them go ahead; logging in finds the account if the name has one
+      if (my === seq) { held = true; btn.textContent = `Continue as @${name}`; set(`Couldn't check @${name} just now. Tap Continue: if it's already yours, you'll be logged in.`, "", true); }
+    }
   };
   let t = 0; inp.oninput = () => { clearTimeout(t); t = setTimeout(check, 250); };
   const close = () => { el.remove(); document.body.classList.remove("gated"); off(); onDone?.(); };
