@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 13 Oct 2026 (**version 1.0.4**, service worker `pulse-shell-v40`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
+Last updated 13 Oct 2026 (**version 1.0.5**, service worker `pulse-shell-v41`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -224,7 +224,7 @@ The prediction game is what turns the app from something people read into someth
   Group challenges: once over, members' phones read everyone's picks (rules allow a pick `get` after `endAt` + 1 min),
   score them with `challengeResults`, and show the results and table points straight away ("confirming"; reactions open
   when the job confirms). The job stays the record: it writes `pscore`, the official results and points, and deletes
-  the picks. Each phone reads each pick once per challenge (kept in memory while a price is out; a refusal stops it).
+  the picks. Each phone reads each pick once per challenge (kept in memory until the closing price is out; a refusal stops it).
 - Demo mode settles on the phone itself.
 - The full spec and every constant are in `docs/prediction-score.md` and at the top of `web/js/score.js`. After
   changing any weight, run `bash scripts/check.sh score`; the calibration checks say whether `CAL` needs
@@ -334,7 +334,9 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 - The e2e tests run in demo mode: `config.js` is served with firebase:null, and Kraken and Binance are mocked.
 
 **Releasing:**
-- Bump `SHELL` in `web/sw.js` on every release. Add any new JS file to `sw.js` FILES and to `index.html`
+- Bump `SHELL` in `web/sw.js` and `version` in `web/config.js` on every release. The service worker installs with
+  `cache: "reload"` (GitHub Pages lets browsers keep files 10 min, which once froze phones on 1.0.0); the app reloads
+  itself if a release lands while it opens, otherwise shows "A new version is ready · Update". Add any new JS file to `sw.js` FILES and to `index.html`
   modulepreload.
 - Commit to `main` and push; it's live in about a minute.
 - Commit messages end with the Co-Authored-By / Claude-Session lines.

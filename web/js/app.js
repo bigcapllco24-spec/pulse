@@ -733,6 +733,15 @@ export function applyTheme() {
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.register("sw.js" + (CONFIG.firebase ? "?config=" + encodeURIComponent(JSON.stringify(CONFIG.firebase)) : "")).catch(() => {});
   // When a new release takes over right after opening, reload once so the new version shows straight away.
+  // A new release took over: reload straight away while the app is still opening; later, offer it rather than
+  // reloading under someone's thumb. (A time stamp, not a once-per-session flag, so every release gets picked up.)
   const hadController = !!navigator.serviceWorker.controller;
-  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && performance.now() < 8000 && !sessionStorage.getItem("pl.swReload")) { sessionStorage.setItem("pl.swReload", "1"); location.reload(); } });
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController) return;
+    const last = +sessionStorage.getItem("pl.swReload") || 0;
+    if (performance.now() < 8000 && Date.now() - last > 20000) { sessionStorage.setItem("pl.swReload", Date.now()); location.reload(); }
+    else toast("A new version of the app is ready.", { action: "Update", onAction: () => location.reload(), ms: 15000 });
+  });
+  // check for a release whenever the app comes back to the front, not only on a fresh open
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {}); });
 }

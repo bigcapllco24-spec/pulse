@@ -1,9 +1,10 @@
 // Service worker: makes the app installable and opens instantly from cache; prices and news always come
 // from the network first. Also receives push alerts when Firebase is configured (config arrives in the URL).
-const SHELL = "pulse-shell-v40"; // 1.0.4
+const SHELL = "pulse-shell-v41"; // 1.0.5
 const FILES = ["./", "index.html", "styles.css", "config.js", "manifest.webmanifest", "icon.svg", "icon-192.png",
   "js/app.js", "js/pages.js", "js/store.js", "js/data.js", "js/chart.js", "js/studies.js", "js/indicators.js", "js/describe.js", "js/search.js", "js/interact.js", "js/levels.js", "js/coach.js", "js/full.js", "js/ui.js", "js/score.js", "js/predict.js", "js/social.js", "js/play.js", "js/feedback.js", "js/panels.js", "data/indicators.json"];
-self.addEventListener("install", (e) => { e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
+// cache: "reload" skips the browser's own cache (GitHub Pages lets it keep files 10 minutes), so a release never caches old files
+self.addEventListener("install", (e) => { e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: "reload" })))).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== SHELL).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
@@ -14,7 +15,7 @@ self.addEventListener("fetch", (e) => {
   // app never waits for the network. A new release (new SHELL name) replaces the whole copy in one go.
   e.respondWith(caches.open(SHELL).then(async (c) => {
     const hit = await c.match(e.request, { ignoreSearch: true });
-    const net = fetch(e.request).then((r) => { if (r.ok) c.put(e.request, r.clone()); return r; }).catch(() => hit);
+    const net = fetch(e.request, { cache: "no-cache" }).then((r) => { if (r.ok) c.put(e.request, r.clone()); return r; }).catch(() => hit);
     if (hit) { e.waitUntil(net.catch(() => {})); return hit; }
     return net;
   }));
