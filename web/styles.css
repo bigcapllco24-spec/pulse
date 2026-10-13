@@ -740,3 +740,23 @@ button.ava { cursor: pointer; }
 .btn.thump { animation: plThump .32s ease-out both, plRipple .6s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .strip > i, .chcard.flip, .rin, .btn.thump { animation: none; } }
 @media (min-width: 900px) { #play, #dash, #profile { max-width: 560px; } }
+
+/* a group's own page: header, the challenges as a timeline (newest at the bottom), New challenge fixed below */
+.grp { position: fixed; inset: 0; bottom: calc(-1 * var(--gapb)); z-index: 50; background: var(--bg); display: flex; flex-direction: column; transform: translateX(100%); transition: transform .26s cubic-bezier(.2,.8,.2,1); }
+.grp.on { transform: none; }
+.grp-h, .grp-b, .grp-f { width: 100%; max-width: 640px; margin: 0 auto; box-sizing: border-box; }
+.grp-h { display: flex; align-items: center; gap: 2px; padding: calc(8px + var(--safe-t)) 8px 8px; border-bottom: 1px solid var(--line); }
+.grp-h .iconbtn { flex: none; }
+.grp-t { flex: 1; min-width: 0; display: grid; text-align: left; background: none; border: 0; color: var(--text); font: inherit; padding: 4px 6px; cursor: pointer; }
+.grp-t b { font-size: var(--t-l); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grp-t .hint { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grp-b { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.grp-b > :first-child { margin-top: auto; } /* a short timeline sits at the bottom, like a chat */
+.grp-b .chcard { margin: 0; }
+.grp-day { align-self: center; font-size: var(--t-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.grp-res { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 14px; padding: 12px 14px; font: inherit; cursor: pointer; }
+.grp-res .main { flex: 1; min-width: 0; display: grid; gap: 2px; } .grp-res .t { font-weight: 700; } .grp-res .s { font-size: var(--t-s); color: var(--muted); }
+.grp-empty { text-align: center; }
+.grp-f { padding: 10px 16px calc(10px + var(--safe-b)); border-top: 1px solid var(--line); background: var(--glass); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+body.fbmode .grp { outline: 2px dashed var(--accent); outline-offset: -4px; }
+@media (prefers-reduced-motion: reduce) { .grp { transition: none; } }

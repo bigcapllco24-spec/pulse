@@ -165,6 +165,16 @@ export async function createGroup(rawName) {
   if (live()) syncGroups();
   return id;
 }
+// A group someone shared a link to, before joining: its name, who started it and how many play. null if it's gone.
+export async function peekGroup(g) {
+  if (S.groups.has(g)) { const x = S.groups.get(g); return { name: x.name, ownerName: x.ownerName, n: Object.keys(x.members || {}).length, member: true }; }
+  if (!live()) return null;
+  await connected();
+  const { f, db } = fbx(), s = await f.getDoc(f.doc(db, "groups", g));
+  if (!s.exists()) return null;
+  const d = s.data(), members = d.members || {};
+  return { name: d.name, ownerName: d.ownerName, n: Object.keys(members).length, member: me() in members };
+}
 export async function joinGroup(g) {
   needName();
   if ((store.data.groups || []).includes(g) && S.groups.has(g)) return S.groups.get(g);

@@ -17,7 +17,7 @@ function describeTarget(el) {
   const txt = (n) => (n?.getAttribute?.("aria-label") || n?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
   const card = t(".card"), it = card ? APP.seq[+card.dataset.i] : null, coin = it?.sym?.t || null;
   const view = card?.dataset.view || "main";
-  const screen = t("#gate") ? "Username step" : t("#full") ? "Full-screen chart" : t(".sheet") ? "Sheet" : t("#sDash") ? "Coins" : t("#sPlay") ? "Predict" : t("#sProfile") ? "Settings" : t(".tabbar") ? "Tab bar" : t(".topbar") ? "Top bar" : "Feed";
+  const screen = t("#gate") ? "Username step" : t("#grp") ? `Group page · ${t("#grp").querySelector(".grp-t b")?.textContent || ""}` : t("#full") ? "Full-screen chart" : t(".sheet") ? "Sheet" : t("#sDash") ? "Coins" : t("#sPlay") ? "Predict" : t("#sProfile") ? "Settings" : t(".tabbar") ? "Tab bar" : t(".topbar") ? "Top bar" : "Feed";
   const parts = [
     [".lower[data-learn]", (n) => `${n.dataset.learn} panel`], [".oli", (n) => `${txt(n).split(" ")[0]} line`], [".lvtag", () => "Support/resistance label"],
     [".scrubcard", () => "Hold-to-read card"], ["[data-fx]", () => "ƒx (indicators) button"], ["[data-lv]", () => "S/R button"], ["[data-tf]", () => "Time range chip"], [".head .chg", () => "Change % next to the coin name"],

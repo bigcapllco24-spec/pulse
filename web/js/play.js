@@ -11,7 +11,7 @@ import { APP, showTab } from "./app.js";
 import { resetTours, startTour } from "./coach.js";
 import { setFeedbackMode } from "./feedback.js";
 import { S, onSocial, me, myName, bandOf, RANK_MIN, CH_PERIODS, PICK_MINS, GROUP_MAX, getCards, getCard, findPlayers, getBoard, myCard, following, isFollowing, follow, setPublic, setPickDefault,
-  myGroups, groupLink, createGroup, joinGroup, leaveGroup, removeMember, renameGroup, invite, declineInvite, challengesOf, myPick, picksOpen, waitingForMe, isSeen, markSeen,
+  myGroups, groupLink, createGroup, peekGroup, joinGroup, leaveGroup, removeMember, renameGroup, invite, declineInvite, challengesOf, myPick, picksOpen, waitingForMe, isSeen, markSeen,
   unseenResults, canCount, startChallenge, makePick, REACTIONS, react, groupTable } from "./social.js";
 
 const PERIODS = Object.keys(HORIZONS);
@@ -48,13 +48,13 @@ export function initPlay() {
     if (j !== i) { APP.playView = order[j]; haptic(); renderPlay(); root.parentElement.scrollTop = 0; }
   }, { passive: true });
   root.addEventListener("touchcancel", () => (st = null), { passive: true });
-  setInterval(() => { if (APP.tab === "play" && $("sheet").hidden && !document.hidden) rerender(); }, 30000); // countdowns
+  setInterval(() => { if (APP.tab === "play" && $("sheet").hidden && !document.hidden) { rerender(); if (APP.openGroup) drawGroup(); } }, 30000); // countdowns
   badge();
 }
 const rerender = () => { const pg = $("play").parentElement, y = pg.scrollTop; renderPlay(); pg.scrollTop = y; };
 // The Predict tab's badge: picks waiting for you. The Groups tab's dot: that, new results or invites.
 export function badge() {
-  const n = waitingForMe().length, b = document.querySelector('.tabbar [data-tab="play"] .badge');
+  const n = waitingForMe().length + S.invites.length, b = document.querySelector('.tabbar [data-tab="play"] .badge'); // picks and invites waiting for you
   if (b) { b.hidden = !n; b.textContent = n; }
 }
 const groupsNeedYou = () => waitingForMe().length + unseenResults().length + S.invites.length > 0;
@@ -73,7 +73,8 @@ export function renderPlay() {
       </button>
     </header>
     ${prov ? `<div class="pl-progress"><div class="pl-prog" aria-hidden="true"><i style="width:${Math.min(100, (n / PROVISIONAL_UNDER) * 100)}%"></i></div><p class="hint">${sc?.score != null ? `${n} of ${PROVISIONAL_UNDER} scored. Your score settles at ${PROVISIONAL_UNDER}, and then you can join the public leaderboard.` : `Make a call to start your score. Everyone starts at ${CHANCE}, about what guessing scores.`}</p></div>` : ""}
-    ${wait ? `<button class="strip" data-pick="${esc(wait.g)}|${esc(wait.id)}"><i></i><span class="m"><b>${esc(groupName(wait.g))} needs your pick</b><span class="s">${esc(wait.t)} · ${SHORT[wait.horizon]} · closes in ${num(until(wait.joinUntil))}</span></span><span class="chev">›</span></button>` : ""}
+    ${wait ? `<button class="strip" data-pick="${esc(wait.g)}|${esc(wait.id)}"><i></i><span class="m"><b>${esc(groupName(wait.g))} needs your pick</b><span class="s">${esc(wait.t)} · ${SHORT[wait.horizon]} · closes in ${num(until(wait.joinUntil))}</span></span><span class="chev">›</span></button>`
+      : view !== "groups" && S.invites.length ? `<button class="strip" id="plInv"><i></i><span class="m"><b>@${esc(S.invites[0].from)} invited you to ${esc(S.invites[0].name)}</b><span class="s">${S.invites.length > 1 ? `${S.invites.length} invites · ` : ""}Join or decline in Groups</span></span><span class="chev">›</span></button>` : ""}
     <div class="utabs" role="tablist" aria-label="Predict">${[["calls", "Calls"], ["groups", "Groups"], ["ranks", "Ranks"]].map(([k, l]) => `<button role="tab" data-pv="${k}" aria-selected="${view === k}">${l}${k === "groups" && groupsNeedYou() ? `<span class="dot" aria-label="needs you"></span>` : ""}</button>`).join("")}</div>
     <div class="pl-view" data-view="${view}"></div>`;
   const body = el.querySelector(".pl-view");
@@ -81,6 +82,7 @@ export function renderPlay() {
   el.querySelector("#plMe").onclick = () => openAvatarSheet();
   el.querySelector("#plCard").onclick = () => openPlayerCard(me());
   el.querySelectorAll("[data-pv]").forEach((b) => (b.onclick = () => { if (APP.playView !== b.dataset.pv) { APP.playView = b.dataset.pv; haptic(); renderPlay(); el.parentElement.scrollTop = 0; } }));
+  el.querySelector("#plInv")?.addEventListener("click", () => { APP.playView = "groups"; haptic(); renderPlay(); el.parentElement.scrollTop = 0; });
   wirePicks(el);
 }
 function wirePicks(root) {
@@ -141,11 +143,11 @@ function groupsView(el) {
     if (open) return [`${esc(open.t)} · ${SHORT[open.horizon]} · ${Object.keys(open.picked || {}).length} of ${n} picked`, picksOpen(open) ? `<span class="lab good">Live</span>` : ""];
     return [`${n} player${n === 1 ? "" : "s"}${groupTable(g.id).some((r) => r.pts > 0) && mine >= 0 ? ` · you're ${ord(mine + 1)} this month` : ""}`, ""];
   };
-  el.innerHTML = `${waits.map((ch) => `<button class="strip" data-pick="${esc(ch.g)}|${esc(ch.id)}"><i></i><span class="m"><b>${esc(groupName(ch.g))} · ${esc(ch.t)} · ${SHORT[ch.horizon]}</b><span class="s">${Object.keys(ch.picked || {}).length} of ${Object.keys(S.groups.get(ch.g)?.members || {}).length} picked · closes in ${num(until(ch.joinUntil))}</span></span><span class="btn primary sm">Pick</span></button>`).join("")}
+  el.innerHTML = `${S.invites.length ? `<div class="label">Invites</div><div class="hl">${S.invites.map((i) => `<div class="row"><span class="main"><span class="t">${esc(i.name)}</span><span class="s">from @${esc(i.from)}</span></span><button class="btn ghost sm" data-decline="${esc(i.g)}">Decline</button><button class="btn primary sm" data-join="${esc(i.g)}">Join</button></div>`).join("")}</div><div style="height:16px"></div>` : ""}
+    ${waits.map((ch) => `<button class="strip" data-pick="${esc(ch.g)}|${esc(ch.id)}"><i></i><span class="m"><b>${esc(groupName(ch.g))} · ${esc(ch.t)} · ${SHORT[ch.horizon]}</b><span class="s">${Object.keys(ch.picked || {}).length} of ${Object.keys(S.groups.get(ch.g)?.members || {}).length} picked · closes in ${num(until(ch.joinUntil))}</span></span><span class="btn primary sm">Pick</span></button>`).join("")}
     ${groups.length ? `<div class="label">Your groups</div><div class="hl">${groups.map((g) => { const [s, tag] = status(g), ms = Object.entries(g.members || {}).slice(0, 3);
       return `<button class="row" data-g="${esc(g.id)}"><span class="stack" aria-hidden="true">${ms.map(([a, u]) => ava(u, a === me() ? myCard() : S.cards.get(a), "xs")).join("")}</span><span class="main"><span class="t">${esc(g.name)}</span><span class="s">${s}</span></span>${tag || `<span class="chev">›</span>`}</button>`; }).join("")}</div>`
       : `<div class="pl-intro"><b>Play with friends</b><p class="hint">A group calls the same coin over the same time and sees who was closest. Prices stay hidden until it's scored.</p></div>`}
-    ${S.invites.length ? `<div class="label" style="margin-top:16px">Invites</div><div class="hl">${S.invites.map((i) => `<div class="row"><span class="main"><span class="t">${esc(i.name)}</span><span class="s">from @${esc(i.from)}</span></span><button class="btn ghost sm" data-decline="${esc(i.g)}">Decline</button><button class="btn primary sm" data-join="${esc(i.g)}">Join</button></div>`).join("")}</div>` : ""}
     <button class="btn block pl-new" id="plNewG">Start a group</button>
     <p class="hint">Up to ${GROUP_MAX} players a group. Share a group's link, or invite players from their card.</p>`;
   el.querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openGroup(b.dataset.g)));
@@ -310,37 +312,86 @@ async function shareLink(g) {
   try { if (navigator.share) { await navigator.share({ title: groupName(g), text, url }); return; } } catch (e) { if (e?.name === "AbortError") return; }
   try { await navigator.clipboard.writeText(url); toast("Group link copied."); } catch { prompt("Copy this link", url); }
 }
+// ---------- a group's own page: its challenges as a timeline, oldest first, newest at the bottom (like a chat, with
+// no chat). Older results fold to one line; the live challenge and the latest results show in full.
+let grpOff = null; const opened = new Set(); // results rows unfolded on this visit
+const dayLabel = (iso) => {
+  const d = new Date(iso), t = new Date(), y = new Date(Date.now() - 864e5), same = (a, b) => a.toDateString() === b.toDateString();
+  return same(d, t) ? "Today" : same(d, y) ? "Yesterday" : d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+};
 export function openGroup(g, { fresh = false } = {}) {
-  APP.openGroup = g;
-  openSheet(esc(groupName(g)), "", (body) => {
-    const draw = () => {
-      const grp = S.groups.get(g);
-      if (!grp) { body.innerHTML = `<div class="empty">Loading the group…</div>`; return; }
-      const n = Object.keys(grp.members || {}).length, list = challengesOf(g), t = groupTable(g), mi = t.findIndex((r) => r.a === me());
-      $("shTitle").textContent = grp.name;
-      const played = t.some((r) => r.pts > 0);
-      body.innerHTML = `<div class="gr-head"><span class="hint">${n} player${n === 1 ? "" : "s"}${played && mi >= 0 ? ` · you're ${ord(mi + 1)} this month` : ""}</span>
-          <span><button class="iconbtn ghost" id="grInv" aria-label="Invite"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"/><path d="M3 20c1.2-3.4 3.8-5 7-5s5.8 1.6 7 5M19 8v6M16 11h6"/></svg></button><button class="iconbtn ghost" id="grInfo" aria-label="Group and members"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg></button></span></div>
-        ${fresh || n === 1 ? `<div class="notice">Share the group's link so friends can join. ${n === 1 ? "It's just you so far." : ""} <button class="linkbtn" id="grShare">Share link</button></div>` : ""}
-        ${list.length ? list.map((ch) => chCard(g, ch, n)).join("") : `<div class="pl-intro"><b>No challenges yet</b><p class="hint">Start one: pick a coin and a period, make your call, and everyone in the group gets the same end time.</p></div>`}
-        ${played ? `<div class="label" style="margin-top:6px">${new Date().toLocaleString("en-IN", { month: "long" })} table</div><div class="hl">${t.map((r, i) => `<div class="row"><span class="num lbn">${i + 1}</span>${ava(r.u, r.a === me() ? myCard() : S.cards.get(r.a), "xs")}<span class="main"><span class="t">@${esc(r.u)}${r.a === me() ? " · you" : ""}</span></span><b class="num">${r.pts}<small class="muted"> pts</small></b></div>`).join("")}</div>` : ""}
-        <div class="shfoot"><button class="btn primary block" id="grNew">New challenge</button></div>`;
-      body.querySelector("#grNew").onclick = () => openChallengeSheet(g);
-      body.querySelector("#grInv").onclick = () => openInviteSheet(g);
-      body.querySelector("#grInfo").onclick = () => openGroupInfo(g);
-      body.querySelector("#grShare")?.addEventListener("click", () => shareLink(g));
-      body.querySelectorAll("[data-reveal]").forEach((b) => (b.onclick = () => { markSeen(b.dataset.reveal); haptic([8, 30, 8]); APP.flip = b.dataset.reveal; draw(); APP.flip = null; badge(); }));
-      body.querySelectorAll("[data-rx]").forEach((b) => (b.onclick = async () => { const [c, k] = b.dataset.rx.split("|"); try { await react(g, c, k); haptic(); } catch { toast("Couldn't react just now."); } }));
-      body.querySelectorAll("[data-again]").forEach((b) => (b.onclick = () => { const ch = list.find((x) => x.id === b.dataset.again); openChallengeSheet(g, { coin: ch.coin, horizon: ch.horizon }); }));
-      body.querySelectorAll("[data-share]").forEach((b) => (b.onclick = () => shareResult(g, list.find((x) => x.id === b.dataset.share))));
-      body.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openPlayerCard(b.dataset.a)));
-      wirePicks(body);
-      const need = Object.keys(grp.members || {}).filter((a) => a !== me() && !S.cards.has(a));
-      if (need.length) getCards(need).then(() => APP.openGroup === g && !$("sheet").hidden && draw()).catch(() => {});
-    };
-    draw();
-    const off = onSocial(() => { if (APP.openGroup === g && document.getElementById("sheet").contains(body)) draw(); else off(); });
-  }, () => { APP.openGroup = null; });
+  let el = $("grp");
+  if (APP.openGroup === g && el && !el.hidden) { drawGroup(true); return; }
+  if (!el) { el = document.createElement("section"); el.id = "grp"; el.className = "grp"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); document.body.appendChild(el); }
+  APP.openGroup = g; APP.groupFresh = fresh; opened.clear();
+  el.hidden = false; requestAnimationFrame(() => el.classList.add("on"));
+  if (history.state?.grp !== g) history.pushState({ grp: g }, "");
+  grpOff?.(); grpOff = onSocial(() => APP.openGroup === g && drawGroup());
+  drawGroup(true);
+}
+// Back (the button, Escape, or the phone's back): the page slides away
+export function closeGroup() {
+  const el = $("grp"); if (!el || el.hidden) return;
+  grpOff?.(); grpOff = null; APP.openGroup = null;
+  el.classList.remove("on"); setTimeout(() => { if (!APP.openGroup) { el.hidden = true; el.innerHTML = ""; } }, 260);
+  if (APP.tab === "play") renderPlay(); badge();
+}
+const backFromGroup = () => (history.state?.grp ? history.back() : closeGroup());
+addEventListener("popstate", () => { if (APP.openGroup && history.state?.grp !== APP.openGroup) { closeSheet(); closeGroup(); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && APP.openGroup && $("sheet").hidden) backFromGroup(); });
+
+function drawGroup(toBottom = false) {
+  const g = APP.openGroup, el = $("grp"); if (!g || !el) return;
+  const grp = S.groups.get(g);
+  if (!grp) { el.innerHTML = `<div class="grp-h"><button class="iconbtn ghost" id="grBack" aria-label="Back">‹</button><span class="grp-t"><b>Group</b></span></div><div class="grp-b"><div class="empty">${!(store.data?.groups || []).includes(g) ? "You're not in this group any more." : "Loading the group…"}</div></div>`; el.querySelector("#grBack").onclick = backFromGroup; return; }
+  const box = el.querySelector(".grp-b"), nearEnd = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 80, y = box?.scrollTop || 0;
+  const n = Object.keys(grp.members || {}).length, list = challengesOf(g).slice().reverse(), t = groupTable(g), mi = t.findIndex((r) => r.a === me()), played = t.some((r) => r.pts > 0);
+  const lastDone = [...list].reverse().find((ch) => ch.status === "done")?.id;
+  let day = "", rows = "";
+  for (const ch of list) {
+    const d = dayLabel(ch.at); if (d !== day) { day = d; rows += `<span class="grp-day">${esc(d)}</span>`; }
+    const fold = ch.status === "done" && ch.id !== lastDone && isSeen(ch.id) && !opened.has(ch.id);
+    if (fold) {
+      const r = (ch.results || []), win = r.find((x) => x.rank === 1), mine = r.find((x) => x.a === me());
+      rows += `<button class="grp-res" data-open="${esc(ch.id)}"><span class="main"><span class="t">${esc(ch.t)} · ${SHORT[ch.horizon]} · results</span><span class="s">${win ? `${win.a === me() ? "You" : "@" + esc(win.u)} won` : "No one scored"}${mine && win?.a !== me() ? ` · you were ${mine.rank ? ord(mine.rank) : "not counted"}, ${esc(mine.label)}` : ""}</span></span><span class="chev">›</span></button>`;
+    } else rows += chCard(g, ch, n);
+  }
+  el.innerHTML = `<div class="grp-h"><button class="iconbtn ghost" id="grBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <button class="grp-t" id="grInfo2"><b>${esc(grp.name)}</b><span class="hint">${n} player${n === 1 ? "" : "s"}${played && mi >= 0 ? ` · you're ${ord(mi + 1)} in ${new Date().toLocaleString("en-IN", { month: "long" })}` : ""}</span></button>
+      <button class="iconbtn ghost" id="grInv" aria-label="Invite"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"/><path d="M3 20c1.2-3.4 3.8-5 7-5s5.8 1.6 7 5M19 8v6M16 11h6"/></svg></button>
+      <button class="iconbtn ghost" id="grTable" aria-label="This month's table"><svg viewBox="0 0 24 24"><path d="M6 20V10M12 20V4M18 20v-7"/></svg></button>
+      <button class="iconbtn ghost" id="grInfo" aria-label="Group and players"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg></button></div>
+    <div class="grp-b">
+      ${APP.groupFresh || n === 1 ? `<div class="notice">Share the group's link so friends can join.${n === 1 ? " It's just you so far." : ""} <button class="linkbtn" id="grShare">Share link</button></div>` : ""}
+      ${rows || `<div class="pl-intro grp-empty"><b>No challenges yet</b><p class="hint">Start one: pick a coin and a period, make your call, and everyone in the group gets the same end time. Prices stay hidden until it's scored.</p></div>`}
+    </div>
+    <div class="grp-f"><button class="btn primary block" id="grNew">New challenge</button></div>`;
+  const b = el.querySelector(".grp-b");
+  b.scrollTop = toBottom || nearEnd ? b.scrollHeight : y;
+  el.querySelector("#grBack").onclick = backFromGroup;
+  el.querySelector("#grNew").onclick = () => openChallengeSheet(g);
+  el.querySelector("#grInv").onclick = () => openInviteSheet(g);
+  el.querySelector("#grInfo").onclick = el.querySelector("#grInfo2").onclick = () => openGroupInfo(g);
+  el.querySelector("#grTable").onclick = () => openGroupTable(g);
+  el.querySelector("#grShare")?.addEventListener("click", () => shareLink(g));
+  el.querySelectorAll("[data-open]").forEach((x) => (x.onclick = () => { opened.add(x.dataset.open); drawGroup(); }));
+  el.querySelectorAll("[data-reveal]").forEach((x) => (x.onclick = () => { markSeen(x.dataset.reveal); opened.add(x.dataset.reveal); haptic([8, 30, 8]); APP.flip = x.dataset.reveal; drawGroup(); APP.flip = null; badge(); el.querySelector(".chcard.flip")?.scrollIntoView({ block: "start", behavior: "smooth" }); }));
+  el.querySelectorAll("[data-rx]").forEach((x) => (x.onclick = async () => { const [c, k] = x.dataset.rx.split("|"); try { await react(g, c, k); haptic(); } catch { toast("Couldn't react just now."); } }));
+  el.querySelectorAll("[data-again]").forEach((x) => (x.onclick = () => { const ch = list.find((c) => c.id === x.dataset.again); openChallengeSheet(g, { coin: ch.coin, horizon: ch.horizon }); }));
+  el.querySelectorAll("[data-share]").forEach((x) => (x.onclick = () => shareResult(g, list.find((c) => c.id === x.dataset.share))));
+  el.querySelectorAll(".grp-b [data-a]").forEach((x) => (x.onclick = () => openPlayerCard(x.dataset.a)));
+  wirePicks(el);
+  const need = Object.keys(grp.members || {}).filter((a) => a !== me() && !S.cards.has(a));
+  if (need.length) getCards(need).then(() => APP.openGroup === g && drawGroup()).catch(() => {});
+}
+// This month's points table, from the group page's chart button.
+function openGroupTable(g) {
+  const t = groupTable(g), played = t.some((r) => r.pts > 0), month = new Date().toLocaleString("en-IN", { month: "long" });
+  openSheet(`${esc(month)} table`, `${played ? `<div class="hl">${t.map((r, i) => `<button class="row" data-a="${esc(r.a)}"><span class="num lbn">${i + 1}</span>${ava(r.u, r.a === me() ? myCard() : S.cards.get(r.a), "xs")}<span class="main"><span class="t">@${esc(r.u)}${r.a === me() ? " · you" : ""}</span><span class="s">${r.all} pts all time</span></span><b class="num">${r.pts}<small class="muted"> pts</small></b></button>`).join("")}</div>`
+    : `<div class="empty">No results this month yet. Points land when a challenge is scored.</div>`}
+    <p class="hint" style="margin-top:10px">Spot on 5, Very close 3, Close 2, Off 1, plus 1 for the right direction. Starts again each month.</p>`, (body) => {
+    body.querySelectorAll("[data-a]").forEach((x) => (x.onclick = () => openPlayerCard(x.dataset.a)));
+  });
 }
 function chCard(g, ch, n) {
   const picked = Object.entries(ch.picked || {}), grp = S.groups.get(g), missing = Object.entries(grp?.members || {}).filter(([a]) => !(a in (ch.picked || {})));
@@ -388,7 +439,7 @@ function openInviteSheet(g) {
       } catch { if (my === seq) res.innerHTML = `<p class="hint">Couldn't search just now.</p>`; }
     }, 220); };
     setTimeout(() => inp.focus(), 280);
-  }, () => setTimeout(() => S.groups.has(g) && openGroup(g), 280));
+  });
 }
 function openGroupInfo(g) {
   const grp = S.groups.get(g); if (!grp) return;
@@ -399,9 +450,9 @@ function openGroupInfo(g) {
     <p class="hint">${owner ? "You started this group: you can rename it and remove players. If you leave, the next player looks after it." : `Started by @${esc(grp.ownerName)}.`}</p>`, (body) => {
     body.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openPlayerCard(b.dataset.a)));
     body.querySelector("#giShare").onclick = () => shareLink(g);
-    body.querySelector("#giRen")?.addEventListener("click", async () => { const n = prompt("Rename the group", grp.name); if (n && n.trim()) { try { await renameGroup(g, n); toast("Renamed."); openGroup(g); } catch (e) { toast(e.message); } } });
-    body.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => { if (confirm(`Remove @${b.dataset.u} from ${grp.name}?`)) { try { await removeMember(g, b.dataset.rm); toast(`Removed @${b.dataset.u}.`); openGroup(g); } catch { toast("Couldn't remove just now."); } } }));
-    body.querySelector("#giLeave").onclick = async () => { if (!confirm(`Leave ${grp.name}?${ms.length === 1 ? " You're the last player, so the group will be deleted." : ""}`)) return; try { await leaveGroup(g); closeSheet(); toast(`You left ${grp.name}.`); if (APP.tab === "play") renderPlay(); } catch { toast("Couldn't leave just now. Try again."); } };
+    body.querySelector("#giRen")?.addEventListener("click", async () => { const n = prompt("Rename the group", grp.name); if (n && n.trim()) { try { await renameGroup(g, n); toast("Renamed."); closeSheet(); } catch (e) { toast(e.message); } } });
+    body.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => { if (confirm(`Remove @${b.dataset.u} from ${grp.name}?`)) { try { await removeMember(g, b.dataset.rm); toast(`Removed @${b.dataset.u}.`); closeSheet(); } catch { toast("Couldn't remove just now."); } } }));
+    body.querySelector("#giLeave").onclick = async () => { if (!confirm(`Leave ${grp.name}?${ms.length === 1 ? " You're the last player, so the group will be deleted." : ""}`)) return; try { await leaveGroup(g); closeSheet(); if (APP.openGroup === g) backFromGroup(); toast(`You left ${grp.name}.`); if (APP.tab === "play") renderPlay(); } catch { toast("Couldn't leave just now. Try again."); } };
   });
 }
 
@@ -590,9 +641,22 @@ export async function openLink(hash = location.hash) {
   const m = hash.match(/^#\/g\/([a-z0-9]{20,})/);
   if (/^#\/predict/.test(hash) || m) { history.replaceState(null, "", location.pathname); showTab("play"); }
   if (!m) return;
-  APP.playView = "groups";
-  try { const grp = await joinGroup(m[1]); toast(`You're in ${grp.name}.`); haptic(); openGroup(m[1]); }
-  catch (e) { toast(e.message, { ms: 5000 }); }
+  APP.playView = "groups"; renderPlay();
+  const g = m[1];
+  let info; try { info = await peekGroup(g); } catch { toast("Couldn't open that group just now. Check your connection and try the link again.", { ms: 5000 }); return; }
+  if (!info) { toast("That group doesn't exist any more, or the link is wrong.", { ms: 5000 }); return; }
+  if (info.member) { openGroup(g); return; }
+  // a link never adds anyone by itself: say which group it is, and join only on a yes
+  openSheet("Join this group?", `<div class="pl-intro" style="text-align:center"><b style="font-size:var(--t-xl)">${esc(info.name)}</b><p class="hint">Started by @${esc(info.ownerName || "someone")} · ${info.n} player${info.n === 1 ? "" : "s"}</p></div>
+    <p class="hint">You'll play under @${esc(myName() || "your username")}. The group sees your username, your picks once they're scored, and your points in its table, never your other calls.</p>
+    <button class="btn primary block" id="jgGo">Join ${esc(info.name)}</button><button class="btn block" id="jgNo" style="margin-top:8px">Not now</button>`, (body) => {
+    body.querySelector("#jgNo").onclick = closeSheet;
+    body.querySelector("#jgGo").onclick = async (e) => {
+      e.target.disabled = true; e.target.textContent = "Joining…";
+      try { const grp = await joinGroup(g); closeSheet(); haptic(); toast(`You're in ${grp.name}.`); setTimeout(() => openGroup(g), 280); }
+      catch (err) { toast(err.message, { ms: 5000 }); e.target.disabled = false; e.target.textContent = `Join ${info.name}`; }
+    };
+  });
 }
 // After the profile pages: back to where you came from (the avatar sheet reopens on Predict)
 export function backFromProfile() {
