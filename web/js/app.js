@@ -3,7 +3,7 @@
 import { CONFIG } from "../config.js";
 import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists, settleDemoPredictions } from "./store.js";
 import { initSocial, settleDemoChallenges } from "./social.js";
-import { initPlay, renderPlay, openPredictSheet, openLink, badge, openAvatarSheet, closeGroup } from "./play.js";
+import { initPlay, renderPlay, openPredictSheet, openLink, badge, openAvatarSheet, closeGroup, closeProfile } from "./play.js";
 import { krakenRows } from "./predict.js";
 import { loadSymbols, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
@@ -619,7 +619,7 @@ addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { i
 // Tabs: Coins ("dash"), Feed and Predict ("play"). "profile" is the settings pages, opened from the avatar sheet
 // on Predict (or from Coins for alerts); the tab bar keeps showing where they were opened from.
 export function showTab(tab, sub, arg) {
-  closeGroup(); // a group's page sits over the tabs; going anywhere else closes it
+  closeGroup(); closeProfile(); // the group and profile pages sit over the tabs; going anywhere else closes them
   if (tab === "profile" && !sub) { tab = "play"; setTimeout(openAvatarSheet, 0); }
   APP.tab = tab;
   $("sFeed").hidden = tab !== "feed"; $("sDash").hidden = tab !== "dash"; $("sPlay").hidden = tab !== "play"; $("sProfile").hidden = tab !== "profile";

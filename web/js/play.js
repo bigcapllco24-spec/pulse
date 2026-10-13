@@ -83,17 +83,27 @@ export function renderPlay() {
   const sub = [`@${esc(u || "you")}`, followers ? `${num(followers)} follower${followers === 1 ? "" : "s"}` : "", rank ? `#${num(rank)}` : ""].filter(Boolean).join(" · ");
   const n = sc?.n || 0, prov = !sc || sc.provisional;
   const wait = view === "groups" ? null : waitingForMe()[0];
-  el.innerHTML = `<header class="pl-head">
-      <button class="ava ${sc?.score != null && !prov ? BAND_CLASS[sc.band] || "" : "prov"}" id="plMe" aria-label="Your account and settings">${esc((u || "?")[0].toUpperCase())}</button>
-      <button class="pl-who" id="plCard" aria-label="Your player card">
+  // the three parts of the page, as tiles that say what's in each
+  const openN = store.preds.length + S.picks.filter((p) => !p.counts && p.status !== "scored" && p.status !== "void").length, gN = myGroups().length;
+  const rk = rank ? `#${num(rank)}` : store.data?.public !== true ? "Join" : n < RANK_MIN ? `${RANK_MIN - n} to go` : "Soon";
+  const tiles = [
+    ["calls", "Calls", openN ? `${openN} open` : "Make a call", `<path d="M3 17l5-6 4 4 4-7 5 9"/>`],
+    ["groups", "Groups", gN ? `${gN} group${gN === 1 ? "" : "s"}` : "Play friends", `<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.3 3.4-5 6.5-5s5.5 1.7 6.5 5"/><circle cx="17" cy="9" r="2.6"/><path d="M16 14.6c2.7.2 4.6 1.9 5.4 4.9"/>`],
+    ["ranks", "Ranks", rk, `<path d="M6 20V10M12 20V4M18 20v-7"/>`],
+  ];
+  el.innerHTML = `<div class="pl-top"><span class="label">Predict</span><button class="iconbtn ghost" id="plMe" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div>
+    <button class="pl-head" id="plCard" aria-label="Your profile">
+      <span class="ava lg ${sc?.score != null && !prov ? BAND_CLASS[sc.band] || "" : "prov"}" aria-hidden="true">${esc((u || "?")[0].toUpperCase())}</span>
+      <span class="pl-who">
         <span class="pl-score">${sc?.score != null ? `<b class="num">${sc.score}</b><span class="${BAND_CLASS[sc.band] || ""}t">${esc(sc.band)}${prov ? " · Provisional" : ""}</span>` : `<span class="muted">No score yet</span>`}</span>
         <span class="pl-sub">${sub}</span>
-      </button>
-    </header>
-    ${prov ? `<div class="pl-progress"><div class="pl-prog" aria-hidden="true"><i style="width:${Math.min(100, (n / PROVISIONAL_UNDER) * 100)}%"></i></div><p class="hint">${sc?.score != null ? `${n} of ${PROVISIONAL_UNDER} scored. Your score settles at ${PROVISIONAL_UNDER}, and then you can join the public leaderboard.` : `Make a call to start your score. Everyone starts at ${CHANCE}, about what guessing scores.`}</p></div>` : ""}
+      </span>
+      <span class="pl-go">Profile<span class="chev">›</span></span>
+      ${prov ? `<span class="pl-progress"><span class="pl-prog" aria-hidden="true"><i style="width:${Math.min(100, (n / PROVISIONAL_UNDER) * 100)}%"></i></span><span class="hint">${sc?.score != null ? `${n} of ${PROVISIONAL_UNDER} calls scored. Your score settles at ${PROVISIONAL_UNDER}, then you can join the public leaderboard.` : `Make a call to start your score. Everyone starts at ${CHANCE}, about what guessing scores.`}</span></span>` : ""}
+    </button>
     ${wait ? `<button class="strip" data-pick="${esc(wait.g)}|${esc(wait.id)}"><i></i><span class="m"><b>${esc(groupName(wait.g))} needs your pick</b><span class="s">${esc(wait.t)} · ${SHORT[wait.horizon]} · closes in ${num(until(wait.joinUntil))}</span></span><span class="chev">›</span></button>`
       : view !== "groups" && S.invites.length ? `<button class="strip" id="plInv"><i></i><span class="m"><b>@${esc(S.invites[0].from)} invited you to ${esc(S.invites[0].name)}</b><span class="s">${S.invites.length > 1 ? `${S.invites.length} invites · ` : ""}Join or decline in Groups</span></span><span class="chev">›</span></button>` : ""}
-    <div class="utabs" role="tablist" aria-label="Predict">${[["calls", "Calls"], ["groups", "Groups"], ["ranks", "Ranks"]].map(([k, l]) => `<button role="tab" data-pv="${k}" aria-selected="${view === k}">${l}${k === "groups" && groupsNeedYou() ? `<span class="dot" aria-label="needs you"></span>` : ""}</button>`).join("")}</div>
+    <div class="pl-tiles" role="tablist" aria-label="Predict">${tiles.map(([k, l, s, icon]) => `<button role="tab" class="pl-tile" data-pv="${k}" aria-selected="${view === k}"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${l}${k === "groups" && groupsNeedYou() ? `<span class="dot" aria-label="needs you"></span>` : ""}</b><span class="${/^#?\d[\d,]*$/.test(s) ? "num" : ""}">${esc(s)}</span></button>`).join("")}</div>
     <div class="pl-view" data-view="${view}"></div>`;
   const body = el.querySelector(".pl-view");
   ({ calls: callsView, groups: groupsView, ranks: ranksView })[view](body);
@@ -122,7 +132,7 @@ function callsView(el) {
     return `<div class="callrow"><div class="top"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="hint num">${esc(Date.now() >= Date.parse(due) ? "scoring…" : leftText(due, p.horizon))}</span></div>
       <span class="hint">${num(esc(m$(p.target)))} called${away != null && p.horizon !== "1y" ? ` · now ${num(away.toFixed(1) + "%")} away` : ""}${grp}${p.kind === "pick" ? " · group only" : ""}</span><div class="tbar" aria-hidden="true"><i style="width:${(share * 100).toFixed(1)}%"></i></div></div>`;
   };
-  el.innerHTML = `<div class="label">Make a call</div>
+  el.innerHTML = `<div class="label pl-sec" style="margin-top:0">Make a call</div>
     ${coins.length ? `<div class="pchips">${coins.map((x) => `<button class="pchip" data-pp="${esc(x.key)}"><b>${esc(x.t)}</b><span class="num">${esc(money(D.series[x.key].bars.at(-1).c, x.m))}</span>${open.some((p) => p.coin === x.key) ? `<em aria-label="open call"></em>` : ""}</button>`).join("")}</div>`
       : `<p class="hint">Prices are loading. Add coins from the feed's + to call them here.</p>`}
     <div class="secrow"><span class="label">Open${open.length ? ` · ${open.length}` : ""}</span></div>
@@ -150,11 +160,11 @@ function groupsView(el) {
   };
   el.innerHTML = `${S.invites.length ? `<div class="label">Invites</div><div class="hl">${S.invites.map((i) => `<div class="row"><span class="main"><span class="t">${esc(i.name)}</span><span class="s">from @${esc(i.from)}</span></span><button class="btn ghost sm" data-decline="${esc(i.g)}">Decline</button><button class="btn primary sm" data-join="${esc(i.g)}">Join</button></div>`).join("")}</div><div style="height:16px"></div>` : ""}
     ${waits.map((ch) => `<button class="strip" data-pick="${esc(ch.g)}|${esc(ch.id)}"><i></i><span class="m"><b>${esc(groupName(ch.g))} · ${esc(ch.t)} · ${SHORT[ch.horizon]}</b><span class="s">${Object.keys(ch.picked || {}).length} of ${Object.keys(S.groups.get(ch.g)?.members || {}).length} picked · closes in ${num(until(ch.joinUntil))}</span></span><span class="btn primary sm">Pick</span></button>`).join("")}
-    ${groups.length ? `<div class="label">Your groups</div><div class="hl">${groups.map((g) => { const [s, tag] = status(g), ms = Object.entries(g.members || {}).slice(0, 3);
-      return `<button class="row" data-g="${esc(g.id)}"><span class="stack" aria-hidden="true">${ms.map(([a, u]) => ava(u, a === me() ? myCard() : S.cards.get(a), "xs")).join("")}</span><span class="main"><span class="t">${esc(g.name)}</span><span class="s">${s}</span></span>${tag || `<span class="chev">›</span>`}</button>`; }).join("")}</div>`
+    ${groups.length ? `<div class="label pl-sec">Your groups</div><div class="pl-cards">${groups.map((g) => { const [s, tag] = status(g), ms = Object.entries(g.members || {}), n = ms.length;
+      return `<button class="gcard" data-g="${esc(g.id)}"><span class="gcard-top"><b>${esc(g.name)}</b>${tag || `<span class="chev">›</span>`}</span>
+        <span class="gcard-bot"><span class="stack" aria-hidden="true">${ms.slice(0, 5).map(([a, u]) => ava(u, a === me() ? myCard() : S.cards.get(a), "xs")).join("")}${n > 5 ? `<span class="ava xs more">+${n - 5}</span>` : ""}</span><span class="s">${s}</span></span></button>`; }).join("")}</div>`
       : `<div class="pl-intro"><b>Play with friends</b><p class="hint">A group calls the same coin over the same time and sees who was closest. Prices stay hidden until it's scored.</p></div>`}
-    <button class="btn block pl-new" id="plNewG">Start a group</button>
-    <p class="hint">Up to ${GROUP_MAX} players a group. Share a group's link, or invite players from their card.</p>`;
+    <button class="pl-newg" id="plNewG"><span class="plus" aria-hidden="true">+</span><span class="main"><b>Start a group</b><span class="s">Up to ${GROUP_MAX} players. Share its link, or invite players from their card.</span></span></button>`;
   el.querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openGroup(b.dataset.g)));
   el.querySelector("#plNewG").onclick = () => openNewGroup();
   el.querySelectorAll("[data-join]").forEach((b) => (b.onclick = async () => { b.disabled = true; try { await joinGroup(b.dataset.join); haptic(); toast("You're in."); openGroup(b.dataset.join); } catch (e) { toast(e.message, { ms: 4500 }); b.disabled = false; } }));
@@ -179,10 +189,10 @@ function ranksView(el) {
     ["following", "People you follow", fl.length ? "Only you see this board" : "Follow players to compare", fl.length && followRank?.place ? ord(followRank.place) : "–", fl.length ? `of ${fl.length + 1}` : ""],
     ...myGroups().map((g) => { const t = groupTable(g.id), i = t.findIndex((r) => r.a === me()), played = t.some((r) => r.pts > 0);
       return [g.id, g.name, `${new Date().toLocaleString("en-IN", { month: "long" })} · ${t.length} player${t.length === 1 ? "" : "s"}`, played && i >= 0 ? ord(i + 1) : "–", played ? `${t[i]?.pts ?? 0} pts` : "no results yet"]; })];
-  el.innerHTML = `<button class="fieldbtn" id="plFind"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="8" r="4"/><path d="M3 20c1.2-3.4 3.8-5 7-5s5.8 1.6 7 5M19 8v6M16 11h6"/></svg>Find players by @username</button>
-    <div class="label" style="margin-top:16px">Where you rank</div>
-    <div class="hl">${rows.map(([k, t, s, big, small]) => `<button class="row" data-board="${esc(k)}"><span class="main"><span class="t">${esc(t)}</span><span class="s">${esc(s)}</span></span><span class="r"><b class="${/^[#\d]/.test(big) ? "num" : ""}">${esc(big)}</b><span class="hint">${esc(small)}</span></span><span class="chev">›</span></button>`).join("")}</div>
-    <p class="hint" style="margin-top:12px">Skill scores in a learning game. Not advice.</p>`;
+  el.innerHTML = `<button class="fieldbtn" id="plFind"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>Find players by @username</button>
+    <div class="label pl-sec">Where you rank</div>
+    <div class="pl-cards">${rows.map(([k, t, s, big, small]) => `<button class="rcard" data-board="${esc(k)}"><span class="main"><b>${esc(t)}</b><span class="s">${esc(s)}</span></span><span class="r"><b class="${/^[#\d]/.test(big) ? "num" : ""}">${esc(big)}</b><span class="hint">${esc(small)}</span></span></button>`).join("")}</div>
+    <p class="hint" style="margin-top:14px">Skill scores in a learning game. Not advice.</p>`;
   el.querySelector("#plFind").onclick = () => openSearch();
   el.querySelectorAll("[data-board]").forEach((b) => (b.onclick = () => (b.dataset.board === "everyone" && !pub ? openJoinBoard() : openBoard(b.dataset.board))));
 }
@@ -234,32 +244,67 @@ export function openBoard(tab = "everyone") {
 }
 
 // ---------- player card
-export async function openPlayerCard(a) {
-  const self = a === me();
-  openSheet(self ? "Your player card" : "Player", `<p class="hint">Loading…</p>`);
-  let c;
-  try { c = self ? { ...myCard(), ...cardFromScore() } : await getCard(a); } catch { c = null; }
-  if (!c) { setSheetBody(`<div class="empty">This player's card isn't ready yet. Cards update every 2 hours.</div>`); return; }
-  const common = myGroups().filter((g) => a in (g.members || {}) && !self);
+// ---------- a player's card: the same card is a sheet for other players and your own full profile page
+function cardHtml(c, a, actions) {
+  const common = a === me() ? [] : myGroups().filter((g) => a in (g.members || {}));
   const line = (c.line || []).filter((x) => x.s != null), lo = Math.min(...line.map((x) => x.s)), hi = Math.max(...line.map((x) => x.s));
   const path = line.length > 1 ? line.map((x, i) => `${i ? "L" : "M"}${((i / (line.length - 1)) * 354).toFixed(1)} ${(56 - ((x.s - lo) / Math.max(1, hi - lo)) * 48).toFixed(1)}`).join(" ") : "";
+  return `<div class="pc-top">${ava(c.u, c, "lg")}<div><b class="pc-u">@${esc(c.u)}</b><span class="hint">${c.band ? `<span class="${BAND_CLASS[c.band] || ""}t" style="font-weight:700">${esc(c.band)}</span>` : "New player"}${c.prov && c.score != null ? " · Provisional" : ""}${c.since ? ` · since ${esc(new Date(c.since + "-01").toLocaleDateString("en-IN", { month: "short", year: "numeric" }))}` : ""}</span></div></div>
+    <div class="pc-score"><div><span class="label">Prediction score</span><b class="num">${c.score ?? "–"}</b></div><div class="pc-meta"><span><b class="num">${(c.followers || 0).toLocaleString("en-IN")}</b> <span class="muted">follower${c.followers === 1 ? "" : "s"}</span></span>${c.rank ? `<span><b class="num">#${c.rank}</b> <span class="muted">· top ${Math.max(1, Math.ceil((c.rank / Math.max(1, c.of)) * 100))}%</span></span>` : ""}</div></div>
+    ${actions}
+    ${path ? `<div><div class="secrow" style="margin-top:0"><span class="label">Last 90 days</span><span class="hint num">${line[0].s} → ${line.at(-1).s}</span></div><svg class="pc-line" viewBox="0 0 354 60" preserveAspectRatio="none" role="img" aria-label="Score from ${line[0].s} to ${line.at(-1).s}"><path d="${path}"/></svg></div>` : ""}
+    <div class="pc-stats"><span><b class="num">${c.n || 0}</b><span>scored</span></span><span><b class="num">${c.spot ?? 0}</b><span>Spot on</span></span><span><b class="num">${c.closePlus != null ? c.closePlus + "%" : "–"}</b><span>Close+</span></span><span><b>${c.best ? SHORT[c.best] : "–"}</b><span>best</span></span></div>
+    ${(c.badges || []).length ? `<div><span class="label">Badges</span><p style="margin:4px 0 0">${(c.badges || []).map(esc).join(" · ")}</p></div>` : ""}
+    ${common.length ? `<div><span class="label">Groups in common</span><p style="margin:4px 0 0">${common.map((g) => esc(g.name)).join(", ")}</p></div>` : ""}`;
+}
+export async function openPlayerCard(a) {
+  if (a === me()) { openProfile(); return; }
+  openSheet("Player", `<p class="hint">Loading…</p>`);
+  let c; try { c = await getCard(a); } catch { c = null; }
+  if (!c) { setSheetBody(`<div class="empty">This player's card isn't ready yet. Cards update every 2 hours.</div>`); return; }
   const draw = () => {
     const on = isFollowing(a);
-    setSheetBody(`<div class="pc-top">${ava(c.u, c, "lg")}<div><b class="pc-u">@${esc(c.u)}</b><span class="hint">${c.band ? `<span class="${BAND_CLASS[c.band] || ""}t" style="font-weight:700">${esc(c.band)}</span>` : "New player"}${c.prov && c.score != null ? " · Provisional" : ""}${c.since ? ` · since ${esc(new Date(c.since + "-01").toLocaleDateString("en-IN", { month: "short", year: "numeric" }))}` : ""}</span></div></div>
-      <div class="pc-score"><div><span class="label">Prediction score</span><b class="num">${c.score ?? "–"}</b></div><div class="pc-meta"><span><b class="num">${(c.followers || 0).toLocaleString("en-IN")}</b> <span class="muted">follower${c.followers === 1 ? "" : "s"}</span></span>${c.rank ? `<span><b class="num">#${c.rank}</b> <span class="muted">· top ${Math.max(1, Math.ceil((c.rank / Math.max(1, c.of)) * 100))}%</span></span>` : ""}</div></div>
-      ${self ? `<button class="btn block" id="pcEdit">Privacy and leaderboard</button>` : `<div class="pc-acts"><button class="btn ${on ? "" : "primary"}" id="pcFollow">${on ? "Following" : "Follow"}</button><button class="btn" id="pcInvite">Invite to a group</button></div>`}
-      ${path ? `<div><div class="secrow" style="margin-top:0"><span class="label">Last 90 days</span><span class="hint num">${line[0].s} → ${line.at(-1).s}</span></div><svg class="pc-line" viewBox="0 0 354 60" preserveAspectRatio="none" role="img" aria-label="Score from ${line[0].s} to ${line.at(-1).s}"><path d="${path}"/></svg></div>` : ""}
-      <div class="pc-stats"><span><b class="num">${c.n || 0}</b><span>scored</span></span><span><b class="num">${c.spot ?? 0}</b><span>Spot on</span></span><span><b class="num">${c.closePlus != null ? c.closePlus + "%" : "–"}</b><span>Close+</span></span><span><b>${c.best ? SHORT[c.best] : "–"}</b><span>best</span></span></div>
-      ${(c.badges || []).length ? `<div><span class="label">Badges</span><p style="margin:4px 0 0">${(c.badges || []).map(esc).join(" · ")}</p></div>` : ""}
-      ${common.length ? `<div><span class="label">Groups in common</span><p style="margin:4px 0 0">${common.map((g) => esc(g.name)).join(", ")}</p></div>` : ""}
-      <p class="hint">Scores and results only; price calls are never shown. A learning game, not advice.</p>`);
+    setSheetBody(cardHtml(c, a, `<div class="pc-acts"><button class="btn ${on ? "" : "primary"}" id="pcFollow">${on ? "Following" : "Follow"}</button><button class="btn" id="pcInvite">Invite to a group</button></div>`)
+      + `<p class="hint">Scores and results only; price calls are never shown. A learning game, not advice.</p>`);
     const sh = $("sheet");
-    sh.querySelector("#pcEdit")?.addEventListener("click", () => openAvatarSheet());
     sh.querySelector("#pcFollow")?.addEventListener("click", async () => { try { await follow(a, !on); haptic(); if (!on) c.followers = (c.followers || 0) + 1; else c.followers = Math.max(0, (c.followers || 0) - 1); draw(); } catch (e) { toast(e.message); } });
     sh.querySelector("#pcInvite")?.addEventListener("click", () => chooseGroupToInvite(a, c.u));
   };
   draw();
 }
+// ---------- your profile: a page of its own (from the top of Predict), with the way to settings on it
+let profOn = false;
+function openProfile() {
+  let el = $("prof");
+  if (!el) { el = document.createElement("section"); el.id = "prof"; el.className = "grp"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); document.body.appendChild(el); }
+  profOn = true; el.hidden = false; document.body.classList.add("grpopen"); requestAnimationFrame(() => el.classList.add("on"));
+  if (!history.state?.prof) history.pushState({ prof: 1 }, "");
+  drawProfile();
+}
+function drawProfile() {
+  const el = $("prof"); if (!el || !profOn) return;
+  const c = { ...myCard(), ...cardFromScore() }, fl = following().length, pub = store.data?.public === true;
+  el.innerHTML = `<div class="grp-h"><button class="iconbtn ghost" id="prBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button><span class="grp-t"><b>Your profile</b><span class="hint">What other players see</span></span></div>
+    <div class="grp-b prof-b">${cardHtml(c, me(), "")}
+      <div class="hl">
+        <button class="row" id="prFollowing"><span class="main"><span class="t">Following</span><span class="s">${fl ? `${fl} player${fl === 1 ? "" : "s"} · only you see who` : "Find players to follow from Ranks"}</span></span><span class="chev">›</span></button>
+        <button class="row" id="prBoard"><span class="main"><span class="t">Public leaderboard</span><span class="s">${pub ? "You're on it" : "You're not on it"}</span></span><span class="chev">›</span></button>
+        <button class="row" id="prSettings"><span class="main"><span class="t">Settings</span><span class="s">Username, alerts, chart style, appearance, notifications</span></span><span class="chev">›</span></button>
+      </div>
+      <p class="hint">Other players see your username, score, band, followers, rank and record. Your price calls are never shown. A learning game, not advice.</p></div>`;
+  el.querySelector("#prBack").onclick = backFromProfilePage;
+  el.querySelector("#prFollowing").onclick = () => openFollowing();
+  el.querySelector("#prBoard").onclick = () => (pub ? openBoard("everyone") : openJoinBoard());
+  el.querySelector("#prSettings").onclick = () => openAvatarSheet();
+}
+export function closeProfile() {
+  const el = $("prof"); if (!el || el.hidden) return;
+  profOn = false; el.classList.remove("on"); if (!APP.openGroup) document.body.classList.remove("grpopen");
+  setTimeout(() => { if (!profOn) { el.hidden = true; el.innerHTML = ""; } }, 260);
+}
+const backFromProfilePage = () => (history.state?.prof ? history.back() : closeProfile());
+addEventListener("popstate", () => { if (profOn && !history.state?.prof) { closeSheet(); closeProfile(); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && profOn && !APP.openGroup && $("sheet").hidden) backFromProfilePage(); });
 const cardFromScore = () => { const sc = myScore(); return sc ? { u: myName(), score: sc.score, band: sc.band, prov: sc.provisional, n: sc.n } : { u: myName(), score: null, n: 0, prov: true }; };
 function chooseGroupToInvite(a, u) {
   const gs = myGroups().filter((g) => !(a in (g.members || {})));
@@ -338,7 +383,7 @@ export function openGroup(g, { fresh = false } = {}) {
 // Back (the button, Escape, or the phone's back): the page slides away
 export function closeGroup() {
   const el = $("grp"); if (!el || el.hidden) return;
-  grpOff?.(); grpOff = null; APP.openGroup = null; document.body.classList.remove("grpopen");
+  grpOff?.(); grpOff = null; APP.openGroup = null; if (!profOn) document.body.classList.remove("grpopen");
   el.classList.remove("on"); setTimeout(() => { if (!APP.openGroup) { el.hidden = true; el.innerHTML = ""; } }, 260);
   if (APP.tab === "play") renderPlay(); badge();
 }
@@ -594,7 +639,7 @@ export function openAvatarSheet() {
   const sc = myScore(), card = myCard(), u = myName(), unread = store.alerts.filter((a) => !a.read).length;
   const row = (k, t, s, extra = `<span class="chev">›</span>`) => `<button class="row" data-av="${k}"><span class="main"><span class="t">${t}</span>${s ? `<span class="s">${s}</span>` : ""}</span>${extra}</button>`;
   const sw = (id, on, label) => `<span class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""} aria-label="${label}"><span></span></span>`;
-  openSheet("Account", `<button class="row pl-me" data-av="card">${ava(u, cardFromScore(), "lg")}<span class="main"><span class="t" style="font-size:var(--t-xl)">@${esc(u || "you")}</span><span class="s">${sc?.score != null ? `${num(sc.score)} ${esc(sc.band)}` : "No score yet"}${card?.followers ? ` · ${card.followers} follower${card.followers === 1 ? "" : "s"}` : ""}</span><span class="s" style="color:var(--accent);font-weight:700">View your player card</span></span><span class="chev">›</span></button>
+  openSheet("Account", `<button class="row pl-me" data-av="card">${ava(u, cardFromScore(), "lg")}<span class="main"><span class="t" style="font-size:var(--t-xl)">@${esc(u || "you")}</span><span class="s">${sc?.score != null ? `${num(sc.score)} ${esc(sc.band)}` : "No score yet"}${card?.followers ? ` · ${card.followers} follower${card.followers === 1 ? "" : "s"}` : ""}</span><span class="s" style="color:var(--accent);font-weight:700">View your profile</span></span><span class="chev">›</span></button>
     <div class="label pg">People and privacy</div><div class="hl">
       ${row("following", "Following", following().length ? `${following().length} player${following().length === 1 ? "" : "s"} · only you can see who` : "Players you follow show here, only to you")}
       <div class="row"><span class="main"><span class="t">Public leaderboard</span><span class="s">Show my username, score and rank to everyone</span></span>${sw("avPub", store.data?.public === true, "Public leaderboard")}</div>
@@ -617,7 +662,7 @@ export function openAvatarSheet() {
     </div>
     <p class="hint pl-ver">${esc(CONFIG.appName)} ${esc(CONFIG.version)}</p>`, (body) => {
     const go = (k) => {
-      if (k === "card") return openPlayerCard(me());
+      if (k === "card") { closeSheet(); return openPlayerCard(me()); }
       if (k === "following") return openFollowing();
       if (k === "push") return enablePush().then(() => toast("Notifications are on for this phone."), (e) => toast(e.message, { ms: 5000 }));
       if (k === "tour") { closeSheet(); resetTours(); showTab("feed"); setTimeout(() => startTour("feed"), 300); return; }

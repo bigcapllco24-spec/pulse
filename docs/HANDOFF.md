@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 13 Oct 2026 (**version 1.0.7**, service worker `pulse-shell-v43`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
+Last updated 13 Oct 2026 (**version 1.0.8**, service worker `pulse-shell-v44`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -242,10 +242,12 @@ The prediction game is what turns the app from something people read into someth
 
 ## 5a. Score as identity: Predict tab, groups, following, leaderboard (1.0.0)
 
-**Predict tab** (`play.js`): header = letter avatar (first letter of the username, ring in the band colour, dashed
-while provisional) + score + band; tap the avatar for the Account sheet, the score for your player card. Then a
-"needs your pick" strip, and three views (swipe sideways): **Calls** (make a call chips, Open, Scored),
-**Groups** (your groups, invites, start a group), **Ranks** (find players, Everyone / People you follow / each group).
+**Predict tab** (`play.js`, 1.0.8): a title row with a settings gear (`#plMe` → Account sheet); your profile card
+(letter avatar ringed in the band colour, dashed while provisional, score, band, progress, "Profile ›") opens **your
+profile as a full page** (`#prof`: card, Following, Public leaderboard, Settings). Then a "needs your pick" / invite
+strip, and three large tiles that say what's in each (Calls · n open, Groups · n groups, Ranks · #rank / n to go),
+swipe sideways too: **Calls** (make a call chips, Open, Scored), **Groups** (group cards with members and status,
+invites, Start a group), **Ranks** (find players, cards for Everyone / People you follow / each group).
 
 **Groups** (max 20 players, max 10 groups each; the random 20-character id is the invite link `#/g/<id>`):
 - **Group page** (full screen, not a sheet): the challenges as a timeline, oldest first and newest at the bottom, with

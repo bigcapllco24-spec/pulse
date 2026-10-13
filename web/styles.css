@@ -761,3 +761,45 @@ button.ava { cursor: pointer; }
 body.fbmode .grp { outline: 2px dashed var(--accent); outline-offset: -4px; }
 @media (prefers-reduced-motion: reduce) { .grp { transition: none; } }
 body.grpopen .tabbar { display: none; } /* the group page is its own screen: no tab bar under or over it */
+
+/* ---------- Predict tab, 1.0.8: a title row with settings, your profile as one card, the three parts as tiles, room to breathe */
+.pl-top { display: flex; align-items: center; justify-content: space-between; margin: 0 0 6px; }
+.pl-top .label { font-size: var(--t-s); margin: 0; }
+.pl-top .iconbtn svg { width: 22px; height: 22px; }
+.pl-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 14px; width: 100%; margin: 0 0 14px; padding: 16px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.pl-head .ava.lg { width: 56px; height: 56px; font-size: 24px; }
+.pl-go { display: flex; align-items: center; gap: 2px; font-size: var(--t-s); font-weight: 700; color: var(--accent); }
+.pl-go .chev { font-size: var(--t-xl); line-height: 1; }
+.pl-head .pl-progress { grid-column: 1 / -1; display: grid; gap: 8px; margin: 10px 0 0; }
+.pl-head .pl-prog { display: block; height: 4px; }
+.pl-head .pl-prog i { display: block; }
+.pl-head .hint { margin: 0; }
+#play > .strip { margin: 0 0 14px; }
+.pl-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0 0 22px; }
+.pl-tile { display: grid; justify-items: start; gap: 6px; min-width: 0; padding: 14px 12px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
+.pl-tile svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pl-tile b { font-size: var(--t-m); color: var(--text); display: flex; align-items: center; gap: 6px; }
+.pl-tile > span { font-size: var(--t-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pl-tile .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.pl-tile[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.pl-view .pl-sec, .pl-view .secrow { margin-top: 26px; }
+.pl-view > :first-child { margin-top: 0; }
+.pl-view .label { margin-bottom: 10px; }
+.pl-cards { display: grid; gap: 10px; }
+.gcard, .rcard { display: grid; gap: 10px; width: 100%; padding: 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.gcard-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.gcard-top b { font-size: var(--t-l); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gcard-bot { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.gcard-bot .s, .rcard .s { font-size: var(--t-s); color: var(--muted); min-width: 0; }
+.ava.more { background: var(--surface2); color: var(--muted); font-size: 10px; }
+.rcard { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.rcard .main { display: grid; gap: 3px; min-width: 0; } .rcard .main b { font-size: var(--t-l); }
+.rcard .r { display: grid; justify-items: end; gap: 2px; text-align: right; }
+.rcard .r b { font-size: 22px; font-weight: 700; } .rcard .r .hint { margin: 0; font-size: var(--t-xs); }
+.pl-newg { display: flex; align-items: center; gap: 14px; width: 100%; margin: 14px 0 0; padding: 16px; border: 1.5px dashed var(--line); border-radius: 18px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.pl-newg .plus { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 24px; font-weight: 600; }
+.pl-newg .main { display: grid; gap: 3px; } .pl-newg .s { font-size: var(--t-s); color: var(--muted); }
+.pl-view .pl-intro { margin-bottom: 0; }
+.prof-b > :first-child { margin-top: 0; }
+.prof-b { gap: 16px; }
+@media (max-width: 359px) { .pl-tile { padding: 12px 10px; } .pl-tile svg { display: none; } }

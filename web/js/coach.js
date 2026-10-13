@@ -28,8 +28,8 @@ export const TOURS = {
   ],
   dash: [{ target: "#dash .wchips", text: "Your coins, by watchlist. Picking one here also sets what the feed shows. Your alerts are further down.", ring: true }],
   play: [
-    { target: "#play .pl-head", text: "This is you: your username and prediction score, from 300 to 900. Tap the letter for your account and settings.", ring: true },
-    { target: "#play .utabs", text: "Calls are your predictions. Groups are friends calling the same coin over the same time. Ranks show where you stand.", ring: true },
+    { target: "#play .pl-head", text: "This is you: your username and prediction score, from 300 to 900. Tap it for your profile; the gear above is settings.", ring: true },
+    { target: "#play .pl-tiles", text: "Calls are your predictions. Groups are friends calling the same coin over the same time. Ranks show where you stand.", ring: true },
     { target: "#play .pchips", text: "Tap a coin to call its price. It's a game for learning: no money, not advice.", ring: true, hand: "tap" },
   ],
   add: [{ target: "#addQ", text: "Type a coin's name or symbol, like “sol”. Tap the result, then pick its watchlists.", ring: true }],
