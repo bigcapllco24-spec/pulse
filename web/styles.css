@@ -152,9 +152,9 @@ p { margin: 6px 0; }
 .pill { font-size: var(--t-xs); font-weight: 700; border-radius: 999px; padding: 2px 8px; }
 .pill.confirmed { background: var(--up-soft); color: var(--up); } .pill.single { background: var(--surface2); color: var(--muted); } .pill.company { background: var(--accent-soft); color: var(--accent); } .pill.official { background: var(--accent-soft); color: var(--accent); }
 .dotpin { width: 8px; height: 8px; border-radius: 50%; background: var(--pin); display: inline-block; }
-.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
-.stat-grid div { background: var(--surface); padding: 10px; }
-.stat-grid b { display: block; font-size: var(--t-m); }
+.stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
+.stat-grid div { min-width: 0; background: var(--surface); padding: 10px 8px; }
+.stat-grid b { display: block; font-size: clamp(12px, 3.6vw, 15px); white-space: nowrap; letter-spacing: -.02em; }
 .stat-grid span { font-size: var(--t-xs); color: var(--muted); font-weight: 600; }
 .reading { background: var(--surface); border-radius: 14px; padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; margin-bottom: 8px; cursor: pointer; border: 0; text-align: left; width: 100%; }
 .reading .k { font-size: var(--t-s); color: var(--muted); font-weight: 600; } .reading .v { font-weight: 800; font-size: var(--t-l); }
@@ -298,9 +298,9 @@ button.row, a.row { width: 100%; background: none; border-left: 0; border-right:
 .dsec .reading { background: var(--surface2); }
 .dsec .rng + .rng { margin-top: 14px; }
 .dline { margin: 8px 0 0; }
-.perf { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-.perf div { background: var(--surface2); border-radius: 10px; padding: 8px 6px; text-align: center; }
-.perf span { display: block; font-size: var(--t-xs); color: var(--muted); font-weight: 700; } .perf b { font-size: var(--t-m); }
+.perf { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; } /* five equal cells that never push past the card */
+.perf div { min-width: 0; background: var(--surface2); border-radius: 10px; padding: 8px 2px; text-align: center; }
+.perf span { display: block; font-size: var(--t-xs); color: var(--muted); font-weight: 700; } .perf b { display: block; font-size: clamp(11px, 3.3vw, 15px); white-space: nowrap; letter-spacing: -.02em; }
 .perf b.up { color: var(--up); } .perf b.down { color: var(--down); }
 .dline .pill { background: var(--surface2); font-size: var(--t-s); padding: 3px 10px; display: inline-block; margin: 0 4px 4px 0; }
 /* support/resistance and pivot lines */
@@ -760,3 +760,4 @@ button.ava { cursor: pointer; }
 .grp-f { padding: 10px 16px calc(10px + var(--safe-b)); border-top: 1px solid var(--line); background: var(--glass); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
 body.fbmode .grp { outline: 2px dashed var(--accent); outline-offset: -4px; }
 @media (prefers-reduced-motion: reduce) { .grp { transition: none; } }
+body.grpopen .tabbar { display: none; } /* the group page is its own screen: no tab bar under or over it */

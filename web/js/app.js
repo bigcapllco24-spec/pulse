@@ -391,7 +391,7 @@ function renderDetails(c, it) {
     // 3. performance
     const back = (days) => { const cut = new Date(Date.parse(b.t) - days * 864e5).toISOString().slice(0, 10); const p = [...all].reverse().find((x) => x.t <= cut); return p ? ((last - p.c) / p.c) * 100 : null; };
     const perf = [["1W", 7], ["1M", 30], ["3M", 91], ["6M", 182], ["1Y", 365]].map(([l, n]) => [l, back(n)]).filter(([, x]) => x != null);
-    html += sec("Performance", "perf", `<div class="perf">${perf.map(([l, x]) => `<div><span>${l}</span><b class="${x >= 0 ? "up" : "down"}">${pct(x, 1)}</b></div>`).join("")}</div>`);
+    html += sec("Performance", "perf", `<div class="perf">${perf.map(([l, x]) => `<div><span>${l}</span><b class="${x >= 0 ? "up" : "down"}">${pct(x, Math.abs(x) >= 100 ? 0 : 1)}</b></div>`).join("")}</div>`);
     // 4. trend: price against its moving averages
     if (avgs.length) html += sec("Trend", "trend", `<div class="mas">${avgs.map(([l, x]) => { const dist = ((last - x) / x) * 100; return `<div class="marow"><span>${l} average</span><b>${esc(money(x, s.m))}</b><em class="${dist >= 0 ? "up" : "down"}">${sign(dist)} ${dist >= 0 ? "above" : "below"}</em></div>`; }).join("")}</div>`);
     // 5. volatility

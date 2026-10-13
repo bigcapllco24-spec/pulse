@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 13 Oct 2026 (**version 1.0.5**, service worker `pulse-shell-v41`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
+Last updated 13 Oct 2026 (**version 1.0.6**, service worker `pulse-shell-v42`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -249,8 +249,8 @@ while provisional) + score + band; tap the avatar for the Account sheet, the sco
 
 **Groups** (max 20 players, max 10 groups each; the random 20-character id is the invite link `#/g/<id>`):
 - **Group page** (full screen, not a sheet): the challenges as a timeline, oldest first and newest at the bottom, with
-  day labels; older results you've seen fold to one line (tap to open); the live challenge and latest results show
-  in full; New challenge fixed at the bottom; header has invite, this month's table and group info. Back button,
+  day labels; every result you've seen folds to one line (tap to open; one just revealed stays open); live challenges
+  show in full; the tab bar is hidden while it's open; New challenge fixed at the bottom; header has invite, this month's table and group info. Back button,
   Escape or the phone's back close it.
 - **Joining:** a link never adds anyone by itself: it shows "Join this group?" (name, starter, players) with Join /
   Not now. Invites show Join / Decline in Groups, an invite strip on Predict, and count in the Predict tab badge.

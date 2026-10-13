@@ -169,7 +169,7 @@ let followRank = null; // { key, place, of } for the People you follow board, wo
 function ranksView(el) {
   const card = myCard(), sc = myScore(), pub = store.data?.public === true, n = sc?.n || 0;
   const everyone = card?.rank ? [`#${card.rank}`, `top ${Math.max(1, Math.ceil((card.rank / Math.max(1, card.of)) * 100))}%`]
-    : !pub ? ["Join", "You're not on it"] : n < RANK_MIN ? [`${n}/${RANK_MIN}`, `ranked after ${RANK_MIN} scored`] : ["Soon", "ranked at the next update"];
+    : !pub ? ["Join", "You're not on it"] : n < RANK_MIN ? [`${RANK_MIN - n} to go`, `scored calls till you're ranked`] : ["Soon", "ranked at the next update"];
   const fl = following(), fkey = fl.join();
   if (fl.length && followRank?.key !== fkey + "|" + (sc?.score ?? "")) {
     followRank = { key: fkey + "|" + (sc?.score ?? ""), place: null, of: fl.length + 1 };
@@ -206,7 +206,7 @@ export function openBoard(tab = "everyone") {
       body.querySelectorAll("[data-bt]").forEach((b) => (b.onclick = () => { tab = b.dataset.bt; draw(); }));
       body.querySelector('[aria-selected="true"]')?.scrollIntoView({ inline: "nearest", block: "nearest" });
       const box = body.querySelector("[data-bl]");
-      let rows = [], foot = "", meRow = null;
+      let rows = [], foot = "", meRow = null, note = "";
       const mine = myCard(), sc = myScore(), self = { a: me(), u: myName(), score: sc?.score ?? null, band: sc?.band, n: sc?.n || 0, prov: !sc || sc.provisional };
       try {
         if (tab === "everyone") {
@@ -214,6 +214,7 @@ export function openBoard(tab = "everyone") {
           rows = (b.rows || []).map((r) => ({ ...r, prov: false }));
           foot = `Public players with ${RANK_MIN}+ scored calls${b.at ? `, updated ${esc(new Date(b.at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }))}` : ""}. Skill scores in a learning game. Not advice.`;
           if (!rows.some((r) => r.a === me())) meRow = mine?.rank ? { ...self, place: mine.rank } : null;
+          if (!mine?.rank) note = store.data?.public !== true ? "You're not on this board: join it from Ranks → Everyone." : (sc?.n || 0) < RANK_MIN ? `You're ranked once ${RANK_MIN} of your calls are scored (${sc?.n || 0} so far).` : "You'll show here at the next update (every 2 hours).";
         } else if (tab === "following") {
           const cs = (await getCards(following())).filter(Boolean);
           rows = [...cs, self].filter((r) => r.score != null || r.a === me()).sort((x, y) => (y.score ?? -1) - (x.score ?? -1));
@@ -225,7 +226,7 @@ export function openBoard(tab = "everyone") {
         }
       } catch { box.innerHTML = `<div class="empty">Couldn't load this board. Check your connection.</div>`; return; }
       const line = (r, i) => `<button class="row lbrow${r.a === me() ? " you" : ""}" data-a="${esc(r.a)}"><span class="num lbn">${r.place ?? i + 1}</span>${ava(r.u, r, "sm")}<span class="main"><span class="t">@${esc(r.u)}${r.a === me() ? " · you" : ""}</span><span class="s">${r.pts != null ? `${esc(r.band || "No score yet")}` : `${esc(r.band || "")}${r.n ? ` · ${r.n} scored` : ""}`}</span></span><b class="num lbs">${r.pts != null ? `${r.pts}<small> pts</small>` : r.score ?? "–"}</b></button>`;
-      box.innerHTML = rows.length ? `<div class="hl">${rows.map(line).join("")}</div>${meRow ? `<div class="hl lbme">${line(meRow, 0)}</div>` : ""}<p class="hint" style="margin-top:10px">${foot}</p>` : `<div class="empty">${tab === "everyone" ? "Nobody's on the public leaderboard yet." : "No scores here yet."}</div><p class="hint">${foot}</p>`;
+      box.innerHTML = (note ? `<p class="notice" style="margin:0 0 10px">${esc(note)}</p>` : "") + (rows.length ? `<div class="hl">${rows.map(line).join("")}</div>${meRow ? `<div class="hl lbme">${line(meRow, 0)}</div>` : ""}<p class="hint" style="margin-top:10px">${foot}</p>` : `<div class="empty">${tab === "everyone" ? `Nobody's on the public leaderboard yet. Players show here once ${RANK_MIN} of their calls are scored and they choose to join.` : "No scores here yet."}</div><p class="hint">${foot}</p>`);
       box.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openPlayerCard(b.dataset.a)));
     };
     draw();
@@ -329,7 +330,7 @@ export function openGroup(g, { fresh = false } = {}) {
   if (APP.openGroup === g && el && !el.hidden) { drawGroup(true); return; }
   if (!el) { el = document.createElement("section"); el.id = "grp"; el.className = "grp"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); document.body.appendChild(el); }
   APP.openGroup = g; APP.groupFresh = fresh; opened.clear();
-  el.hidden = false; requestAnimationFrame(() => el.classList.add("on"));
+  el.hidden = false; document.body.classList.add("grpopen"); requestAnimationFrame(() => el.classList.add("on"));
   if (history.state?.grp !== g) history.pushState({ grp: g }, "");
   grpOff?.(); grpOff = onSocial(() => APP.openGroup === g && drawGroup());
   drawGroup(true);
@@ -337,7 +338,7 @@ export function openGroup(g, { fresh = false } = {}) {
 // Back (the button, Escape, or the phone's back): the page slides away
 export function closeGroup() {
   const el = $("grp"); if (!el || el.hidden) return;
-  grpOff?.(); grpOff = null; APP.openGroup = null;
+  grpOff?.(); grpOff = null; APP.openGroup = null; document.body.classList.remove("grpopen");
   el.classList.remove("on"); setTimeout(() => { if (!APP.openGroup) { el.hidden = true; el.innerHTML = ""; } }, 260);
   if (APP.tab === "play") renderPlay(); badge();
 }
@@ -351,11 +352,10 @@ function drawGroup(toBottom = false) {
   if (!grp) { el.innerHTML = `<div class="grp-h"><button class="iconbtn ghost" id="grBack" aria-label="Back">‹</button><span class="grp-t"><b>Group</b></span></div><div class="grp-b"><div class="empty">${!(store.data?.groups || []).includes(g) ? "You're not in this group any more." : "Loading the group…"}</div></div>`; el.querySelector("#grBack").onclick = backFromGroup; return; }
   const box = el.querySelector(".grp-b"), nearEnd = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 80, y = box?.scrollTop || 0;
   const n = Object.keys(grp.members || {}).length, list = challengesOf(g).slice().reverse(), t = groupTable(g), mi = t.findIndex((r) => r.a === me()), played = t.some((r) => r.pts > 0);
-  const lastDone = [...list].reverse().find((ch) => ch.status === "done")?.id;
   let day = "", rows = "";
   for (const ch of list) {
     const d = dayLabel(ch.at); if (d !== day) { day = d; rows += `<span class="grp-day">${esc(d)}</span>`; }
-    const fold = ch.status === "done" && ch.id !== lastDone && isSeen(ch.id) && !opened.has(ch.id);
+    const fold = ch.status === "done" && isSeen(ch.id) && !opened.has(ch.id); // seen results fold to one line; tap to open
     if (fold) {
       const r = (ch.results || []), win = r.find((x) => x.rank === 1), mine = r.find((x) => x.a === me());
       rows += `<button class="grp-res" data-open="${esc(ch.id)}"><span class="main"><span class="t">${esc(ch.t)} · ${SHORT[ch.horizon]} · results</span><span class="s">${win ? `${win.a === me() ? "You" : "@" + esc(win.u)} won` : "No one scored"}${mine && win?.a !== me() ? ` · you were ${mine.rank ? ord(mine.rank) : "not counted"}, ${esc(mine.label)}` : ""}</span></span><span class="chev">›</span></button>`;
