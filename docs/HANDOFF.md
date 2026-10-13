@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 13 Oct 2026 (**version 1.0.3**, service worker `pulse-shell-v39`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
+Last updated 13 Oct 2026 (**version 1.0.4**, service worker `pulse-shell-v40`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -224,7 +224,7 @@ The prediction game is what turns the app from something people read into someth
   Group challenges: once over, members' phones read everyone's picks (rules allow a pick `get` after `endAt` + 1 min),
   score them with `challengeResults`, and show the results and table points straight away ("confirming"; reactions open
   when the job confirms). The job stays the record: it writes `pscore`, the official results and points, and deletes
-  the picks. It can't run more often on the free plan: every run reads every open call.
+  the picks. Each phone reads each pick once per challenge (kept in memory while a price is out; a refusal stops it).
 - Demo mode settles on the phone itself.
 - The full spec and every constant are in `docs/prediction-score.md` and at the top of `web/js/score.js`. After
   changing any weight, run `bash scripts/check.sh score`; the calibration checks say whether `CAL` needs

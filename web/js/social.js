@@ -353,8 +353,9 @@ export async function settleDemoChallenges(fetchRows, now = Date.now()) {
 // ---------- live: a challenge is scored on each member's phone the moment it ends, with the same code and prices as
 // the data job (everyone's picks can be read once it's over), so results show at once. The job's copy, a few minutes
 // later, is the record: it adds the points to the table and deletes the picks; until then these are "confirming".
-const doneHere = new Map(); // challenge id → { results, end, move } worked out here, or "trying"
-const withHere = (ch) => { const h = doneHere.get(ch.id); return ch.status === "open" && h && h !== "trying" ? { ...ch, status: "done", ...h, here: true } : ch; };
+const doneHere = new Map(); // challenge id → { results, end, move } worked out here, "trying", or "job" (left to the data job)
+const picksRead = new Map(); // challenge id → everyone's picks, read once (retries while a price isn't out cost no reads)
+const withHere = (ch) => { const h = doneHere.get(ch.id); return ch.status === "open" && h && typeof h === "object" ? { ...ch, status: "done", ...h, here: true } : ch; };
 export async function settleChallengesHere(fetchRows, now = Date.now()) {
   if (!live()) return settleDemoChallenges(fetchRows, now);
   const due = [...S.challenges.values()].flat().filter((ch) => ch.status === "open" && !doneHere.has(ch.id) && now >= Date.parse(ch.endAt) + SETTLE_DELAY);
@@ -363,10 +364,11 @@ export async function settleChallengesHere(fetchRows, now = Date.now()) {
   for (const ch of due) {
     doneHere.set(ch.id, "trying");
     try {
-      const picks = (await Promise.all(Object.keys(ch.picked || {}).map(async (a) => {
+      if (!picksRead.has(ch.id)) picksRead.set(ch.id, (await Promise.all(Object.keys(ch.picked || {}).map(async (a) => {
         const d = await f.getDoc(f.doc(db, "accounts", a, "picks", ch.id));
         return d.exists() ? { ...isoDates(d.data()), path: `accounts/${a}/picks/${ch.id}` } : null;
-      }))).filter(Boolean);
+      }))).filter(Boolean));
+      const picks = picksRead.get(ch.id);
       const out = [];
       for (const pk of picks) {
         if (pk.status === "scored" || pk.status === "void") { out.push(pk); continue; }
@@ -376,8 +378,12 @@ export async function settleChallengesHere(fetchRows, now = Date.now()) {
       }
       const first = out.filter((x) => x.status === "scored").sort((x, y) => Date.parse(x.createdAt) - Date.parse(y.createdAt))[0];
       doneHere.set(ch.id, { results: challengeResults(ch, out), end: first?.actual ?? null, move: first ? Math.round((first.actual / first.p0 - 1) * 1e4) / 100 : null, doneAt: new Date(now).toISOString() });
-      n++;
-    } catch { doneHere.delete(ch.id); } // not ready (or picks already tidied by the job): the next pass, or the job, has it
+      picksRead.delete(ch.id); n++;
+    } catch (e) {
+      // a price not out yet: try again next pass (the picks are already in memory); anything else, such as picks the job
+      // has already tidied away, is left to the data job, so a phone never keeps re-reading
+      if (/not out yet/.test(e?.message || "")) doneHere.delete(ch.id); else { doneHere.set(ch.id, "job"); picksRead.delete(ch.id); }
+    }
   }
   if (n) { for (const [g, list] of S.challenges) S.challenges.set(g, list.map(withHere)); emit(); }
   return n;
