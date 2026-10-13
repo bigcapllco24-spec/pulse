@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 13 Oct 2026 (**version 1.0.9**, service worker `pulse-shell-v45`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
+Last updated 13 Oct 2026 (**version 1.0.10**, service worker `pulse-shell-v46`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -408,6 +408,9 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 - **iOS Home Screen strip (1.0.9):** on current iOS a Home Screen app's visible area can be ~62 pt shorter than the
   screen. The old fix pushed the tab bar, sheets and group page down into that strip, but it isn't drawn, so their
   bottoms were cut off. `--gapb` is now always 0: nothing is placed below the visible area. Don't reintroduce it.
+  Root cause: `apple-mobile-web-app-status-bar-style` `black-translucent` makes iOS 26 size the Home Screen app to the
+  screen minus the status bar, anchored at the top. 1.0.10 uses `black` (app drawn from under the status bar to the
+  bottom edge). iOS reads that tag only when the app is added, so existing installs must be removed and re-added once.
 - **To discuss:** compare two coins on one chart; share a card as an image; moving an account to a new phone;
   stock data (on hold, needs a licence).
 
