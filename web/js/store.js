@@ -295,11 +295,22 @@ export function checkUsername(raw) {
 const within = (p, ms = 8000) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("timeout")), ms))]);
 export async function usernameFree(name) {
   if (store.mode === "demo") return "free";
-  // only needs the sign-in, not the whole account load, so the check is quick on a first open
+  // only needs the sign-in, not the whole account load. One plain HTTPS read: the database's live connection can take
+  // seconds to open on a phone's first visit, and the person is waiting on this answer while they type.
   await within(loadFirebase());
-  const d = await within(fb.f.getDoc(fb.f.doc(fb.db, "usernames", name)));
+  let acct;
+  try {
+    const token = await within(fb.auth.currentUser.getIdToken(), 5000);
+    const r = await within(fetch(`https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/(default)/documents/usernames/${encodeURIComponent(name)}?mask.fieldPaths=acct`, { headers: { authorization: "Bearer " + token } }), 5000);
+    if (r.status === 404) acct = null;
+    else if (r.ok) acct = (await r.json()).fields?.acct?.stringValue ?? null;
+    else throw new Error("http " + r.status);
+  } catch { // fall back to the database connection
+    const d = await within(fb.f.getDoc(fb.f.doc(fb.db, "usernames", name)));
+    acct = d.exists() ? d.data().acct : null;
+  }
   // a name can also be free again if the account that held it no longer exists; the save finds out
-  return !d.exists() || d.data().acct === store.id ? "free" : "held";
+  return !acct || acct === store.id ? "free" : "held";
 }
 // Log in by username (MVP: the username alone opens the account; a password or Google sign-in comes later).
 // This phone's sign-in is added to the account's devices, and the rules let any listed device use the account.

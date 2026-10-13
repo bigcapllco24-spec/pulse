@@ -1,5 +1,6 @@
 // Feedback on any part of the app. Press and hold anything (text, a chart, a panel, a button) for 3 seconds to leave
-// a note about that exact part; or switch on Feedback mode in Profile, where every tap (buttons too) opens the note instead of acting.
+// a note about that exact part, on any screen or sheet; or switch on Feedback mode in the Account sheet, where every tap on a page
+// (buttons too) opens the note instead of acting.
 // Notes go to Firestore "feedback" with where they were left, so whoever builds from them knows exactly what's meant.
 import { esc, openSheet, closeSheet, toast, haptic } from "./ui.js";
 import { sendFeedback, ls } from "./store.js";
@@ -16,7 +17,7 @@ function describeTarget(el) {
   const txt = (n) => (n?.getAttribute?.("aria-label") || n?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
   const card = t(".card"), it = card ? APP.seq[+card.dataset.i] : null, coin = it?.sym?.t || null;
   const view = card?.dataset.view || "main";
-  const screen = t("#full") ? "Full-screen chart" : t(".sheet") ? "Sheet" : t("#sDash") ? "Coins" : t("#sPlay") ? "Predict" : t("#sProfile") ? "Settings" : t(".tabbar") ? "Tab bar" : t(".topbar") ? "Top bar" : "Feed";
+  const screen = t("#gate") ? "Username step" : t("#full") ? "Full-screen chart" : t(".sheet") ? "Sheet" : t("#sDash") ? "Coins" : t("#sPlay") ? "Predict" : t("#sProfile") ? "Settings" : t(".tabbar") ? "Tab bar" : t(".topbar") ? "Top bar" : "Feed";
   const parts = [
     [".lower[data-learn]", (n) => `${n.dataset.learn} panel`], [".oli", (n) => `${txt(n).split(" ")[0]} line`], [".lvtag", () => "Support/resistance label"],
     [".scrubcard", () => "Hold-to-read card"], ["[data-fx]", () => "ƒx (indicators) button"], ["[data-lv]", () => "S/R button"], ["[data-tf]", () => "Time range chip"], [".head .chg", () => "Change % next to the coin name"],
@@ -42,20 +43,19 @@ function askFeedback(el) {
   const ctx = describeTarget(el);
   haptic();
   openSheet("Leave feedback?", `<p class="fbwhere"><span class="cap">About</span><b>${esc(ctx.where)}</b><span>${esc(ctx.screen)}${ctx.coin ? ` · ${esc(ctx.coin)}` : ""}</span></p>
-    <div class="fbrow fbask"><button class="btn ghost" data-fbno>Not now</button><button class="btn primary" data-fbyes>Add feedback</button></div>`, (body) => {
+    <div class="fbrow fbask" data-fbsheet><button class="btn ghost" data-fbno>Not now</button><button class="btn primary" data-fbyes>Add feedback</button></div>`, (body) => {
     body.querySelector("[data-fbno]").onclick = closeSheet;
-    body.querySelector("[data-fbyes]").onclick = () => openFeedback(el);
+    body.querySelector("[data-fbyes]").onclick = () => openFeedback(el, ctx); // where it was held, worked out before this sheet replaced it
   });
 }
-export function openFeedback(el) {
-  const ctx = describeTarget(el);
+export function openFeedback(el, ctx = describeTarget(el)) {
   const day = new Date().toISOString().slice(0, 10), sent = ls.get("pl.fbDay", {});
   const count = sent.day === day ? sent.n : 0;
   haptic();
   openSheet("Feedback", `<p class="fbwhere"><span class="cap">About</span><b>${esc(ctx.where)}</b><span>${esc(ctx.screen)}${ctx.coin ? ` · ${esc(ctx.coin)}` : ""}</span></p>
     <textarea id="fbText" class="input fbtext" maxlength="1000" rows="5" placeholder="What would make this better? What's confusing or broken?"></textarea>
     <div class="fbrow"><span class="hint" id="fbCount">0 / 1000</span><button class="btn primary" id="fbSend" disabled>Send</button></div>
-    <p class="hint">Your note is saved with the part of the app it's about. No name or contact details are attached.</p>`, (body) => {
+    <p class="hint" data-fbsheet>Your note is saved with the part of the app it's about. No name or contact details are attached.</p>`, (body) => {
     const ta = body.querySelector("#fbText"), btn = body.querySelector("#fbSend");
     setTimeout(() => ta.focus(), 250);
     ta.oninput = () => { body.querySelector("#fbCount").textContent = `${ta.value.length} / 1000`; btn.disabled = !ta.value.trim(); };
@@ -98,7 +98,8 @@ export function initFeedback() {
   const stop = () => { if (hold) { clearTimeout(hold.t); hold = null; } };
   addEventListener("pointerdown", (e) => {
     stop();
-    if (mode || e.button > 0 || e.target.closest("input, textarea, select, #fbBar, .sheet, .backdrop, #gate")) return;
+    // anywhere, sheets included, except text boxes and the feedback sheets themselves
+    if (mode || e.button > 0 || e.target.closest("input, textarea, select, #fbBar, .backdrop") || (e.target.closest(".sheet") && document.querySelector(".sheet [data-fbsheet]"))) return;
     const el = e.target, x = e.clientX, y = e.clientY;
     hold = { x, y, t: setTimeout(() => { hold = null; held = true; askFeedback(el); }, HOLD_MS) };
   }, true);

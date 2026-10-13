@@ -530,6 +530,7 @@ body.fbmode .card, body.fbmode .page, body.fbmode .tabbar { outline: 2px dashed 
 code.uid { font-size: var(--t-s); word-break: break-all; }
 /* first step for a new account: choose a username (can't be skipped) */
 .gate { position: fixed; inset: 0; z-index: 95; background: var(--bg); display: grid; place-items: center; padding: calc(24px + var(--safe-t)) 22px calc(24px + var(--safe-b)); overflow-y: auto; }
+body.gated .backdrop { z-index: 96; } body.gated .sheet { z-index: 97; } body.gated .toast { z-index: 98; }
 .gatein { width: 100%; max-width: 420px; display: grid; gap: 12px; }
 .gatein h1 { margin: 0; } .gatein p { margin: 0; color: var(--muted); }
 .gatein .field { margin: 6px 0 0; }

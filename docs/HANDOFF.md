@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 13 Oct 2026 (**version 1.0.0**, service worker `pulse-shell-v36`, 161/161 e2e checks). Version lives in `web/config.js` and shows at the
+Last updated 13 Oct 2026 (**version 1.0.1**, service worker `pulse-shell-v37`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -119,7 +119,7 @@ scripts/check.sh        all tests; tests/ = pipeline, levels, score, predict, so
 - **Daily recap card:** the % change since midnight, local time.
 - **Prediction game:** see section 5 for how the timelines and scoring work.
 - **Feedback loop:**
-  - Press and hold anything still for 3 s → "Leave feedback?" → note about that exact part (letting go doesn't
+  - Press and hold anything still for 3 s, on any page or sheet (and the username step) → "Leave feedback?" → note about that exact part (letting go doesn't
     press the button). Or Account sheet → Give feedback, where every tap opens a note. (Triple-tap was removed: it
     clashed with buttons and phone zoom.)
   - Each note is saved to Firestore `feedback` with where it was left (part, screen, coin, screen size).

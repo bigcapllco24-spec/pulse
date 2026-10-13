@@ -3,7 +3,7 @@ Run:  cd web && python3 -m http.server 8773   (in another terminal)
       python3 tests/e2e.py [base_url]
 Needs Python Playwright and Chromium. Prints a PASS/FAIL line per check and exits non-zero on any failure.
 """
-import sys, time, json
+import sys, time, json, re
 from playwright.sync_api import sync_playwright
 
 VERBOSE = "-v" in sys.argv
@@ -384,7 +384,7 @@ def phone_tests(b):
     # the start can be changed only twice
     p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(500); p.click("#plMe"); p.wait_for_timeout(700)
     groups = p.locator("#sheet .label.pg").all_inner_texts(); sheet_txt = p.inner_text("#sheet")
-    check("phone: the account sheet groups settings (People and privacy, Charts and alerts, Sharing, App), shows the version, and Admin for admins", [g.lower() for g in groups] == ["people and privacy", "charts and alerts", "sharing", "app"] and "Pulse 1.0.0" in sheet_txt and p.locator("#sheet [data-av=inbox]").count() == 1, " | ".join(groups))
+    check("phone: the account sheet groups settings (People and privacy, Charts and alerts, Sharing, App), shows the version, and Admin for admins", [g.lower() for g in groups] == ["people and privacy", "charts and alerts", "sharing", "app"] and re.search(r"Pulse \d+\.\d+\.\d+", sheet_txt) and p.locator("#sheet [data-av=inbox]").count() == 1, " | ".join(groups))
     p.click("#sheet [data-av=account]"); p.wait_for_timeout(500)
     lefts = [p.inner_text("#profile .dline >> nth=0")]
     p.click("#aName"); p.wait_for_timeout(400)
@@ -395,7 +395,7 @@ def phone_tests(b):
         lefts.append(p.inner_text("#profile .dline >> nth=0"))
     p.click("#aName"); p.wait_for_timeout(500)
     blocked = (p.inner_text("#toast") if p.is_visible("#toast") else "") and not p.is_visible("#sheet")
-    check("phone: Account shows the app version", "Pulse 1.0.0" in p.inner_text("#profile"))
+    check("phone: Account shows the app version", re.search(r"Pulse \d+\.\d+\.\d+", p.inner_text("#profile")))
     check("phone: username rejects phone-like numbers", "phone" in bad2, bad2)
     check("phone: the starting username can be changed twice, then no more", lefts[0].startswith("@chart_fan ·") and "2 changes left" in lefts[0] and "1 change left" in lefts[1] and "0 changes left" in lefts[2] and bool(blocked), " ; ".join(lefts))
     p.click("#pBack"); p.wait_for_timeout(500)
@@ -858,6 +858,16 @@ def group_test(b):
     p.click("#giLeave"); p.wait_for_timeout(900)
     acct = p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount'))")
     check("groups: leaving a group removes it from my account and the page", acct.get("groups") == [] and gid not in social().get("groups", {}) and "Play with friends" in p.inner_text("#play"), str(acct.get("groups")))
+    # holding anything for 3 seconds asks for feedback, inside sheets too
+    p.click("#plMe"); p.wait_for_timeout(600); cdp = ctx.new_cdp_session(p)
+    bx = p.locator("#sheet [data-av=chart]").bounding_box(); x, y = bx["x"] + 60, bx["y"] + bx["height"] / 2
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y}]}); p.wait_for_timeout(3300)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); p.wait_for_timeout(500)
+    asked = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+    check("feedback: holding a row in a sheet for 3 seconds asks to leave feedback about that row", "Leave feedback?" in p.inner_text("#shTitle") and "Chart style" in asked and "Sheet · Account" in asked, asked[:120].replace("\n", " "))
+    p.click("#sheet [data-fbyes]"); p.wait_for_timeout(500); p.fill("#fbText", "Test note"); p.click("#fbSend"); p.wait_for_timeout(700)
+    notes = p.evaluate("JSON.parse(localStorage.getItem('pl.demoFeedback')||'[]')")
+    check("feedback: the note is saved with where it was left", bool(notes) and notes[0]["where"].startswith("Row: Chart style") and notes[0]["screen"] == "Sheet · Account", str(notes[:1])[:160])
     check("groups: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
