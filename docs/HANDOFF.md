@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 13 Oct 2026 (**version 1.0.2**, service worker `pulse-shell-v38`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
+Last updated 13 Oct 2026 (**version 1.0.3**, service worker `pulse-shell-v39`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -218,7 +218,13 @@ The prediction game is what turns the app from something people read into someth
   `accounts/{uid}/results`. The score is written to `accounts/{uid}.pscore`, by the server only.
 - `settle.yml` scores due predictions **every 15 minutes**. The 2-hour data job refreshes every score as results
   fade.
-- On the phone, a due prediction shows its result straight away, marked "confirming".
+- **Scored the moment it's due, on the phone:** a timer wakes when the next call or challenge is due (+1 min so the
+  closing candle exists; retries every 15 s). Calls are scored with the same `settle()` and Kraken prices as the job,
+  move to Scored marked "confirming", and `myScore()` recomputes the profile score from results + these at once.
+  Group challenges: once over, members' phones read everyone's picks (rules allow a pick `get` after `endAt` + 1 min),
+  score them with `challengeResults`, and show the results and table points straight away ("confirming"; reactions open
+  when the job confirms). The job stays the record: it writes `pscore`, the official results and points, and deletes
+  the picks. It can't run more often on the free plan: every run reads every open call.
 - Demo mode settles on the phone itself.
 - The full spec and every constant are in `docs/prediction-score.md` and at the top of `web/js/score.js`. After
   changing any weight, run `bash scripts/check.sh score`; the calibration checks say whether `CAL` needs

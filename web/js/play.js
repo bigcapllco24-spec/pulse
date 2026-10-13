@@ -2,7 +2,7 @@
 // challenges, finding and following players, the leaderboard, player cards, and the avatar sheet (your settings).
 // Data lives in store.js (your account and predictions) and social.js (people and groups).
 import { CONFIG } from "../config.js";
-import { store, allSyms, makePrediction, myScore, enablePush, isAdmin } from "./store.js";
+import { store, allSyms, makePrediction, myScore, enablePush, isAdmin, scoredHere, settleHere, nextDue } from "./store.js";
 import { HORIZONS, PROVISIONAL_UNDER, CHANCE, checkPrediction, canPredict, allowedRange, dailyVol, dueAt, closenessText } from "./score.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { D } from "./data.js";
@@ -11,7 +11,7 @@ import { APP, showTab } from "./app.js";
 import { resetTours, startTour } from "./coach.js";
 import { setFeedbackMode } from "./feedback.js";
 import { S, onSocial, me, myName, bandOf, RANK_MIN, CH_PERIODS, PICK_MINS, GROUP_MAX, getCards, getCard, findPlayers, getBoard, myCard, following, isFollowing, follow, setPublic, setPickDefault,
-  myGroups, groupLink, createGroup, peekGroup, joinGroup, leaveGroup, removeMember, renameGroup, invite, declineInvite, challengesOf, myPick, picksOpen, waitingForMe, isSeen, markSeen,
+  myGroups, groupLink, createGroup, peekGroup, joinGroup, settleChallengesHere, nextChallengeEnd, leaveGroup, removeMember, renameGroup, invite, declineInvite, challengesOf, myPick, picksOpen, waitingForMe, isSeen, markSeen,
   unseenResults, canCount, startChallenge, makePick, REACTIONS, react, groupTable } from "./social.js";
 
 const PERIODS = Object.keys(HORIZONS);
@@ -49,7 +49,25 @@ export function initPlay() {
   }, { passive: true });
   root.addEventListener("touchcancel", () => (st = null), { passive: true });
   setInterval(() => { if (APP.tab === "play" && $("sheet").hidden && !document.hidden) { rerender(); if (APP.openGroup) drawGroup(); } }, 30000); // countdowns
+  // score calls and challenges on this phone the moment they're due (the data job confirms them a few minutes later)
+  store.on((w) => w === "preds" && scheduleScoring()); onSocial(scheduleScoring);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { tried = false; scheduleScoring(); } });
+  scheduleScoring();
   badge();
+}
+let scoreT = 0, scoring = false, tried = false;
+function scheduleScoring() {
+  clearTimeout(scoreT);
+  const next = Math.min(nextDue(), nextChallengeEnd()); if (next === Infinity) return;
+  const wait = next <= Date.now() ? (tried ? 15000 : 300) : next - Date.now() + 1500; // overdue and not out yet: try again every 15 s
+  scoreT = setTimeout(scoreDue, Math.min(wait, 2 ** 31 - 1));
+}
+async function scoreDue() {
+  if (scoring || document.hidden) return;
+  scoring = true; tried = true;
+  const now = Date.now();
+  try { if (nextDue() <= now) await settleHere(krakenRows, now); if (nextChallengeEnd() <= now) await settleChallengesHere(krakenRows, now); } catch {}
+  scoring = false; scheduleScoring();
 }
 const rerender = () => { const pg = $("play").parentElement, y = pg.scrollTop; renderPlay(); pg.scrollTop = y; };
 // The Predict tab's badge: picks waiting for you. The Groups tab's dot: that, new results or invites.
@@ -90,31 +108,18 @@ function wirePicks(root) {
 }
 
 // ---------- Calls: make one, your open calls, your scored ones
-const previews = new Map(); // a due prediction's result worked out on the phone, until the server confirms it
-const pkey = (p) => `${p.t}_${p.horizon}_${p.createdAt}`;
-const previewRows = rowCache((t, iv) => krakenRows(t, iv));
-function previewDue(open) {
-  const now = Date.now();
-  for (const p of open) {
-    const k = pkey(p);
-    if (previews.has(k) || now < Date.parse(dueAt(p)) + SETTLE_DELAY) continue;
-    previews.set(k, "pending");
-    settle(p, { now, rows: previewRows }).then((r) => { previews.set(k, r); if (APP.tab === "play") rerender(); }).catch(() => previews.delete(k));
-  }
-}
 function callsView(el) {
   const coins = allSyms().filter((x) => D.series[x.key]?.bars?.length);
   // open: your predictions, plus group picks that don't count to your score (those that do are predictions too)
-  const open = [...store.preds.map((p) => ({ ...p, kind: "pred" })), ...S.picks.filter((p) => !p.counts && p.status !== "scored" && p.status !== "void").map((p) => ({ ...p, kind: "pick" }))]
+  // a call scored on this phone the moment it was due moves straight to Scored (marked "confirming" until the server's copy lands)
+  const here = [...scoredHere.values()], isHere = (p) => here.some((r) => r.t === p.t && r.horizon === p.horizon && r.createdAt === p.createdAt);
+  const open = [...store.preds.filter((p) => !isHere(p)).map((p) => ({ ...p, kind: "pred" })), ...S.picks.filter((p) => !p.counts && p.status !== "scored" && p.status !== "void").map((p) => ({ ...p, kind: "pick" }))]
     .sort((a, b) => Date.parse(dueAt(a)) - Date.parse(dueAt(b)));
-  previewDue(store.preds);
-  const done = [...store.results].sort((a, b) => Date.parse(b.resolvedAt || 0) - Date.parse(a.resolvedAt || 0));
+  const done = [...here, ...store.results].sort((a, b) => Date.parse(b.resolvedAt || 0) - Date.parse(a.resolvedAt || 0));
   const callRow = (p) => {
     const due = dueAt(p), made = Date.parse(p.createdAt), share = Math.max(0, Math.min(1, (Date.now() - made) / Math.max(1, Date.parse(due) - made)));
-    const r = p.kind === "pred" ? previews.get(pkey(p)) : null;
-    if (r && r !== "pending" && r.status === "scored") { const x = { ...p, ...r.patch }; return `<div class="callrow"><div class="top"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="lab ${LABEL_CLASS[x.label]}">${esc(x.label)}</span></div><span class="hint">${num(esc(m$(p.target)))} called · it was ${num(esc(m$(x.actual)))} · confirming</span></div>`; }
     const now = lastPrice(p.coin), away = now ? Math.abs(p.target / now - 1) * 100 : null, grp = p.g ? ` · ${esc(groupName(p.g))}` : "";
-    return `<div class="callrow"><div class="top"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="hint num">${esc(r === "pending" ? "checking…" : leftText(due, p.horizon))}</span></div>
+    return `<div class="callrow"><div class="top"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="hint num">${esc(Date.now() >= Date.parse(due) ? "scoring…" : leftText(due, p.horizon))}</span></div>
       <span class="hint">${num(esc(m$(p.target)))} called${away != null && p.horizon !== "1y" ? ` · now ${num(away.toFixed(1) + "%")} away` : ""}${grp}${p.kind === "pick" ? " · group only" : ""}</span><div class="tbar" aria-hidden="true"><i style="width:${(share * 100).toFixed(1)}%"></i></div></div>`;
   };
   el.innerHTML = `<div class="label">Make a call</div>
@@ -129,7 +134,7 @@ function callsView(el) {
 }
 function resultRow(p) {
   return p.status === "scored"
-    ? `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">${num(esc(closenessText(p).split(" · ")[0]))} · ${num(esc(m$(p.target)))} called, it was ${num(esc(m$(p.actual)))}${p.g ? ` · ${esc(groupName(p.g))}` : ""}</span></span><span class="lab ${LABEL_CLASS[p.label] || ""}">${esc(p.label)}</span></div>`
+    ? `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">${num(esc(closenessText(p).split(" · ")[0]))} · ${num(esc(m$(p.target)))} called, it was ${num(esc(m$(p.actual)))}${p.g ? ` · ${esc(groupName(p.g))}` : ""}${p.here ? " · confirming" : ""}</span></span><span class="lab ${LABEL_CLASS[p.label] || ""}">${esc(p.label)}</span></div>`
     : `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s" style="white-space:normal">${esc(p.voidReason || "Not counted.")}</span></span><span class="lab low">Not counted</span></div>`;
 }
 
@@ -405,8 +410,9 @@ function chCard(g, ch, n) {
       <div class="secrow" style="margin:0"><b>${title}</b><span class="hint">${ch.end != null ? `ended ${num(esc(m$(ch.end)))}${ch.move != null ? ` <span class="${ch.move >= 0 ? "up" : "down"} num">${esc(pct(ch.move, 1))}</span>` : ""}` : ""}</span></div>
       <div class="hl">${(ch.results || []).map((r, i) => `<button class="row rrow${r.a === me() ? " you" : ""}${APP.flip === ch.id ? " rin" : ""}" style="${APP.flip === ch.id ? `animation-delay:${0.2 + i * 0.09}s` : ""}" data-a="${esc(r.a)}"><span class="num lbn">${r.rank ?? "–"}</span>${ava(r.u, r.a === me() ? myCard() : S.cards.get(r.a), "xs")}<span class="main"><span class="t">@${esc(r.u)}</span><span class="s"><span class="lab ${LABEL_CLASS[r.label] || ""}">${esc(r.label)}</span> ${r.label === "Not counted" ? "couldn't be scored" : `${num(Math.abs(r.off).toFixed(1) + "%")} off · ${r.up ? "up" : "down"}`} · ${r.counts ? "counts" : "group only"}</span></span><b class="num rpts">+${r.pts}</b></button>`).join("")}
         ${missing.length ? `<div class="row"><span class="main"><span class="s">${missing.map(([, u]) => "@" + esc(u)).join(", ")} didn't pick</span></span></div>` : ""}</div>
-      ${mineIn ? `<div class="opts">${REACTIONS.map(([k, l]) => `<button class="opt" data-rx="${esc(ch.id)}|${k}" aria-pressed="${mineRx === k}">${l}${counts[k] ? ` · ${counts[k]}` : ""}</button>`).join("")}</div>
-      <div class="pc-acts"><button class="btn" data-again="${esc(ch.id)}">Rematch</button><button class="btn" data-share="${esc(ch.id)}">Share result</button></div>` : ""}
+      ${mineIn && ch.here ? `<p class="hint" style="margin:0">Scored on your phone just now · confirming. Reactions open in a few minutes.</p>` : ""}
+      ${mineIn && !ch.here ? `<div class="opts">${REACTIONS.map(([k, l]) => `<button class="opt" data-rx="${esc(ch.id)}|${k}" aria-pressed="${mineRx === k}">${l}${counts[k] ? ` · ${counts[k]}` : ""}</button>`).join("")}</div>` : ""}
+      ${mineIn ? `<div class="pc-acts"><button class="btn" data-again="${esc(ch.id)}">Rematch</button><button class="btn" data-share="${esc(ch.id)}">Share result</button></div>` : ""}
     </div>`;
   }
   const mine = myPick(ch.id), open = picksOpen(ch), iPicked = me() in (ch.picked || {});

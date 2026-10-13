@@ -84,7 +84,7 @@ function syncGroups() {
         S.groups.set(g, { id: g, ...isoDates(d.data()) }); emit();
       }, () => {}),
       f.onSnapshot(f.query(f.collection(db, "groups", g, "challenges"), f.orderBy("at", "desc"), f.limit(8)), (q) => {
-        S.challenges.set(g, q.docs.map((d) => ({ id: d.id, g, ...isoDates(d.data({ serverTimestamps: "estimate" })) }))); emit();
+        S.challenges.set(g, q.docs.map((d) => withHere({ id: d.id, g, ...isoDates(d.data({ serverTimestamps: "estimate" })) }))); emit();
       }, () => {}),
     ]);
   }
@@ -350,10 +350,46 @@ export async function settleDemoChallenges(fetchRows, now = Date.now()) {
   return done;
 }
 
-// ---------- your group standings this month, best first: [{ a, u, pts }]
+// ---------- live: a challenge is scored on each member's phone the moment it ends, with the same code and prices as
+// the data job (everyone's picks can be read once it's over), so results show at once. The job's copy, a few minutes
+// later, is the record: it adds the points to the table and deletes the picks; until then these are "confirming".
+const doneHere = new Map(); // challenge id → { results, end, move } worked out here, or "trying"
+const withHere = (ch) => { const h = doneHere.get(ch.id); return ch.status === "open" && h && h !== "trying" ? { ...ch, status: "done", ...h, here: true } : ch; };
+export async function settleChallengesHere(fetchRows, now = Date.now()) {
+  if (!live()) return settleDemoChallenges(fetchRows, now);
+  const due = [...S.challenges.values()].flat().filter((ch) => ch.status === "open" && !doneHere.has(ch.id) && now >= Date.parse(ch.endAt) + SETTLE_DELAY);
+  if (!due.length) return 0;
+  const { f, db } = fbx(), rows = rowCache(fetchRows); let n = 0;
+  for (const ch of due) {
+    doneHere.set(ch.id, "trying");
+    try {
+      const picks = (await Promise.all(Object.keys(ch.picked || {}).map(async (a) => {
+        const d = await f.getDoc(f.doc(db, "accounts", a, "picks", ch.id));
+        return d.exists() ? { ...isoDates(d.data()), path: `accounts/${a}/picks/${ch.id}` } : null;
+      }))).filter(Boolean);
+      const out = [];
+      for (const pk of picks) {
+        if (pk.status === "scored" || pk.status === "void") { out.push(pk); continue; }
+        const r = await settle(pk, { now, rows });
+        if (r.status === "open") throw new Error("price not out yet");
+        out.push({ ...pk, ...r.patch });
+      }
+      const first = out.filter((x) => x.status === "scored").sort((x, y) => Date.parse(x.createdAt) - Date.parse(y.createdAt))[0];
+      doneHere.set(ch.id, { results: challengeResults(ch, out), end: first?.actual ?? null, move: first ? Math.round((first.actual / first.p0 - 1) * 1e4) / 100 : null, doneAt: new Date(now).toISOString() });
+      n++;
+    } catch { doneHere.delete(ch.id); } // not ready (or picks already tidied by the job): the next pass, or the job, has it
+  }
+  if (n) { for (const [g, list] of S.challenges) S.challenges.set(g, list.map(withHere)); emit(); }
+  return n;
+}
+// When the next open challenge ends (ms), to wake up for it.
+export const nextChallengeEnd = () => Math.min(Infinity, ...[...S.challenges.values()].flat().filter((ch) => ch.status === "open" && !doneHere.has(ch.id)).map((ch) => Date.parse(ch.endAt) + SETTLE_DELAY));
+
+// ---------- your group standings this month, best first: [{ a, u, pts }] (with results scored here added in)
 export function groupTable(g, month = new Date().toISOString().slice(0, 7)) {
   const grp = S.groups.get(g); if (!grp) return [];
-  const t = grp.table || {};
+  let t = grp.table || {};
+  for (const ch of S.challenges.get(g) || []) if (ch.here) t = addPoints(t, ch.results || [], ch.endAt.slice(0, 7));
   return Object.entries(grp.members || {}).map(([a, u]) => ({ a, u, pts: t[a]?.m === month ? t[a].mpts : 0, all: t[a]?.all || 0 }))
     .sort((x, y) => y.pts - x.pts || y.all - x.all || x.u.localeCompare(y.u));
 }

@@ -78,10 +78,12 @@ service cloud.firestore {
         allow get, list: if canUse(acct);
         allow delete: if isOwner(acct) && !exists(/databases/$(db)/documents/accounts/$(acct));
       }
-      // A sealed group pick: only its owner can read it; the data job scores it and puts the outcome in the challenge.
+      // A sealed group pick: only its owner can read it until the challenge is over. Then the group's phones read it
+      // to score the challenge at once (the same way the data job does, which then deletes the picks).
       // A pick that counts to the public score is made together with its prediction (same coin, period and end time).
       match /picks/{c} {
         allow get, list: if canUse(acct);
+        allow get: if signedIn() && request.time > resource.data.endAt + duration.value(1, 'm');
         allow create: if canUse(acct)
           && request.resource.data.keys().hasOnly(['g', 'c', 'coin', 't', 'horizon', 'target', 'counts', 'createdAt', 'endAt'])
           && request.resource.data.c == c && request.resource.data.g is string

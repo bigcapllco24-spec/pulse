@@ -2,8 +2,8 @@
 // Firestore document is accounts/{uid}, readable and writable only by that sign-in.
 // Without a Firebase config the app runs in demo mode and keeps everything in this browser.
 import { CONFIG } from "../config.js";
-import { HORIZONS, checkPrediction, canPredict, profileScore } from "./score.js";
-import { settle, rowCache } from "./predict.js";
+import { HORIZONS, checkPrediction, canPredict, profileScore, dueAt } from "./score.js";
+import { settle, rowCache, SETTLE_DELAY } from "./predict.js";
 
 const FB = "https://www.gstatic.com/firebasejs/10.14.1/";
 const LS = { code: "pl.code", demo: "pl.demoAccount", demoAlerts: "pl.demoAlerts", demoLists: "pl.demoLists", hidden: "pl.hidden", demoPreds: "pl.demoPreds", preds: "pl.preds" };
@@ -396,8 +396,40 @@ export async function settleDemoPredictions(fetchRows) {
   saveDemoPreds();
   return done.length;
 }
-// The profile score: written by the data job for live accounts, worked out on the phone in demo mode.
+// Scored here, the moment it's due: a live prediction is scored on the phone with the same code and the same Kraken
+// prices the data job uses, so the result and the score show at once; the job's copy replaces it within minutes.
+export const scoredHere = new Map(); // prediction key → the prediction with its result
+const keyOf = (p) => `${p.t}_${p.horizon}_${p.createdAt}`;
+let settling = false;
+export async function settleHere(fetchRows, now = Date.now()) {
+  if (store.mode === "demo") return settleDemoPredictions(fetchRows);
+  const open = new Set(store.preds.map(keyOf));
+  for (const k of scoredHere.keys()) if (!open.has(k)) scoredHere.delete(k); // the data job has moved it to results
+  const due = store.preds.filter((p) => !scoredHere.has(keyOf(p)) && now >= Date.parse(dueAt(p)) + SETTLE_DELAY);
+  if (!due.length || settling) return 0;
+  settling = true;
+  const rows = rowCache(fetchRows); let n = 0; // fresh prices on every pass
+  try {
+    for (const p of due) {
+      let r; try { r = await settle(p, { now, rows }); } catch { continue; }
+      if (r.status === "open") continue; // its closing price isn't out yet: next pass
+      scoredHere.set(keyOf(p), { ...p, ...r.patch, status: r.status, resolvedAt: r.patch.resolvedAt || new Date(now).toISOString(), here: true }); n++;
+    }
+  } finally { settling = false; }
+  if (n) store.emit("preds");
+  return n;
+}
+// When the next open prediction is due (ms), to wake up for it.
+export const nextDue = () => Math.min(Infinity, ...store.preds.map((p) => Date.parse(dueAt(p)) + SETTLE_DELAY));
+
+// The profile score: written by the data job for live accounts, worked out on the phone in demo mode, and on the phone
+// straight away when a prediction has just been scored here (the job writes the same number a few minutes later).
 export function myScore() {
+  const here = [...scoredHere.values()].filter((r) => r.status === "scored");
+  if (store.mode !== "demo" && here.length && store.results.length < 300) {
+    const ps = profileScore([...store.results.filter((r) => r.status === "scored"), ...here]);
+    if (ps.score != null) return { score: ps.score, band: ps.band, provisional: ps.provisional, n: ps.n, here: true };
+  }
   if (store.mode !== "demo") return store.data?.pscore || null;
   const ps = profileScore(store.results.filter((r) => r.status === "scored"));
   return ps.score == null ? null : { score: ps.score, band: ps.band, provisional: ps.provisional, n: ps.n };
