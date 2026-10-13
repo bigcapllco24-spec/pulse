@@ -733,15 +733,28 @@ export function applyTheme() {
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.register("sw.js" + (CONFIG.firebase ? "?config=" + encodeURIComponent(JSON.stringify(CONFIG.firebase)) : "")).catch(() => {});
   // When a new release takes over right after opening, reload once so the new version shows straight away.
-  // A new release took over: reload straight away while the app is still opening; later, offer it rather than
-  // reloading under someone's thumb. (A time stamp, not a once-per-session flag, so every release gets picked up.)
+  // A new release took over. A Home Screen app is usually resumed rather than restarted, so it could run an old
+  // version for days: reload at once if the app has just opened or just come back to the front (nothing is lost:
+  // everything is saved); in the middle of using it, offer Update and apply it anyway the next time it comes back.
   const hadController = !!navigator.serviceWorker.controller;
+  let frontSince = performance.now(), updateReady = false;
+  const reloadNow = () => {
+    const last = +sessionStorage.getItem("pl.swReload") || 0;
+    if (Date.now() - last < 20000) return false; // never loop
+    sessionStorage.setItem("pl.swReload", Date.now()); location.reload(); return true;
+  };
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!hadController) return;
-    const last = +sessionStorage.getItem("pl.swReload") || 0;
-    if (performance.now() < 8000 && Date.now() - last > 20000) { sessionStorage.setItem("pl.swReload", Date.now()); location.reload(); }
-    else toast("A new version of the app is ready.", { action: "Update", onAction: () => location.reload(), ms: 15000 });
+    updateReady = true;
+    if (performance.now() - frontSince < 10000 && reloadNow()) return;
+    toast("A new version of the app is ready.", { action: "Update", onAction: () => location.reload(), ms: 10 * 60e3 });
   });
-  // check for a release whenever the app comes back to the front, not only on a fresh open
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {}); });
+  // every time the app comes back to the front: apply a release that's waiting, or check for one
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    frontSince = performance.now();
+    if (updateReady && reloadNow()) return;
+    navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {});
+  });
+  addEventListener("pageshow", (e) => { if (e.persisted) { frontSince = performance.now(); navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {}); } });
 }

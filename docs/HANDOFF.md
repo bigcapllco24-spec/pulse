@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 13 Oct 2026 (**version 1.0.6**, service worker `pulse-shell-v42`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
+Last updated 13 Oct 2026 (**version 1.0.7**, service worker `pulse-shell-v43`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -335,8 +335,9 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 
 **Releasing:**
 - Bump `SHELL` in `web/sw.js` and `version` in `web/config.js` on every release. The service worker installs with
-  `cache: "reload"` (GitHub Pages lets browsers keep files 10 min, which once froze phones on 1.0.0); the app reloads
-  itself if a release lands while it opens, otherwise shows "A new version is ready · Update". Add any new JS file to `sw.js` FILES and to `index.html`
+  `cache: "reload"` (GitHub Pages lets browsers keep files 10 min, which once froze phones on 1.0.0); a Home Screen app
+  is resumed, not restarted, so the app checks for a release every time it comes to the front and reloads at once if
+  one lands within 10 s of opening or coming back; mid-use it offers Update (10 min) and applies it on the next return. Add any new JS file to `sw.js` FILES and to `index.html`
   modulepreload.
 - Commit to `main` and push; it's live in about a minute.
 - Commit messages end with the Co-Authored-By / Claude-Session lines.
