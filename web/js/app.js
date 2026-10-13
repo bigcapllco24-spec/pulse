@@ -662,17 +662,10 @@ document.addEventListener("visibilitychange", () => {
   else if (Date.now() - lastRefresh > 60000) doRefresh(false);
 });
 
-// iOS Home Screen apps sometimes lay the page out shorter than the screen (by about the status bar's height),
-// leaving an empty strip under the tab bar. Measure it and stretch the layout to the real bottom edge.
-function fitScreen() {
-  const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
-  const portrait = innerHeight > innerWidth, sh = portrait ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width);
-  const gap = standalone && /iPhone|iPad|iPod/.test(navigator.userAgent) ? Math.max(0, Math.min(80, sh - innerHeight)) : 0;
-  document.documentElement.style.setProperty("--gapb", gap + "px");
-}
-fitScreen();
-addEventListener("resize", fitScreen);
-addEventListener("orientationchange", () => setTimeout(fitScreen, 300));
+// Nothing is ever pushed below the visible area. (Until 1.0.9 the app pushed its bottom bars down to cover a strip that
+// older iPhones left under Home Screen apps; on current iOS that strip isn't drawn, so the bars' lower half - tab
+// labels, sheet ends, the group page's button - was cut off. A plain strip in the app's colour is the safe trade.)
+document.documentElement.style.setProperty("--gapb", "0px");
 
 export function applyTheme() {
   const t = store.data?.settings?.theme || "dark";

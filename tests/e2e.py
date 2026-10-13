@@ -672,8 +672,8 @@ def ios_homescreen_test(b):
     ctx.add_init_script("Object.defineProperty(navigator,'standalone',{get:()=>true}); Object.defineProperty(screen,'height',{get:()=>844}); Object.defineProperty(screen,'width',{get:()=>390});")
     ctx.route("https://api.kraken.com/**", kraken_route); ctx.route("https://data-api.binance.vision/**", binance_route); demo_mode(ctx)
     p = ctx.new_page(); p.goto(BASE); p.wait_for_timeout(1500)
-    r = p.evaluate("(()=>{const t=document.querySelector('.tabbar').getBoundingClientRect(), f=document.getElementById('feed'); return [t.bottom, f.clientHeight, getComputedStyle(document.documentElement).getPropertyValue('--gapb').trim()]})()")
-    check("iOS Home Screen: tab bar and feed reach the real bottom of the screen (no empty strip)", abs(r[0] - 844) < 1 and r[1] == 844, str(r))
+    r = p.evaluate("(()=>{const t=document.querySelector('.tabbar').getBoundingClientRect(), l=[...document.querySelectorAll('.tabbar button')].map(b=>b.getBoundingClientRect().bottom); return [t.bottom, innerHeight, Math.max(...l)]})()")
+    check("iOS Home Screen: the tab bar and its labels sit fully inside the visible area (nothing pushed below it)", abs(r[0] - r[1]) < 1 and r[2] <= r[1] + 0.5, str(r))
     ctx.close()
 
 def landscape_test(b):
