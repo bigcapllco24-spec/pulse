@@ -1,6 +1,6 @@
 // Service worker: makes the app installable and opens instantly from cache; prices and news always come
 // from the network first. Also receives push alerts when Firebase is configured (config arrives in the URL).
-const SHELL = "pulse-shell-v46"; // 1.0.10
+const SHELL = "pulse-shell-v47"; // 1.0.11
 const FILES = ["./", "index.html", "styles.css", "config.js", "manifest.webmanifest", "icon.svg", "icon-192.png",
   "js/app.js", "js/pages.js", "js/store.js", "js/data.js", "js/chart.js", "js/studies.js", "js/indicators.js", "js/describe.js", "js/search.js", "js/interact.js", "js/levels.js", "js/coach.js", "js/full.js", "js/ui.js", "js/score.js", "js/predict.js", "js/social.js", "js/play.js", "js/feedback.js", "js/panels.js", "data/indicators.json"];
 // cache: "reload" skips the browser's own cache (GitHub Pages lets it keep files 10 minutes), so a release never caches old files

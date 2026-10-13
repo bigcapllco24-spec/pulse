@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 13 Oct 2026 (**version 1.0.10**, service worker `pulse-shell-v46`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
+Last updated 13 Oct 2026 (**version 1.0.11**, service worker `pulse-shell-v47`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is

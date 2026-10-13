@@ -95,7 +95,7 @@ export function renderPlay() {
     <button class="pl-head" id="plCard" aria-label="Your profile">
       <span class="ava lg ${sc?.score != null && !prov ? BAND_CLASS[sc.band] || "" : "prov"}" aria-hidden="true">${esc((u || "?")[0].toUpperCase())}</span>
       <span class="pl-who">
-        <span class="pl-score">${sc?.score != null ? `<b class="num">${sc.score}</b><span class="${BAND_CLASS[sc.band] || ""}t">${esc(sc.band)}${prov ? " · Provisional" : ""}</span>` : `<span class="muted">No score yet</span>`}</span>
+        <span class="pl-score">${sc?.score != null ? `<b class="num">${sc.score}</b><span class="${BAND_CLASS[sc.band] || ""}t">${esc(sc.band)}</span>` : `<span class="muted">No score yet</span>`}</span>
         <span class="pl-sub">${sub}</span>
       </span>
       <span class="pl-go">Profile<span class="chev">›</span></span>
