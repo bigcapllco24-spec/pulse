@@ -672,7 +672,7 @@ export function applyTheme() {
   const t = store.data?.settings?.theme || "dark";
   const dark = t === "dark" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
-  document.querySelector('meta[name="theme-color"]').content = dark ? "#14120F" : "#F4EFE6";
+  document.querySelector('meta[name="theme-color"]').content = dark ? "#0B0F14" : "#F4F6F8";
 }
 
 // ---------- boot

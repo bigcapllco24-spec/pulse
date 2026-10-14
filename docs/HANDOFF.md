@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 14 Oct 2026 (**version 1.1.0**, service worker `pulse-shell-v48`, firestore.rules published 13 Oct 8:51 AM IST; 1.1.0 needs no rules change). Version lives in `web/config.js` and shows at the
+Last updated 14 Oct 2026 (**version 1.1.1**, service worker `pulse-shell-v49`, firestore.rules published 13 Oct 8:51 AM IST; 1.1.0 needs no rules change). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -41,7 +41,9 @@ they work.
 ```
 web/                    the app (served as-is by GitHub Pages)
   index.html            shell + modulepreload list
-  sw.js                 service worker: cache-first; bump SHELL ("pulse-shell-vNN") on every release
+  sw.js                 service worker: cache-first; bump SHELL ("pulse-shell-vNN") on every release. Since 1.1.1 a release
+                        installs as one complete set (fetched with ?v=SHELL) and files are never refreshed one by one:
+                        that mixed 1.1.0's new styles with 1.0's code on a phone.
   config.js             Firebase web config (public by design), VAPID key
   styles.css            all styles; type scale tokens --t-xs/s/m/l/xl/xxl in :root; landscape block at the end
   data/                 candles.json + news.json + daily.json (written by the data job), indicators.json (guides), symbols.json
@@ -87,10 +89,8 @@ scripts/check.sh        all tests; tests/ = pipeline, levels, score, predict, so
 
 **Tabs:** Coins · Feed · Predict. Settings live in the Account sheet (tap your letter avatar on Predict).
 
-**Colours (1.1.0):** light = **Paper** (ground #F4EFE6, card #FFFDF8, text #1C1A16, tap #2D5BE3); dark = Paper's dark
-twin: **Ink ground #14120F with neutral Graphite boxes** (card #1A1B1D, raised #232427, line #2E3033), cream text
-#F2ECE1, tap #7C9CFF. Switching light ↔ dark must not change the feel of the app (Veer). Tokens are in `:root` and
-`:root[data-theme="light"]` at the top of styles.css; score bands are `--b1`…`--b5`. Designs:
+**Colours:** the original Midnight (dark) and light themes. 1.1.0 tried Paper (light) and Ink + Graphite (dark); Veer
+turned them down on the phone the same day and 1.1.1 put the original palette back. Explorations stay on
 https://claude.ai/artifact/J9GbykhVNMbWf442SYA3yg
 
 
@@ -417,7 +417,8 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 - Three tabs: Coins, Feed, Predict. Predictions live only on Predict; settings sit behind the letter avatar.
 - Scores belong to the account id. "Groups", not chats; no chat. Only follower counts are public, never who follows whom.
 - Leaderboard opt-in; group challenges 1h/1d/1y only; results never show anyone's price call.
-- Colours: Paper for light, Ink ground + Graphite boxes for dark, same feel in both (14 Oct). Profile redesign approved.
+- Colours: the original palette (one palette, Midnight + light). Paper / Ink were tried in 1.1.0 and reverted in 1.1.1
+  at Veer's request. Profile redesign approved and kept.
 - Daily coin and streak days run on Indian time for everyone. Other players' cards use the same new design.
 - No real sign-in in 1.1.0 (username login stays the accepted MVP risk). Community content: no Reddit/X posts; Snapshot
   votes and project forums only. Reddit mention counts parked until Reddit confirms commercial use.

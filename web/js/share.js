@@ -8,9 +8,9 @@ import { BANDS, SCORE_MIN, SCORE_MAX } from "./score.js";
 import { BAND_CLASS } from "./card.js";
 import { ls } from "./store.js";
 
-const LOOKS = {
-  light: { bg: "#F4EFE6", surface: "#FFFDF8", s2: "#EDE6D9", line: "#DDD3C2", text: "#1C1A16", muted: "#6B6457", accent: "#2D5BE3", up: "#0E7A45", down: "#C2362B", b1: "#A39B8C", b2: "#6B6457", b3: "#2D5BE3", b4: "#7A3FD1", b5: "#B7791F" },
-  dark: { bg: "#14120F", surface: "#1A1B1D", s2: "#232427", line: "#2E3033", text: "#F2ECE1", muted: "#A39A8B", accent: "#7C9CFF", up: "#3FCF8E", down: "#FF6B5E", b1: "#8C8374", b2: "#A39A8B", b3: "#7C9CFF", b4: "#B48CFF", b5: "#E8B04B" },
+const LOOKS = { // the app's own two themes (styles.css)
+  light: { bg: "#F4F6F8", surface: "#FFFFFF", s2: "#EEF1F4", line: "#DCE2E8", text: "#131C24", muted: "#5A6774", accent: "#2B4FC7", up: "#0B7A4B", down: "#C0362C", b1: "#8A939C", b2: "#5A6774", b3: "#2B4FC7", b4: "#7B4FD6", b5: "#9A6A00" },
+  dark: { bg: "#0B0F14", surface: "#131A21", s2: "#1A232C", line: "#24303B", text: "#E8EEF3", muted: "#8A98A6", accent: "#7EA2FF", up: "#3DD68C", down: "#FF6B61", b1: "#6B7785", b2: "#A3B0BD", b3: "#7EA2FF", b4: "#B48CFF", b5: "#F5C451" },
 };
 const SIZES = { story: [360, 640], square: [360, 360] };
 const SCALE = 3; // 1080 px wide

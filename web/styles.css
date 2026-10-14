@@ -1,10 +1,10 @@
-/* Colours (1.1.0): Paper for light, its dark twin (Ink ground, neutral Graphite boxes) for dark. Calm, phone-first, dark by default. One font (Inter), two neutrals, green and red only for
+/* Design language: calm, phone-first, dark by default. One font (Inter), two neutrals, green and red only for
    up and down (always with a sign or arrow), one blue accent for things you can tap. Numbers are big and tabular. */
 :root {
-  --bg: #14120F; --surface: #1A1B1D; --surface2: #232427; --line: #2E3033; --text: #F2ECE1; --muted: #A39A8B;
-  --up: #3FCF8E; --down: #FF6B5E; --accent: #7C9CFF; --accent-ink: #14120F; --accent-soft: rgba(124,156,255,.14);
-  --up-soft: rgba(63,207,142,.14); --down-soft: rgba(255,107,94,.14); --warn: #E8B04B; --warn-soft: rgba(232,176,75,.14);
-  --ma1: #E8B04B; --ma2: #B48CFF; --ma3: #6FC3E0; --pin: #7C9CFF; --glass: rgba(20,18,15,.78);
+  --bg: #0B0F14; --surface: #131A21; --surface2: #1A232C; --line: #24303B; --text: #E8EEF3; --muted: #8A98A6;
+  --up: #3DD68C; --down: #FF6B61; --accent: #7EA2FF; --accent-ink: #0B0F14; --accent-soft: rgba(126,162,255,.14);
+  --up-soft: rgba(61,214,140,.14); --down-soft: rgba(255,107,97,.14); --warn: #E6B84C; --warn-soft: rgba(230,184,76,.14);
+  --ma1: #F5C451; --ma2: #B48CFF; --ma3: #5BC8F5; --pin: #7EA2FF; --glass: rgba(11,15,20,.72);
   --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --gapb: 0px; /* set by app.js when an iOS Home Screen app leaves an unused strip at the bottom */
   /* one type scale for the whole app: captions, secondary, body, headings, titles, page titles */
@@ -13,10 +13,10 @@
   color-scheme: dark;
 }
 :root[data-theme="light"] {
-  --bg: #F4EFE6; --surface: #FFFDF8; --surface2: #EDE6D9; --line: #DDD3C2; --text: #1C1A16; --muted: #6B6457;
-  --up: #0E7A45; --down: #C2362B; --accent: #2D5BE3; --accent-ink: #FFFFFF; --accent-soft: rgba(45,91,227,.10);
-  --up-soft: rgba(14,122,69,.10); --down-soft: rgba(194,54,43,.10); --warn: #8F5E12; --warn-soft: rgba(183,121,31,.16);
-  --ma1: #B7791F; --ma2: #7A3FD1; --ma3: #1B8DBF; --pin: #2D5BE3; --glass: rgba(244,239,230,.82);
+  --bg: #F4F6F8; --surface: #FFFFFF; --surface2: #EEF1F4; --line: #DCE2E8; --text: #131C24; --muted: #5A6774;
+  --up: #0B7A4B; --down: #C0362C; --accent: #2B4FC7; --accent-ink: #FFFFFF; --accent-soft: rgba(43,79,199,.10);
+  --up-soft: rgba(11,122,75,.10); --down-soft: rgba(192,54,44,.10); --warn: #8A5D00; --warn-soft: rgba(230,184,76,.18);
+  --ma1: #C98A00; --ma2: #7B4FD6; --ma3: #1B8DBF; --pin: #2B4FC7; --glass: rgba(244,246,248,.8);
   color-scheme: light;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -230,7 +230,7 @@ button.row, a.row { width: 100%; background: none; border-left: 0; border-right:
 .check .input { flex: 1; }
 .toast { position: fixed; z-index: 80; left: 50%; transform: translateX(-50%); bottom: calc(var(--tab) + 14px + var(--safe-b) - var(--gapb)); background: var(--text); color: var(--bg); padding: 11px 16px; border-radius: 12px; font-size: var(--t-m); font-weight: 600; max-width: calc(100% - 32px); display: flex; gap: 12px; align-items: center; }
 .toast button { border: 0; background: none; color: var(--accent); font-weight: 800; cursor: pointer; }
-:root:not([data-theme="light"]) .toast button { color: #2D5BE3; }
+:root:not([data-theme="light"]) .toast button { color: #2B4FC7; }
 
 /* dashboard */
 .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
@@ -637,8 +637,8 @@ html { touch-action: pan-x pan-y; }
 .full .fcard { touch-action: none; }
 
 /* ---------- 1.0: Predict tab, people and groups. Numbers that matter (scores, prices, countdowns) use Geist Mono. */
-:root { --num: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; --b1: #8C8374; --b2: #A39A8B; --b3: #7C9CFF; --b4: #B48CFF; --b5: #E8B04B; }
-:root[data-theme="light"] { --b1: #A39B8C; --b2: #6B6457; --b3: #2D5BE3; --b4: #7A3FD1; --b5: #B7791F; }
+:root { --num: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; --b1: #6B7785; --b2: #A3B0BD; --b3: #7EA2FF; --b4: #B48CFF; --b5: #F5C451; }
+:root[data-theme="light"] { --b1: #8A939C; --b2: #5A6774; --b3: #2B4FC7; --b4: #7B4FD6; --b5: #9A6A00; }
 .num, .price, .row .r b, .pnow b { font-family: var(--num); font-feature-settings: "tnum" 1; letter-spacing: -.02em; }
 .b1t { color: var(--muted); } .b2t { color: var(--b2); } .b3t { color: var(--b3); } .b4t { color: var(--b4); } .b5t { color: var(--b5); }
 /* letter avatars: the username's first letter, ringed in the score band's colour, dashed while provisional */
