@@ -557,7 +557,7 @@ def phone_tests(b):
     check("phone: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
-NOCOACH = "localStorage.getItem('pl.coach')||localStorage.setItem('pl.coach', JSON.stringify({feed:1,dash:1,profile:1,add:1,play:1}))"
+NOCOACH = "localStorage.getItem('pl.coach')||localStorage.setItem('pl.coach', JSON.stringify({feed:1,dash:1,profile:1,add:1,play:1})); localStorage.getItem('pl.dailySeen')||localStorage.setItem('pl.dailySeen', JSON.stringify(new Date(Date.now()+19800000).toISOString().slice(0,10)))"  # tours and the daily popup have their own tests
 
 # Prediction game. Its own Kraken stand-in: one smooth made-up price per coin, so 1-minute and daily candles agree
 # (the start price is locked from 1-minute candles, the volatility from daily ones).
@@ -613,7 +613,7 @@ def prediction_test(b):
     ring = p.get_attribute("#plCard .ava", "class")
     check("predict: with 12 scored predictions the header shows one score between 300 and 900 with its band, and the letter avatar is ringed in the band's colour", 300 <= score <= 900 and any(bnd in card for bnd in ["Exceptional", "Very good", "Good", "Fair", "Building"]) and "Provisional" not in card and _re.search(r"\bb[1-5]\b", ring) and "prov" not in ring, card.replace("\n", " ") + " " + ring)
     p.wait_for_timeout(2500)
-    first = p.inner_text("#play .pl-view .hl:last-of-type .row >> nth=0") if p.locator("#play .pl-view .hl").count() else ""
+    first = p.inner_text("#play .pl-scored .row >> nth=0") if p.locator("#play .pl-scored").count() else ""
     page = p.inner_text("#play")
     check("predict: the hour-long call settled on the phone from 1-minute candles and shows how close it was", first.startswith("ETH · 1 hour") and "it was $" in first and _re.search(r"\d+\.\d% (above|below)", first) and any(l in first for l in ["Spot on", "Very close", "Close", "Off", "Far off"]), first.replace("\n", " "))
     check("predict: each prediction shows only how close it was, never a per-prediction score", "points" not in page.lower() and "trade" not in page.lower(), "")
@@ -621,11 +621,23 @@ def prediction_test(b):
     check("predict: Calls starts with today's coin, then the ask (pick a coin, call its price), and has no 'How the score works'", first_el == "daily" and "MAKE A CALL" in page.upper() and "How the score works" not in page and p.locator("#play .pchips [data-pp]").count() >= 1, str(first_el))
     # 1.1.0 habit loop: today's coin, your week, what happened after a scored call
     daily = p.inner_text("#play .daily")
-    check("daily coin: one coin for everyone today, with time left and a 1-day call to make", "TODAY'S COIN" in daily.upper() and _re.search(r"\d+h \d+m left", daily) and p.is_visible("#play [data-daily]"), daily.replace("\n", " ")[:160])
-    p.click("#play [data-daily]"); p.wait_for_timeout(500)
+    h = p.evaluate("document.querySelector('#play .daily').getBoundingClientRect().height")
+    check("daily coin: a one-line banner on Calls (coin, price, time left, Call), with open and scored calls right below the coin chips", "TODAY'S COIN" in daily.upper() and _re.search(r"\d+h \d+m left", daily) and "Call" in daily and h <= 72, f"{h}px {daily.replace(chr(10), ' ')[:120]}")
+    p.click("#play [data-dailyinfo]"); p.wait_for_timeout(500)
+    pop = p.inner_text("#sheet")
+    check("daily coin: tapping the banner explains it in a popup with Make my call and Not now", "Everyone calls the same coin today" in pop and p.is_visible("#dGo") and "Not now" in pop, pop.replace("\n", " ")[:160])
+    p.click("#dGo"); p.wait_for_timeout(800)
     sel = p.get_attribute("#sheet [data-h='1d']", "aria-selected")
-    check("daily coin: its button opens the predict sheet on the 1-day period", sel == "true" and "Predict" in p.inner_text("#sheet"), str(sel))
+    check("daily coin: Make my call opens the predict sheet on the 1-day period", sel == "true" and "Predict" in p.inner_text("#sheet"), str(sel))
     p.click("#sheet [data-close]"); p.wait_for_timeout(400)
+    p.evaluate("localStorage.setItem('pl.dailySeen', JSON.stringify('2000-01-01'))"); p.reload(); p.wait_for_timeout(4500)
+    auto = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+    seen = p.evaluate("localStorage.getItem('pl.dailySeen')")
+    p.click("#sheet [data-close]") if auto else None; p.wait_for_timeout(400)
+    p.reload(); p.wait_for_timeout(4500)
+    again = p.is_visible("#sheet")
+    check("daily coin: the popup opens by itself on the first open of the day, and only once that day", "Today's coin" in auto and seen and "2000" not in seen and not again, f"{auto[:60]!r} seen={seen} again={again}")
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(600)
     check("your week: a plain line about calls scored in the last 7 days", "this week" in p.inner_text("#play .weekbox"), p.inner_text("#play .weekbox").replace("\n", " ") if p.locator("#play .weekbox").count() else "none")
     p.click("#play [data-res] >> nth=0"); p.wait_for_timeout(500)
     wh = p.inner_text("#sheet")
@@ -705,7 +717,7 @@ def landscape_test(b):
     # a phone on its side: vertical swipes page the feed from the first page and between coins
     ctx = b.new_context(viewport={"width": 844, "height": 390}, device_scale_factor=2, is_mobile=True, has_touch=True)
     ctx.route("https://api.kraken.com/**", kraken_route); ctx.route("https://data-api.binance.vision/**", binance_route); demo_mode(ctx)
-    ctx.add_init_script("localStorage.setItem('pl.coach', JSON.stringify({feed:1,dash:1,profile:1,add:1,play:1}))")
+    ctx.add_init_script("localStorage.setItem('pl.coach', JSON.stringify({feed:1,dash:1,profile:1,add:1,play:1})); localStorage.setItem('pl.dailySeen', JSON.stringify(new Date(Date.now()+19800000).toISOString().slice(0,10)))")
     p = ctx.new_page(); p.goto(BASE); p.wait_for_timeout(1500); pass_gate(p, "sideways1", three_months=False); p.wait_for_timeout(1500)
     cdp = ctx.new_cdp_session(p)
     def vs(y0, y1, x=300):

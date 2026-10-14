@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 14 Oct 2026 (**version 1.1.1**, service worker `pulse-shell-v49`, firestore.rules published 13 Oct 8:51 AM IST; 1.1.0 needs no rules change). Version lives in `web/config.js` and shows at the
+Last updated 14 Oct 2026 (**version 1.1.2**, service worker `pulse-shell-v50`, firestore.rules published 13 Oct 8:51 AM IST; 1.1.0 needs no rules change). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -253,7 +253,9 @@ The prediction game is what turns the app from something people read into someth
 **Habit loop (built in 1.1.0, `web/js/habit.js`, `pipeline/lib/habit.mjs`):**
 - **Streaks:** days in a row (Indian time) with at least one 1-day call; open, scored or voided all count. On the
   Predict header, the profile and the share card; badges at 7, 30, 100 days. Cards get `streak`, `bestStreak`.
-- **Daily coin:** one coin a day for everyone (`DAILY_COINS` rotation, day turns at midnight IST). A daily-coin call
+- **Daily coin:** one coin a day for everyone (`DAILY_COINS` rotation, day turns at midnight IST). On Calls it's a
+  one-line banner (1.1.2); the explanation and yesterday's crowd are in a popup that opens by itself once a day
+  (first open of the app that day, if not called yet and nothing else is on screen; `pl.dailySeen`) or from the banner. A daily-coin call
   is just a 1-day call on that coin made that day (no extra data). The data job writes `data/daily.json` with how the
   crowd did on the last 7 days' coins (label counts only, never a price).
 - **What happened:** tap a scored call for its prices and a past-tense fact line (move in % and typical moves, stories

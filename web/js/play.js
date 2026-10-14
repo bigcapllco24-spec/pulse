@@ -2,7 +2,7 @@
 // challenges, finding and following players, the leaderboard, player cards, and the avatar sheet (your settings).
 // Data lives in store.js (your account and predictions) and social.js (people and groups).
 import { CONFIG } from "../config.js";
-import { store, allSyms, makePrediction, myScore, enablePush, isAdmin, scoredHere, settleHere, nextDue } from "./store.js";
+import { store, ls, allSyms, makePrediction, myScore, enablePush, isAdmin, scoredHere, settleHere, nextDue } from "./store.js";
 import { HORIZONS, PROVISIONAL_UNDER, CHANCE, checkPrediction, canPredict, allowedRange, dailyVol, dueAt, closenessText } from "./score.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { D } from "./data.js";
@@ -55,6 +55,8 @@ export function initPlay() {
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { tried = false; scheduleScoring(); } });
   scheduleScoring();
   badge();
+  setTimeout(maybeDaily, 2500); // the daily popup, once a day
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(maybeDaily, 1500); });
 }
 let scoreT = 0, scoring = false, tried = false;
 function scheduleScoring() {
@@ -142,36 +144,55 @@ function callsView(el) {
       : `<p class="hint">Prices are loading. Add coins from the feed's + to call them here.</p>`}
     <div class="secrow"><span class="label">Open${open.length ? ` · ${open.length}` : ""}</span></div>
     ${open.length ? `<div class="hl">${open.map(callRow).join("")}</div>` : `<p class="hint pl-empty">Nothing open. Tap a coin above, or Predict on any chart, to make a call.</p>`}
-    ${weekBox(done)}
     <div class="secrow"><span class="label">Scored</span>${done.length > 3 ? `<button class="linkbtn" id="plAll">All ${done.length}</button>` : ""}</div>
-    ${done.length ? `<div class="hl">${done.slice(0, 3).map(resultRow).join("")}</div><p class="hint" style="margin-top:6px">Tap a scored call to see what happened over its period.</p>` : `<p class="hint pl-empty">Scored calls show here, with how close each one was.</p>`}`;
+    ${done.length ? `<div class="hl pl-scored">${done.slice(0, 3).map(resultRow).join("")}</div><p class="hint" style="margin-top:6px">Tap a scored call to see what happened over its period.</p>` : `<p class="hint pl-empty">Scored calls show here, with how close each one was.</p>`}
+    ${weekBox(done)}`;
   el.querySelectorAll("[data-pp]").forEach((b) => (b.onclick = () => openPredictSheet(symOf(b.dataset.pp), () => renderPlay())));
-  el.querySelector("[data-daily]")?.addEventListener("click", () => openPredictSheet(dailyCoin(istDay(Date.now())), () => renderPlay(), "1d"));
+  el.querySelector("[data-dailyinfo]")?.addEventListener("click", () => openDaily());
   const wireRes = (root) => root.querySelectorAll("[data-res]").forEach((b) => (b.onclick = () => openResult(done[+b.dataset.res])));
   wireRes(el);
   el.querySelector("#plAll")?.addEventListener("click", () => openSheet("Scored calls", `<div class="hl">${done.map(resultRow).join("")}</div>`, wireRes));
 }
 // ---------- the daily coin: one coin a day for everyone (habit.js); yesterday's crowd shows once it's scored
-function dailyBox(here) {
+function dailyState(here = [...scoredHere.values()]) {
   const now = Date.now(), day = istDay(now), dc = dailyCoin(day), all = [...store.preds, ...store.results, ...here];
   const mine = all.find((p) => p.coin === dc.key && p.horizon === "1d" && istDay(Date.parse(p.createdAt)) === day);
-  const blocked = !mine && !canPredict(store.preds, dc.key, "1d"), price = lastPrice(dc.key), st = myStreak();
-  const left = msUntilNextDay(now), hrs = Math.floor(left / 36e5), mins = Math.floor((left % 36e5) / 6e4);
-  const yday = istDay(now - 864e5), crowd = D.daily?.crowd?.[yday], yc = dailyCoin(yday);
-  const MIXC = ["var(--accent)", "color-mix(in srgb, var(--accent) 60%, transparent)", "color-mix(in srgb, var(--text) 62%, transparent)", "color-mix(in srgb, var(--muted) 55%, transparent)", "var(--warn)"];
+  const left = msUntilNextDay(now);
+  return { day, dc, mine, blocked: !mine && !canPredict(store.preds, dc.key, "1d"), price: lastPrice(dc.key), left: `${Math.floor(left / 36e5)}h ${Math.floor((left % 36e5) / 6e4)}m` };
+}
+// a one-line banner on Calls; the explanation and yesterday's crowd live in the daily popup (tap the banner)
+function dailyBox(here) {
+  const { dc, mine, blocked, price, left } = dailyState(here);
+  const right = mine ? `<span class="lab good">You're in</span>` : blocked ? `<span class="hint">1-day call open</span>` : `<span class="btn primary sm">Call</span>`;
+  return `<button class="daily" data-dailyinfo><span class="daily-k">Today's coin</span><span class="daily-m"><b>${esc(dc.t)}</b>${price ? `<span class="num">${esc(m$(price))}</span>` : ""}<span class="hint num">${left} left</span></span>${right}</button>`;
+}
+// ---------- the daily popup: once a day, on the first open of the app that day (Indian time), until you've called it
+const DAILY_SEEN = "pl.dailySeen";
+const MIXC = ["var(--accent)", "color-mix(in srgb, var(--accent) 60%, transparent)", "color-mix(in srgb, var(--text) 62%, transparent)", "color-mix(in srgb, var(--muted) 55%, transparent)", "var(--warn)"];
+export function openDaily() {
+  const { day, dc, mine, blocked, price, left } = dailyState(), st = myStreak();
+  const yday = istDay(Date.now() - 864e5), crowd = D.daily?.crowd?.[yday], yc = dailyCoin(yday);
   const counts = crowd ? LABELS.map((l) => crowd.labels?.[l] || 0) : null, close = counts ? counts[0] + counts[1] + counts[2] : 0;
-  const status = mine ? `<span class="lab good">You're in</span>` : `<span class="hint num">${hrs}h ${mins}m left</span>`;
-  return `<div class="daily">
-    <div class="daily-top"><span class="label">Today's coin</span>${status}</div>
-    <div class="daily-main"><b>${esc(dc.n)}</b>${dc.n !== dc.t ? `<span class="muted">${esc(dc.t)}</span>` : ""}${price ? `<span class="num daily-p">${esc(m$(price))}</span>` : ""}</div>
-    <p class="hint">${mine ? `Your 1-day call is in: ${num(esc(m$(mine.target)))}. It's scored ${esc(when(dueAt(mine), "1d"))}, and tomorrow you'll see how everyone did.`
-      : blocked ? `You already have an open 1-day call on ${esc(dc.t)}, so today's can't be added. It still counts once it's scored.`
-      : `Everyone calls the same coin today: a 1-day call that counts to your score${st.n && !st.today ? ` and keeps your ${st.n}-day streak` : ""}. Calls stay hidden; tomorrow you see how the crowd did.`}</p>
-    ${!mine && !blocked ? `<button class="btn primary block" data-daily>Make your call on ${esc(dc.t)}</button>` : ""}
-    ${crowd?.n ? `<div class="daily-crowd"><div class="pc2-row"><span class="hint">Yesterday · ${esc(yc.n)} · ${num(crowd.n)} player${crowd.n === 1 ? "" : "s"}</span><span class="hint">${num(close)} Close or better</span></div>
-      <div class="pc2-mixbar" aria-hidden="true">${counts.map((k, i) => (k ? `<i style="flex:${k};background:${MIXC[i]}"></i>` : "")).join("")}</div>
-      <span class="hint">${LABELS.map((l, i) => (counts[i] ? `${counts[i]} ${esc(l)}` : "")).filter(Boolean).join(" · ")}</span></div>` : ""}
-  </div>`;
+  ls.set(DAILY_SEEN, day);
+  openSheet("Today's coin", `<div class="dpop">
+      <div class="dpop-main"><b>${esc(dc.n)}</b>${dc.n !== dc.t ? `<span class="muted">${esc(dc.t)}</span>` : ""}${price ? `<span class="num">${esc(m$(price))}</span>` : ""}</div>
+      <p class="hint">${mine ? `You're in: ${num(esc(m$(mine.target)))}, scored ${esc(when(dueAt(mine), "1d"))}. Tomorrow you'll see how everyone did.`
+        : blocked ? `You already have an open 1-day call on ${esc(dc.t)}, so today's can't be added. It still counts once it's scored.`
+        : `Everyone calls the same coin today: a 1-day call that counts to your score${st.n && !st.today ? ` and keeps your ${st.n}-day streak` : ""}. Calls stay hidden until they're scored. ${left} left.`}</p>
+      ${!mine && !blocked ? `<button class="btn primary block" id="dGo">Make my call on ${esc(dc.t)}</button><button class="btn block" data-close style="margin-top:8px">Not now</button>` : ""}
+      ${crowd?.n ? `<div class="daily-crowd"><div class="pc2-row"><span class="label">Yesterday · ${esc(yc.n)}</span><span class="hint">${num(crowd.n)} player${crowd.n === 1 ? "" : "s"} · ${num(close)} Close or better</span></div>
+        <div class="pc2-mixbar" aria-hidden="true">${counts.map((k, i) => (k ? `<i style="flex:${k};background:${MIXC[i]}"></i>` : "")).join("")}</div>
+        <span class="hint">${LABELS.map((l, i) => (counts[i] ? `${counts[i]} ${esc(l)}` : "")).filter(Boolean).join(" · ")}</span></div>` : ""}
+      <p class="hint" style="margin-top:12px">A learning game, not advice.</p></div>`, (body) => {
+    body.querySelector("#dGo")?.addEventListener("click", () => { closeSheet(); setTimeout(() => openPredictSheet(dc, () => APP.tab === "play" && renderPlay(), "1d"), 280); });
+  });
+}
+// shown by itself once a day: only when nothing else is on screen (no username step, tour or sheet) and not yet called
+function maybeDaily() {
+  if (!store.data?.username || document.hidden || $("gate") || $("coach") || !$("sheet").hidden || APP.openGroup) return;
+  const s = dailyState();
+  if (s.mine || s.blocked || !s.price || ls.get(DAILY_SEEN) === s.day) return;
+  openDaily();
 }
 // ---------- your week and how your calls tend to land (habit.js): plain descriptions of your own past calls
 function weekBox(done) {

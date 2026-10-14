@@ -856,9 +856,11 @@ body.grpopen .tabbar { display: none; } /* the group page is its own screen: no 
 .pl-streak { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; font-size: var(--t-s); font-weight: 700; color: var(--text); }
 .pl-streak svg { width: 15px; height: 15px; fill: none; stroke: var(--b5); stroke-width: 2.2; stroke-linejoin: round; }
 .pl-streak.due { color: var(--warn); }
-.daily { background: var(--surface); border: 1.5px solid var(--accent); border-radius: 20px; padding: 14px 16px; display: grid; gap: 8px; margin-bottom: 4px; }
-.daily-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .daily-top .label { color: var(--accent); margin: 0; }
-.daily-main { display: flex; align-items: baseline; gap: 8px; } .daily-main b { font-size: var(--t-xl); } .daily-p { margin-left: auto; font-size: var(--t-l); font-weight: 600; }
-.daily .hint { margin: 0; }
-.daily-crowd { border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 6px; }
+.daily { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; background: var(--surface); border: 1px solid var(--accent); border-radius: 16px; padding: 8px 10px 8px 14px; color: var(--text); font: inherit; text-align: left; cursor: pointer; margin-bottom: 4px; }
+.daily-k { font-size: var(--t-xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); flex: none; width: 52px; line-height: 1.2; }
+.daily-m { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; overflow: hidden; } .daily-m b { font-size: var(--t-l); } .daily-m .hint { margin: 0; }
+.daily .btn.sm { flex: none; }
+.dpop { display: grid; gap: 10px; } .dpop .hint { margin: 0; }
+.dpop-main { display: flex; align-items: baseline; gap: 8px; } .dpop-main b { font-size: var(--t-xl); } .dpop-main .num { margin-left: auto; font-size: var(--t-l); font-weight: 600; }
+.daily-crowd { border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 6px; margin-top: 4px; }
 .weekbox { margin-top: 18px; gap: 6px; } .weekbox .label { margin: 0; } .weekbox .hint { margin: 0; }
