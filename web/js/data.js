@@ -66,7 +66,8 @@ export async function refresh(syms, onFile) {
   D.status = "refreshing"; D.error = null;
   for (const st of Object.values(D.intra)) if (st.bars) st.stale = true; // intraday candles reload on the next draw
   try {
-    const [candles, news] = await Promise.all([getJSON("data/candles.json").catch(() => null), getJSON("data/news.json").catch(() => null)]);
+    const [candles, news, daily] = await Promise.all([getJSON("data/candles.json").catch(() => null), getJSON("data/news.json").catch(() => null), getJSON("data/daily.json").catch(() => null)]);
+    if (daily) D.daily = daily; // the daily coin's crowd results (habit.js)
     if (candles?.series) {
       for (const [k, v] of Object.entries(candles.series)) {
         const cur = D.series[k];

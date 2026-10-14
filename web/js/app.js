@@ -268,7 +268,7 @@ function renderNews(c, it, scope) {
   const stories = (scope === "sym" ? storiesFor(s.key) : (D.news.stories || []).filter((st) => st.syms.some((k) => keys.has(k)))).slice(0, 40);
   const win = view(s.key, chartSettings(s.key))?.win;
   const winDates = new Set((win || []).map((b) => b.t));
-  const by = (k) => stories.filter((st) => (k === "single" ? st.status === "single" : k === "official" ? st.status === "official" : st.status === "confirmed" || st.status === "company"));
+  const by = (k) => stories.filter((st) => (k === "single" || k === "official" || k === "community" ? st.status === k : st.status === "confirmed" || st.status === "company"));
   // Price events are worked out from our own daily candles, so this pane is never empty. Facts about the past only.
   const evSyms = scope === "sym" ? [s] : APP.syms;
   let events = evSyms.flatMap((x) => priceEvents(x).map((e) => ({ ...e, x })));
@@ -280,9 +280,10 @@ function renderNews(c, it, scope) {
     ${sect("Confirmed", "2+ independent outlets", by("confirmed"))}
     ${sect("Official sources", "projects, exchanges, regulators", by("official"))}
     ${sect("Also reported", "one trusted outlet so far", by("single"))}
+    ${sect("Community", "governance votes and project forums", by("community"))}
     <h3 class="nsec">Price events<span>from the daily chart, last 30 days</span></h3>
     <div class="pevents">${events.map((e) => `<div class="pev ${e.dir || ""}"><span class="pd">${esc(fmtDay(e.t))}${scope === "mine" ? ` · <b>${esc(e.x.t)}</b>` : ""}</span><p>${esc(e.text)}</p></div>`).join("") || `<div class="empty">${esc(s.t)} prices are still loading.</div>`}</div>
-    <p class="disclaimer">Headlines from Reuters, AP, CNBC, CoinDesk, The Block, Decrypt, Blockworks, DL News, Cointelegraph, Unchained, CryptoSlate, Fortune and other outlets, found via <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener">the GDELT Project</a> and the outlets' own feeds, then matched across outlets. “Official sources” are the projects' own release pages and blogs, exchange announcements (Kraken) and regulators (SEC). Opinion, predictions and promotional posts are left out. Price events are calculated from daily prices and describe the past only. ${esc(DISCLAIMER)}</p></div>`;
+    <p class="disclaimer">Headlines from Reuters, AP, CNBC, CoinDesk, The Block, Decrypt, Blockworks, DL News, Cointelegraph, Unchained, CryptoSlate, Fortune and other outlets, found via <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener">the GDELT Project</a> and the outlets' own feeds, then matched across outlets. “Official sources” are the projects' own release pages and blogs, exchange announcements (Kraken) and regulators (SEC). “Community” lists governance votes (from Snapshot) and new topics on the projects' own forums, as posted by their communities; anything about prices or trading is left out. Opinion, predictions and promotional posts are left out. Price events are calculated from daily prices and describe the past only. ${esc(DISCLAIMER)}</p></div>`;
   pane.querySelectorAll("[data-scope]").forEach((b) => (b.onclick = () => renderNews(c, it, b.dataset.scope)));
   pane.querySelectorAll("[data-story]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const st = stories.find((x) => x.key === b.dataset.story); if (st) openStory(st); }));
 }
@@ -322,7 +323,7 @@ function priceEvents(sym) {
   ev.push({ t: bars[n - 1].t, w: 0, dir: mv >= 0 ? "up" : "down", text: `Over 30 days: ${mv >= 0 ? "up" : "down"} ${Math.abs(mv).toFixed(1)}%, trading between ${money(lo, sym.m)} and ${money(hi, sym.m)}. ${ev.length ? "" : "A quiet month: "}${ev.length ? "The largest" : "the largest"} single-day move was ${big.toFixed(1)}%.` });
   return ev;
 }
-const STATUS = (st) => (st.status === "confirmed" ? `Confirmed by ${st.outlets.join(" + ")}` : st.status === "company" ? "From the company" : st.status === "official" ? `Official: ${st.official || "source"}` : `Single source: ${st.outlets[0]}`);
+const STATUS = (st) => (st.status === "confirmed" ? `Confirmed by ${st.outlets.join(" + ")}` : st.status === "company" ? "From the company" : st.status === "official" ? `Official: ${st.official || "source"}` : st.status === "community" ? `Community: ${st.community || "forum"}` : `Single source: ${st.outlets[0]}`);
 function storyHtml(st, pinned) {
   const more = st.links.slice(1).map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.source)} ↗</a>`).join(" ");
   return `<article class="story" id="st-${st.key}"><div class="srow2"><a class="h" href="${esc(st.links[0].url)}" target="_blank" rel="noopener">${esc(st.title)}</a>
@@ -671,7 +672,7 @@ export function applyTheme() {
   const t = store.data?.settings?.theme || "dark";
   const dark = t === "dark" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
-  document.querySelector('meta[name="theme-color"]').content = dark ? "#0B0F14" : "#F4F6F8";
+  document.querySelector('meta[name="theme-color"]').content = dark ? "#14120F" : "#F4EFE6";
 }
 
 // ---------- boot

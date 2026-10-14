@@ -2,16 +2,18 @@
 // tidy-up of groups. Everything here is written by the job only, so nobody can change their own card or rank.
 //
 //   players/{acct}   u (username), score, band, prov, n, followers, public, rank, of, spot, closePlus, best, badges,
-//                    since, line (the score at the end of each day, last 90 days)
+//                    since, line (the score at the end of each day, last 90 days), mix (calls per closeness label,
+//                    Spot on → Far off), streak and bestStreak (days in a row with a 1-day call, Indian time)
 //   boards/public    rows (top 100 public players), of (how many are ranked)
 // A card never holds a price call. Followers are counted from everyone's "following" lists (which stay private).
 import { HORIZONS } from "../../web/js/score.js";
+import { mixOf, streakOf, streakBadges } from "../../web/js/habit.js";
 
 const CLOSE = new Set(["Spot on", "Very close", "Close"]);
 export const RANK_MIN = 10; // scored calls before a public player is ranked (the score stops being provisional)
 
 // What a card says about someone's record, from their scored results.
-export function record(results) {
+export function record(results, now = Date.now(), open = []) {
   const n = results.length, close = results.filter((r) => CLOSE.has(r.label)).length;
   let best = null, bestShare = -1;
   for (const h of Object.keys(HORIZONS)) {
@@ -21,14 +23,15 @@ export function record(results) {
     if (share > bestShare) { best = h; bestShare = share; }
   }
   const spot = results.filter((r) => r.label === "Spot on").length;
-  const badges = [spot && "First Spot on", n >= 10 && "10 scored", n >= 100 && "100 scored", new Set(results.map((r) => r.horizon)).size === Object.keys(HORIZONS).length && "All 4 periods"].filter(Boolean);
-  return { spot, closePlus: n ? Math.round((close / n) * 100) : null, best, badges };
+  const st = streakOf([...results, ...open], now); // calls still open count too: a streak is about making calls
+  const badges = [spot && "First Spot on", n >= 10 && "10 scored", n >= 100 && "100 scored", new Set(results.map((r) => r.horizon)).size === Object.keys(HORIZONS).length && "All 4 periods", ...streakBadges(st.best)].filter(Boolean);
+  return { spot, closePlus: n ? Math.round((close / n) * 100) : null, best, badges, mix: mixOf(results), streak: st.n, bestStreak: st.best };
 }
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // accounts: every account (from the data job); scored: Map account → scored results (from settlePredictions).
-export async function publishPlayers(db, accounts, scored = new Map(), { now = Date.now(), log = console.log } = {}) {
+export async function publishPlayers(db, accounts, scored = new Map(), { now = Date.now(), log = console.log, open = new Map() } = {}) {
   const named = accounts.filter((a) => typeof a.username === "string");
   const followers = new Map();
   for (const a of accounts) for (const f of new Set(Array.isArray(a.following) ? a.following : [])) if (f !== a.id) followers.set(f, (followers.get(f) || 0) + 1);
@@ -42,7 +45,7 @@ export async function publishPlayers(db, accounts, scored = new Map(), { now = D
     const ps = a.pscore || null, prev = old.get(a.id);
     const line = (Array.isArray(prev?.line) ? prev.line : []).filter((x) => x.d > from && x.d !== today);
     if (ps?.score != null) line.push({ d: today, s: ps.score });
-    const rec = scored.has(a.id) ? record(scored.get(a.id)) : { spot: prev?.spot ?? 0, closePlus: prev?.closePlus ?? null, best: prev?.best ?? null, badges: prev?.badges ?? [] };
+    const rec = scored.has(a.id) ? record(scored.get(a.id), now, open.get(a.id) || []) : { spot: prev?.spot ?? 0, closePlus: prev?.closePlus ?? null, best: prev?.best ?? null, badges: prev?.badges ?? [], mix: prev?.mix ?? null, streak: prev?.streak ?? 0, bestStreak: prev?.bestStreak ?? 0 };
     const doc = { u: a.username, score: ps?.score ?? null, band: ps?.band ?? null, prov: ps ? !!ps.provisional : true, n: ps?.n || 0,
       followers: followers.get(a.id) || 0, public: a.public === true, rank: rank.get(a.id) || null, of: ranked.length,
       ...rec, since: String(a.createdAt || "").slice(0, 7), line };

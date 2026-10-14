@@ -1,5 +1,6 @@
 // News: fetch from GDELT (free, commercial use allowed with a citation), keep neutral outlets only,
 // drop opinion and promotional headlines, and merge the same story across outlets.
+import { snapshotVotes, forumTopics } from "./community.mjs";
 
 // Outlets kept, by domain. Left out on purpose: Bloomberg (founder ran for US president), WSJ / Barron's /
 // MarketWatch (News Corp, controlled by the Murdoch family, which also controls Fox News), Financial Times,
@@ -61,7 +62,7 @@ const toks = (t) => new Set(String(t).toLowerCase().replace(/[^a-z0-9₹$.%]+/g,
 
 // items: [{title, url, outlet, date:'YYYY-MM-DD', ts, sym?, scope?}] → stories, newest first.
 export function groupStories(items) {
-  const list = items.filter((x) => (x.official ? x.title && x.url : keep(x))).map((x) => ({ ...x, t: toks(x.title) }));
+  const list = items.filter((x) => (x.official || x.community ? x.title && x.url : keep(x))).map((x) => ({ ...x, t: toks(x.title) }));
   const parent = list.map((_, i) => i);
   const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
   for (let i = 0; i < list.length; i++)
@@ -79,8 +80,8 @@ export function groupStories(items) {
   list.forEach((x, i) => { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(x); });
   const stories = [...groups.values()].map((g) => {
     g.sort((a, b) => (a.ts || "").localeCompare(b.ts || ""));
-    const outlets = [...new Set(g.filter((x) => x.outlet !== "Company release" && !x.official).map((x) => x.outlet))];
-    const official = g.find((x) => x.official)?.outlet || null;
+    const outlets = [...new Set(g.filter((x) => x.outlet !== "Company release" && !x.official && !x.community).map((x) => x.outlet))];
+    const official = g.find((x) => x.official)?.outlet || null, community = g.find((x) => x.community)?.outlet || null;
     const links = [], seen = new Set();
     for (const x of g) if (!seen.has(x.url)) { seen.add(x.url); links.push({ source: x.outlet, url: x.url }); }
     const title = g[0].title, withIntro = g.find((x) => x.intro);
@@ -88,7 +89,7 @@ export function groupStories(items) {
       key: storyKey(title), title,
       date: g.map((x) => x.date).sort().pop(), ts: g.map((x) => x.ts || "").sort().pop(),
       outlets, company: g.some((x) => x.outlet === "Company release"),
-      status: outlets.length >= 2 ? "confirmed" : outlets.length === 1 ? "single" : official ? "official" : "company", official,
+      status: outlets.length >= 2 ? "confirmed" : outlets.length === 1 ? "single" : official ? "official" : community ? "community" : "company", official, ...(community ? { community } : {}),
       links: links.slice(0, 6),
       ...(withIntro ? { intro: withIntro.intro, introBy: withIntro.outlet } : {}),
       syms: [...new Set(g.map((x) => x.sym).filter(Boolean))],
@@ -217,11 +218,12 @@ export async function fetchNews(symbols, { log = console.log, pause = 6000 } = {
     pool.push(...(await gdelt(g.length > 1 ? `(${g.join(" OR ")})` : g[0], { days: 7, max: 250, domains: false })).filter((x) => x.outlet));
   }
   log(`gdelt: ${pool.length} headlines from listed outlets in ${groups.length} searches`);
+  const vote = await snapshotVotes([...new Set(syms.map((x) => x.t))], { log });
   for (const sym of syms) {
     const got = pool.filter((x) => mentions(x.title, sym)), fromFeeds = feeds.filter((x) => mentions(x.title, sym));
-    const official = await officialNews(sym);
-    [...got, ...fromFeeds, ...official].forEach((x) => items.push({ ...x, sym: sym.key }));
-    log(`news ${sym.key}: ${got.length} gdelt + ${fromFeeds.length} rss + ${official.length} official`);
+    const official = await officialNews(sym), forum = await forumTopics(sym.t, rss), votes = vote.filter((x) => x.sym === sym.key);
+    [...got, ...fromFeeds, ...official, ...forum, ...votes].forEach((x) => items.push({ ...x, sym: sym.key }));
+    log(`news ${sym.key}: ${got.length} gdelt + ${fromFeeds.length} rss + ${official.length} official + ${forum.length + votes.length} community`);
   }
   return groupStories(items);
 }

@@ -32,7 +32,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           base="${SITE_URL:-https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}}"
-          for f in candles.json news.json; do
+          for f in candles.json news.json daily.json; do
             curl -fsS --max-time 20 "$base/data/$f" -o "/tmp/$f" && node -e "JSON.parse(require('fs').readFileSync('/tmp/$f'))" && mv "/tmp/$f" "web/data/$f" \
               || echo "Using the copy of $f in the repository"
           done

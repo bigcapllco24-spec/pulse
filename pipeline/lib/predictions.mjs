@@ -24,18 +24,19 @@ export function politeKraken(fetchFn = fetch) {
 export const runRows = (fetchRows = politeKraken(), log = console.log) =>
   rowCache(async (t, iv) => { try { return await fetchRows(t, iv); } catch (e) { log(`candles: ${t} ${iv}m failed: ${e.message}`); return []; } });
 
-// Returns a tally, plus results: each account's scored results (for the player cards), for the accounts it read.
+// Returns a tally, plus results: each account's scored results (for the player cards), and open: each account's
+// predictions still open (for streaks), for the accounts it read.
 export async function settlePredictions(db, accounts, { now = Date.now(), fetchRows, log = console.log, rows = runRows(fetchRows, log) } = {}) {
-  const tally = { locked: 0, scored: 0, void: 0, profiles: 0 }, scoredBy = new Map();
+  const tally = { locked: 0, scored: 0, void: 0, profiles: 0 }, scoredBy = new Map(), openBy = new Map();
   for (const a of accounts) {
     const open = a.open || await db.list(`accounts/${a.id}/predictions`);
-    let resolved = 0;
+    let resolved = 0; const still = []; openBy.set(a.id, still);
     for (const p of open) {
       const { id, path, ...doc } = p;
       let res;
       try { res = await settle(doc, { now, rows }); } catch (e) { log(`predictions: ${a.id}/${id} skipped: ${e.message}`); continue; }
       if (res.patch.p0 != null) tally.locked++;
-      if (res.status === "open") { if (Object.keys(res.patch).length) await db.set(`accounts/${a.id}/predictions/${id}`, res.patch); continue; }
+      if (res.status === "open") { still.push({ ...doc, ...res.patch }); if (Object.keys(res.patch).length) await db.set(`accounts/${a.id}/predictions/${id}`, res.patch); continue; }
       // scored or voided: move it to results (a fresh id, as the same coin and period can be predicted again)
       const rid = `${id}_${Date.parse(doc.createdAt)}`;
       await db.set(`accounts/${a.id}/results/${rid}`, { ...doc, ...res.patch });
@@ -53,7 +54,7 @@ export async function settlePredictions(db, accounts, { now = Date.now(), fetchR
     tally.profiles++;
   }
   log(`predictions: ${tally.locked} locked, ${tally.scored} scored, ${tally.void} voided, ${tally.profiles} profile scores`);
-  return { ...tally, results: scoredBy };
+  return { ...tally, results: scoredBy, open: openBy };
 }
 
 // The quick run (every 15 minutes): one query finds every open prediction, so only accounts with something open

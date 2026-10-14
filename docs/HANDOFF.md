@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 13 Oct 2026 (**version 1.0.11**, service worker `pulse-shell-v47`, firestore.rules published 13 Oct 8:51 AM IST). Version lives in `web/config.js` and shows at the
+Last updated 14 Oct 2026 (**version 1.1.0**, service worker `pulse-shell-v48`, firestore.rules published 13 Oct 8:51 AM IST; 1.1.0 needs no rules change). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -44,10 +44,11 @@ web/                    the app (served as-is by GitHub Pages)
   sw.js                 service worker: cache-first; bump SHELL ("pulse-shell-vNN") on every release
   config.js             Firebase web config (public by design), VAPID key
   styles.css            all styles; type scale tokens --t-xs/s/m/l/xl/xxl in :root; landscape block at the end
-  data/                 candles.json + news.json (written by the data job), indicators.json (guides), symbols.json
+  data/                 candles.json + news.json + daily.json (written by the data job), indicators.json (guides), symbols.json
   js/app.js             feed: cards, swipes, details pane, news pane, daily recap, redrawCards()
   js/pages.js           Coins tab (watchlist + alerts), settings pages, panel-fit chooser, sheets (chart chip, ƒx indicators, lines/S/R), feedback inbox
-  js/play.js            Predict tab: score header, Calls / Groups / Ranks, predict + challenge + pick sheets, groups, player cards,
+  js/play.js            Predict tab: score header (streak, share), Calls (daily coin, your week, what happened) / Groups / Ranks,
+                        predict + challenge + pick sheets, groups, player cards,
                         leaderboard, find players, the Account sheet (letter avatar), #/g/<id> join links
   js/social.js          data for groups, challenges, picks, invites, following, player cards and the board (Firestore, or demo cast)
   js/data.js            prices: cache, Kraken daily, intraday (krakenBars, INTRA 1D/1W), view() per chart settings, dailyOf()
@@ -60,25 +61,37 @@ web/                    the app (served as-is by GitHub Pages)
   js/describe.js        plain-language meaning of each reading
   js/store.js           account (Firebase or demo), saves, alerts, lists, username, predictions, feedback
   js/score.js, predict.js  prediction game (shared with the pipeline)
+  js/habit.js           habit loop (shared with the pipeline): streaks, daily coin, crowd, mix, next band, what happened,
+                        tendency, weekly recap, morning summary. Days are Indian time for everyone.
+  js/card.js            the player card / profile markup (dial, next band, tiles, how close calls land, 90-day line)
+  js/share.js           share your card as an image: drawn on a canvas (Story 1080×1920 / Square 1080×1080, Paper or dark)
   js/feedback.js        press-and-hold (3 s) / Feedback mode → note about the tapped part
   js/panels.js          ⤢ sheet with the chosen panels large
   js/coach.js, search.js, ui.js (sheets incl. swipe-down close, toast)
 pipeline/               Node 22, run by GitHub Actions
   run.mjs               full data job: follows → prices → news → alerts + push → predictions → player cards + board → tidy groups
+                        → daily.json (daily coin + crowd) → morning results push (7–9:30 AM IST run, once a day)
   settle.mjs            quick job: score due predictions, then group picks; reveal finished challenges and push members
-  lib/crypto.mjs, news.mjs (GDELT + RSS + official feeds, story grouping), predictions.mjs, google.mjs (Firestore REST + FCM)
+  lib/crypto.mjs, news.mjs (GDELT + RSS + official + community feeds, story grouping), predictions.mjs, google.mjs (Firestore REST + FCM)
+  lib/community.mjs     Snapshot governance votes + project forum topics (facts only, price talk dropped); lib/habit.mjs daily.json, morning push
   lib/challenges.mjs    group challenges (settleChallenges, pusher); lib/players.mjs player cards, public board, tidyGroups
 .github/workflows/
   deploy.yml            push → publish in ~1 min (reuses live data); every 2 h / manual → data job (~2 min) then publish
   settle.yml            every 15 min → pipeline/settle.mjs
 firestore.rules         source of truth for rules (must be published by hand, see section 6)
-scripts/check.sh        all tests; tests/ = pipeline, levels, score, predict, social (Node) + e2e.py (Playwright: phone, desktop, iOS,
+scripts/check.sh        all tests; tests/ = pipeline, levels, score, predict, social, habit (Node) + e2e.py (Playwright: phone, desktop, iOS,
                         groups end to end, 6 screen sizes incl. 320 px, landscape, desktop and light theme)
 ```
 
-## 4. Features as of 1.0.0 (13 Oct 2026)
+## 4. Features as of 1.1.0 (14 Oct 2026)
 
 **Tabs:** Coins · Feed · Predict. Settings live in the Account sheet (tap your letter avatar on Predict).
+
+**Colours (1.1.0):** light = **Paper** (ground #F4EFE6, card #FFFDF8, text #1C1A16, tap #2D5BE3); dark = Paper's dark
+twin: **Ink ground #14120F with neutral Graphite boxes** (card #1A1B1D, raised #232427, line #2E3033), cream text
+#F2ECE1, tap #7C9CFF. Switching light ↔ dark must not change the feel of the app (Veer). Tokens are in `:root` and
+`:root[data-theme="light"]` at the top of styles.css; score bands are `--b1`…`--b5`. Designs:
+https://claude.ai/artifact/J9GbykhVNMbWf442SYA3yg
 
 
 - **Feed card** (default range 1D):
@@ -114,8 +127,10 @@ scripts/check.sh        all tests; tests/ = pipeline, levels, score, predict, so
 - **Details pane** (swipe left): header % = same move as the feed chip ("in 24h" on 1D). Sections: At a glance,
   Daily candle (UTC day, starts 5:30 AM IST), Performance, Trend, Volatility, Indicators · daily candles (flat
   rows, gauge for 0–100 ones), Where the price sits, Alerts. Each section has an ⓘ note.
-- **News pane:** Confirmed (2+ outlets), From the project (official releases), Also reported (one outlet), and
-  price events computed from candles, so it's never empty.
+- **News pane:** Confirmed (2+ outlets), Official sources (project releases, Kraken, SEC), Also reported (one
+  outlet), **Community** (1.1.0: Snapshot governance votes and new topics on the projects' own forums, title and link
+  only, anything about prices or trading dropped; never Reddit or X, which are paid or not free for commercial use and
+  full of price calls), and price events computed from candles, so it's never empty.
 - **Daily recap card:** the % change since midnight, local time.
 - **Prediction game:** see section 5 for how the timelines and scoring work.
 - **Feedback loop:**
@@ -235,7 +250,19 @@ The prediction game is what turns the app from something people read into someth
 - The prediction sheet: the four periods, the price now, and the range that counts.
 - The Predict tab (section 5a).
 
-**Gamification ideas to build next (not built):**
+**Habit loop (built in 1.1.0, `web/js/habit.js`, `pipeline/lib/habit.mjs`):**
+- **Streaks:** days in a row (Indian time) with at least one 1-day call; open, scored or voided all count. On the
+  Predict header, the profile and the share card; badges at 7, 30, 100 days. Cards get `streak`, `bestStreak`.
+- **Daily coin:** one coin a day for everyone (`DAILY_COINS` rotation, day turns at midnight IST). A daily-coin call
+  is just a 1-day call on that coin made that day (no extra data). The data job writes `data/daily.json` with how the
+  crowd did on the last 7 days' coins (label counts only, never a price).
+- **What happened:** tap a scored call for its prices and a past-tense fact line (move in % and typical moves, stories
+  in that time).
+- **Your week + "your calls tend to…":** on Calls; the tendency needs 10 calls in a period and only describes them.
+- **Morning push:** the 7–9:30 AM IST data run sends each player one summary of calls scored since yesterday (and last
+  week's recap on Mondays), once a day (`accounts/{acct}.lastMorning`).
+
+**Earlier ideas list (now built):**
 - **Streaks:** consecutive days with a 1-day call; show it on the score card.
 - **Daily challenge:** one coin a day that everyone predicts. Show how the crowd did only after it resolves.
 - **Weekly recap card:** "3 of 5 calls Close or better this week".
@@ -389,7 +416,11 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 - Default chart 1D; panels max 4 from 390 px wide, else 2.
 - Three tabs: Coins, Feed, Predict. Predictions live only on Predict; settings sit behind the letter avatar.
 - Scores belong to the account id. "Groups", not chats; no chat. Only follower counts are public, never who follows whom.
-- Leaderboard opt-in; group challenges 1h/1d/1y only; results never show anyone's price call; one palette (Midnight).
+- Leaderboard opt-in; group challenges 1h/1d/1y only; results never show anyone's price call.
+- Colours: Paper for light, Ink ground + Graphite boxes for dark, same feel in both (14 Oct). Profile redesign approved.
+- Daily coin and streak days run on Indian time for everyone. Other players' cards use the same new design.
+- No real sign-in in 1.1.0 (username login stays the accepted MVP risk). Community content: no Reddit/X posts; Snapshot
+  votes and project forums only. Reddit mention counts parked until Reddit confirms commercial use.
 - Username first, changeable twice; login by username is an accepted MVP risk.
 - Feedback: hold 3 s; all notes kept in Firestore (no batches); Claude marks them done with a note.
 - Testing: targeted checks for small changes, full suite once per batch in the background; report every push.
@@ -402,8 +433,10 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 - **Pivot labels** crowd the price scale on the full-screen chart.
 - **More GDELT stories:** once GDELT is back, check that BNB, Hyperliquid and Chainlink get stories. BNB and
   HYPE also need RSS sources.
-- **Prediction game:** compliance review of its wording (now also the leaderboard and groups); confirm the
-  15-minute job scores real predictions and group picks.
+- **Prediction game:** compliance review of its wording (now also the leaderboard, groups, the "your calls tend to…"
+  line and the Community section); confirm the 15-minute job scores real predictions and group picks.
+- **1.1.0 live checks:** the first morning push (7:47 AM IST run), daily.json's crowd once a day's calls are scored,
+  and that the Snapshot and forum feeds return items from GitHub Actions (the sandbox can't reach them).
 - **iOS** has no vibration API, so the lock-in/reveal haptics only work on Android; the visual thump still shows.
 - **iOS Home Screen strip (1.0.9):** on current iOS a Home Screen app's visible area can be ~62 pt shorter than the
   screen. The old fix pushed the tab bar, sheets and group page down into that strip, but it isn't drawn, so their
@@ -411,7 +444,8 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
   Root cause: `apple-mobile-web-app-status-bar-style` `black-translucent` makes iOS 26 size the Home Screen app to the
   screen minus the status bar, anchored at the top. 1.0.10 uses `black` (app drawn from under the status bar to the
   bottom edge). iOS reads that tag only when the app is added, so existing installs must be removed and re-added once.
-- **To discuss:** compare two coins on one chart; share a card as an image; moving an account to a new phone;
+- **Reddit mention counts** (parked): only if Reddit confirms Pulse's use; a number only, never posts.
+- **To discuss:** compare two coins on one chart; moving an account to a new phone;
   stock data (on hold, needs a licence).
 
 ## 11. A good first message for a new chat
