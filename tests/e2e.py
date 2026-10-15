@@ -305,6 +305,11 @@ def phone_tests(b):
     check("phone: sheet returns to search for the next coin", p.locator("#addQ").count() == 1)
     p.click("#sheet [data-close]"); p.wait_for_timeout(900)
     check("phone: feed jumps to the newly added stock", active(p)[0] == "ADA", str(active(p)))
+    inl = p.evaluate("""(async()=>{const s=await import('./js/store.js'), m=await import('./js/pages.js'); const keep=s.store.data.settings.list;
+      s.store.data.settings.list=s.watchlists().find(w=>w.name==='Altcoins').id; m.openAddSheet(); await new Promise(r=>setTimeout(r,900));
+      const out=[...document.querySelectorAll('#addRes .result.in .t')].map(x=>x.textContent); s.store.data.settings.list=keep; return out})()""")
+    check("phone: in the add sheet, Added means in the watchlist being added to, not in some other list", inl == ["ADA"], str(inl))
+    p.click("#sheet [data-close]"); p.wait_for_timeout(900)
 
     p.click("#switcher"); p.wait_for_timeout(500)
     rows = p.locator("#sheet [data-l]").all_inner_texts()
@@ -599,7 +604,7 @@ def prediction_test(b):
     check("predict: locking in confirms it, the chip counts it, and 1 day can't be predicted again while it's open", "Locked in" in toast_txt and "1" in badge and one_open, f"{toast_txt} / {badge!r}")
     p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(600)
     head0 = p.inner_text("#play .pl-head"); open0 = p.inner_text("#play .pl-view")
-    check("predict: predictions live on the Predict tab: before anything is scored there's no score yet, and Calls lists the open one", "No score yet" in head0 and "@chart_fan" in head0 and "open · 1" in open0.lower() and "called" in open0, f"{head0!r} / {open0[:120]!r}")
+    check("predict: predictions live on the Predict tab: before anything is scored the score shows 0, and Calls lists the open one", "No calls scored yet" in head0 and "@chart_fan" in head0 and "open · 1" in open0.lower() and "called" in open0, f"{head0!r} / {open0[:120]!r}")
     # an hour-long call made 3 hours ago (settled on the phone from 1-minute candles) and 11 earlier scored results
     p.evaluate("""(async()=>{const d=JSON.parse(localStorage.getItem('pl.demoPreds')), made=Date.now()-3*3600e3;
       const j=await (await fetch('https://api.kraken.com/0/public/OHLC?pair=ETHUSD&interval=1')).json(), r=j.result.ETHUSD.filter(x=>x[0]*1000<=made).pop();
@@ -633,7 +638,8 @@ def prediction_test(b):
     p.evaluate("localStorage.setItem('pl.dailySeen', JSON.stringify('2000-01-01'))"); p.reload(); p.wait_for_timeout(4500)
     auto = p.inner_text("#sheet") if p.is_visible("#sheet") else ""
     seen = p.evaluate("localStorage.getItem('pl.dailySeen')")
-    p.click("#sheet [data-close]") if auto else None; p.wait_for_timeout(400)
+    p.click("#sheet .sh-body [data-close]") if auto else None; p.wait_for_timeout(500)
+    check("daily coin: Not now closes the popup on the first tap", bool(auto) and not p.is_visible("#sheet"))
     p.reload(); p.wait_for_timeout(4500)
     again = p.is_visible("#sheet")
     check("daily coin: the popup opens by itself on the first open of the day, and only once that day", "Today's coin" in auto and seen and "2000" not in seen and not again, f"{auto[:60]!r} seen={seen} again={again}")
@@ -869,6 +875,8 @@ def group_test(b):
     check("group page: a timeline with day labels; results already seen fold to one neat line each", p.locator("#grp .grp-res").count() == 2 and p.locator("#grp .chcard").count() == 0 and "grp-day" in tl and p.is_hidden(".tabbar"), tl)
     p.click("#grp .grp-res >> nth=0"); p.wait_for_timeout(400)
     check("group page: tapping a folded result opens it in full", p.locator("#grp .grp-res").count() == 1 and p.locator("#grp .chcard").count() == 1)
+    p.click("#grp .chcard [data-fold]"); p.wait_for_timeout(400)
+    check("group page: Fold on an open result folds it back to one line", p.locator("#grp .grp-res").count() == 2 and p.locator("#grp .chcard").count() == 0)
     p.click("#grBack"); p.wait_for_timeout(500); p.click("[data-pv=ranks]"); p.wait_for_timeout(400)
     rk = p.inner_text(f"#play [data-board='{gid}']")
     check("ranks: the group shows on Ranks with my place this month", "Weekend crew" in rk and _re.search(r"\d(st|nd|rd|th)", rk) and "pts" in rk, rk.replace("\n", " "))

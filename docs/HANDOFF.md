@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 14 Oct 2026 (**version 1.1.2**, service worker `pulse-shell-v50`, firestore.rules published 13 Oct 8:51 AM IST; 1.1.0 needs no rules change). Version lives in `web/config.js` and shows at the
+Last updated 15 Oct 2026 (**version 1.1.3**, service worker `pulse-shell-v51`, firestore.rules published 13 Oct 8:51 AM IST; 1.1.0 needs no rules change). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -144,7 +144,7 @@ https://claude.ai/artifact/J9GbykhVNMbWf442SYA3yg
   **Alerts**: new alerts (dismiss), your rules with on/off switches, New alert, All rules, Alert history.
 - **Predict tab:** see section 5a.
 - **Adding coins** (+ on the feed, also on the caught-up card): most-traded coins listed before typing; one tap
-  adds to the feed's watchlist with Undo; sheet stays open; Enter adds the top match; tapping an added coin
+  adds to the feed's watchlist with Undo ("✓ Added" means in that watchlist, not in any list); sheet stays open; Enter adds the top match; tapping an added coin
   changes its watchlists. Closing jumps the feed to the last coin added.
 - **Sheets** close by swiping down (from the top bar, or from the content once scrolled to the top).
 - **Text boxes** are 16 px+ so iPhones don't zoom; the open sheet stays above the keyboard.
@@ -218,7 +218,8 @@ The prediction game is what turns the app from something people read into someth
      1-year result moves the score about 40× as much as one 30-minute result.
    - **Fading:** results fade from when they're scored, so a 1-year call is never punished for waiting, and doing
      nothing doesn't change the score.
-   - **Starting point:** everyone starts at **550**, about what random guessing scores. The score shows as
+   - **Starting point:** everyone starts at **550**, about what random guessing scores. Until the first call is scored the
+     app shows **0** ("No calls scored yet"), at Veer's request (15 Oct). The score shows as
      **Provisional** until 10 predictions are scored. With few results it's pulled towards 550.
    - **Bands:**
      - Exceptional 800–900
@@ -254,7 +255,7 @@ The prediction game is what turns the app from something people read into someth
 - **Streaks:** days in a row (Indian time) with at least one 1-day call; open, scored or voided all count. On the
   Predict header, the profile and the share card; badges at 7, 30, 100 days. Cards get `streak`, `bestStreak`.
 - **Daily coin:** one coin a day for everyone (`DAILY_COINS` rotation, day turns at midnight IST). On Calls it's a
-  one-line banner (1.1.2); the explanation and yesterday's crowd are in a popup that opens by itself once a day
+  two-line banner ("Today's coin · time left" over coin and price, 1.1.3); the explanation and yesterday's crowd are in a popup that opens by itself once a day
   (first open of the app that day, if not called yet and nothing else is on screen; `pl.dailySeen`) or from the banner. A daily-coin call
   is just a 1-day call on that coin made that day (no extra data). The data job writes `data/daily.json` with how the
   crowd did on the last 7 days' coins (label counts only, never a price).
@@ -280,7 +281,7 @@ invites, Start a group), **Ranks** (find players, cards for Everyone / People yo
 
 **Groups** (max 20 players, max 10 groups each; the random 20-character id is the invite link `#/g/<id>`):
 - **Group page** (full screen, not a sheet): the challenges as a timeline, oldest first and newest at the bottom, with
-  day labels; every result you've seen folds to one line (tap to open; one just revealed stays open); live challenges
+  day labels; every result you've seen, or that you weren't in, folds to one line (tap to open, **Fold** to close again; one just revealed stays open); live challenges
   show in full; the tab bar is hidden while it's open; New challenge fixed at the bottom; header has invite, this month's table and group info. Back button,
   Escape or the phone's back close it.
 - **Joining:** a link never adds anyone by itself: it shows "Join this group?" (name, starter, players) with Join /

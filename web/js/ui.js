@@ -39,7 +39,7 @@ export function openSheet(title, body, onMount, onClose) {
   sh.innerHTML = `<div class="grab"></div><div class="sh-head"><h2 id="shTitle">${title}</h2><button class="btn ghost" data-close aria-label="Close">Done</button></div><div class="sh-body">${body}</div>`;
   sh.hidden = false; bd.hidden = false;
   requestAnimationFrame(() => { sh.classList.add("on"); bd.classList.add("on"); });
-  sh.querySelector("[data-close]").onclick = closeSheet;
+  sh.onclick = (e) => { if (e.target.closest("[data-close]")) closeSheet(); }; // Done, and any "Not now" etc. in the body
   bd.onclick = closeSheet;
   onCloseFn = onClose || null;
   onMount?.(sh.querySelector(".sh-body"), sh);

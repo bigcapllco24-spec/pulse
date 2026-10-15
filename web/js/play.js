@@ -99,12 +99,12 @@ export function renderPlay() {
     <button class="pl-head" id="plCard" aria-label="Your profile">
       <span class="ava lg ${sc?.score != null && !prov ? BAND_CLASS[sc.band] || "" : "prov"}" aria-hidden="true">${esc((u || "?")[0].toUpperCase())}</span>
       <span class="pl-who">
-        <span class="pl-score">${sc?.score != null ? `<b class="num">${sc.score}</b><span class="${BAND_CLASS[sc.band] || ""}t">${esc(sc.band)}</span>` : `<span class="muted">No score yet</span>`}</span>
+        <span class="pl-score">${sc?.score != null ? `<b class="num">${sc.score}</b><span class="${BAND_CLASS[sc.band] || ""}t">${esc(sc.band)}</span>` : `<b class="num">0</b><span class="muted">No calls scored yet</span>`}</span>
         <span class="pl-sub">${sub}</span>
         ${st.n ? `<span class="pl-streak${st.today ? "" : " due"}">${svgIcon("flame")}<span>${num(st.n)}-day streak${st.today ? "" : " · call today to keep it"}</span></span>` : ""}
       </span>
       <span class="pl-go">Profile<span class="chev">›</span></span>
-      ${prov ? `<span class="pl-progress"><span class="pl-prog" aria-hidden="true"><i style="width:${Math.min(100, (n / PROVISIONAL_UNDER) * 100)}%"></i></span><span class="hint">${sc?.score != null ? `${n} of ${PROVISIONAL_UNDER} calls scored. Your score settles at ${PROVISIONAL_UNDER}, then you can join the public leaderboard.` : `Make a call to start your score. Everyone starts at ${CHANCE}, about what guessing scores.`}</span></span>` : ""}
+      ${prov ? `<span class="pl-progress"><span class="pl-prog" aria-hidden="true"><i style="width:${Math.min(100, (n / PROVISIONAL_UNDER) * 100)}%"></i></span><span class="hint">${sc?.score != null ? `${n} of ${PROVISIONAL_UNDER} calls scored. Your score settles at ${PROVISIONAL_UNDER}, then you can join the public leaderboard.` : `Make a call to start your score. The first scored call starts it at about ${CHANCE}, what guessing scores.`}</span></span>` : ""}
     </button>
     ${wait ? `<button class="strip" data-pick="${esc(wait.g)}|${esc(wait.id)}"><i></i><span class="m"><b>${esc(groupName(wait.g))} needs your pick</b><span class="s">${esc(wait.t)} · ${SHORT[wait.horizon]} · closes in ${num(until(wait.joinUntil))}</span></span><span class="chev">›</span></button>`
       : view !== "groups" && S.invites.length ? `<button class="strip" id="plInv"><i></i><span class="m"><b>@${esc(S.invites[0].from)} invited you to ${esc(S.invites[0].name)}</b><span class="s">${S.invites.length > 1 ? `${S.invites.length} invites · ` : ""}Join or decline in Groups</span></span><span class="chev">›</span></button>` : ""}
@@ -164,7 +164,7 @@ function dailyState(here = [...scoredHere.values()]) {
 function dailyBox(here) {
   const { dc, mine, blocked, price, left } = dailyState(here);
   const right = mine ? `<span class="lab good">You're in</span>` : blocked ? `<span class="hint">1-day call open</span>` : `<span class="btn primary sm">Call</span>`;
-  return `<button class="daily" data-dailyinfo><span class="daily-k">Today's coin</span><span class="daily-m"><b>${esc(dc.t)}</b>${price ? `<span class="num">${esc(m$(price))}</span>` : ""}<span class="hint num">${left} left</span></span>${right}</button>`;
+  return `<button class="daily" data-dailyinfo><span class="daily-m"><span class="daily-k">Today's coin<span class="num"> · ${left} left</span></span><span class="daily-c"><b>${esc(dc.t)}</b>${price ? `<span class="num">${esc(m$(price))}</span>` : ""}</span></span>${right}</button>`;
 }
 // ---------- the daily popup: once a day, on the first open of the app that day (Indian time), until you've called it
 const DAILY_SEEN = "pl.dailySeen";
@@ -474,7 +474,8 @@ function drawGroup(toBottom = false) {
   let day = "", rows = "";
   for (const ch of list) {
     const d = dayLabel(ch.at); if (d !== day) { day = d; rows += `<span class="grp-day">${esc(d)}</span>`; }
-    const fold = ch.status === "done" && isSeen(ch.id) && !opened.has(ch.id); // seen results fold to one line; tap to open
+    const mineIn = (ch.results || []).some((r) => r.a === me());
+    const fold = ch.status === "done" && (isSeen(ch.id) || !mineIn) && !opened.has(ch.id); // seen results (and ones you weren't in) fold to one line; tap to open
     if (fold) {
       const r = (ch.results || []), win = r.find((x) => x.rank === 1), mine = r.find((x) => x.a === me());
       rows += `<button class="grp-res" data-open="${esc(ch.id)}"><span class="main"><span class="t">${esc(ch.t)} · ${SHORT[ch.horizon]} · results</span><span class="s">${win ? `${win.a === me() ? "You" : "@" + esc(win.u)} won` : "No one scored"}${mine && win?.a !== me() ? ` · you were ${mine.rank ? ord(mine.rank) : "not counted"}, ${esc(mine.label)}` : ""}</span></span><span class="chev">›</span></button>`;
@@ -499,6 +500,7 @@ function drawGroup(toBottom = false) {
   el.querySelector("#grTable").onclick = () => openGroupTable(g);
   el.querySelector("#grShare")?.addEventListener("click", () => shareLink(g));
   el.querySelectorAll("[data-open]").forEach((x) => (x.onclick = () => { opened.add(x.dataset.open); drawGroup(); }));
+  el.querySelectorAll("[data-fold]").forEach((x) => (x.onclick = () => { markSeen(x.dataset.fold); opened.delete(x.dataset.fold); drawGroup(); }));
   el.querySelectorAll("[data-reveal]").forEach((x) => (x.onclick = () => { markSeen(x.dataset.reveal); opened.add(x.dataset.reveal); haptic([8, 30, 8]); APP.flip = x.dataset.reveal; drawGroup(); APP.flip = null; badge(); el.querySelector(".chcard.flip")?.scrollIntoView({ block: "start", behavior: "smooth" }); }));
   el.querySelectorAll("[data-rx]").forEach((x) => (x.onclick = async () => { const [c, k] = x.dataset.rx.split("|"); try { await react(g, c, k); haptic(); } catch { toast("Couldn't react just now."); } }));
   el.querySelectorAll("[data-again]").forEach((x) => (x.onclick = () => { const ch = list.find((c) => c.id === x.dataset.again); openChallengeSheet(g, { coin: ch.coin, horizon: ch.horizon }); }));
@@ -526,7 +528,7 @@ function chCard(g, ch, n) {
     const rx = ch.rx || {}, counts = Object.fromEntries(REACTIONS.map(([k]) => [k, Object.values(rx).filter((v) => v === k).length]));
     const mineRx = rx[me()];
     return `<div class="chcard${APP.flip === ch.id ? " flip" : ""}">
-      <div class="secrow" style="margin:0"><b>${title}</b><span class="hint">${ch.end != null ? `ended ${num(esc(m$(ch.end)))}${ch.move != null ? ` <span class="${ch.move >= 0 ? "up" : "down"} num">${esc(pct(ch.move, 1))}</span>` : ""}` : ""}</span></div>
+      <div class="secrow" style="margin:0"><b>${title}</b><span class="hint" style="flex:1;text-align:right">${ch.end != null ? `ended ${num(esc(m$(ch.end)))}${ch.move != null ? ` <span class="${ch.move >= 0 ? "up" : "down"} num">${esc(pct(ch.move, 1))}</span>` : ""}` : ""}</span><button class="linkbtn chfold" data-fold="${esc(ch.id)}">Fold</button></div>
       <div class="hl">${(ch.results || []).map((r, i) => `<button class="row rrow${r.a === me() ? " you" : ""}${APP.flip === ch.id ? " rin" : ""}" style="${APP.flip === ch.id ? `animation-delay:${0.2 + i * 0.09}s` : ""}" data-a="${esc(r.a)}"><span class="num lbn">${r.rank ?? "–"}</span>${ava(r.u, r.a === me() ? myCard() : S.cards.get(r.a), "xs")}<span class="main"><span class="t">@${esc(r.u)}</span><span class="s"><span class="lab ${LABEL_CLASS[r.label] || ""}">${esc(r.label)}</span> ${r.label === "Not counted" ? "couldn't be scored" : `${num(Math.abs(r.off).toFixed(1) + "%")} off · ${r.up ? "up" : "down"}`} · ${r.counts ? "counts" : "group only"}</span></span><b class="num rpts">+${r.pts}</b></button>`).join("")}
         ${missing.length ? `<div class="row"><span class="main"><span class="s">${missing.map(([, u]) => "@" + esc(u)).join(", ")} didn't pick</span></span></div>` : ""}</div>
       ${mineIn && ch.here ? `<p class="hint" style="margin:0">Scored on your phone just now · confirming. Reactions open in a few minutes.</p>` : ""}
@@ -625,7 +627,7 @@ export function openPredictSheet(sym, onDone, prefer = null) {
         ${canPost ? `<div class="pl-post"><label class="pl-switchrow"><span><b>Also post to a group</b><span class="hint">Members get ${PICK_MINS[horizon] >= 60 ? `${PICK_MINS[horizon] / 60} hour${PICK_MINS[horizon] === 60 ? "" : "s"}` : `${PICK_MINS[horizon]} minutes`} to call the same end time</span></span><span class="switch"><input type="checkbox" id="pPost" ${post ? "checked" : ""}><span></span></span></label>
           ${post ? `<div class="opts">${groups.map((x) => `<button class="opt" data-pg="${esc(x.id)}" aria-pressed="${x.id === g}">${esc(x.name)}</button>`).join("")}</div>` : ""}</div>` : ""}
         <button class="btn primary block" id="pGo" disabled>${post && canPost ? "Lock in and start challenge" : "Lock in prediction"}</button>
-        <p class="hint" style="text-align:center">Can't be changed or cancelled once locked. ${post && canPost ? "The group sees you called, not your price, until it's scored. " : ""}A learning game, not advice.</p>`;
+        <p class="hint" style="text-align:center;margin-top:10px">Can't be changed or cancelled once locked. ${post && canPost ? "The group sees you called, not your price, until it's scored. " : ""}A learning game, not advice.</p>`;
       const go = body.querySelector("#pGo"), f = watchPrice(body, "pIn", sym, horizon, (ok) => (go.disabled = !ok));
       body.querySelectorAll("[data-h]").forEach((b) => (b.onclick = () => { horizon = b.dataset.h; draw(f.inp.value); }));
       body.querySelector("#pPost")?.addEventListener("change", (e) => { post = e.target.checked; draw(f.inp.value); });
@@ -713,7 +715,7 @@ export function openAvatarSheet() {
   const sc = myScore(), card = myCard(), u = myName(), unread = store.alerts.filter((a) => !a.read).length;
   const row = (k, t, s, extra = `<span class="chev">›</span>`) => `<button class="row" data-av="${k}"><span class="main"><span class="t">${t}</span>${s ? `<span class="s">${s}</span>` : ""}</span>${extra}</button>`;
   const sw = (id, on, label) => `<span class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""} aria-label="${label}"><span></span></span>`;
-  openSheet("Account", `<button class="row pl-me" data-av="card">${ava(u, cardFromScore(), "lg")}<span class="main"><span class="t" style="font-size:var(--t-xl)">@${esc(u || "you")}</span><span class="s">${sc?.score != null ? `${num(sc.score)} ${esc(sc.band)}` : "No score yet"}${card?.followers ? ` · ${card.followers} follower${card.followers === 1 ? "" : "s"}` : ""}</span><span class="s" style="color:var(--accent);font-weight:700">View your profile</span></span><span class="chev">›</span></button>
+  openSheet("Account", `<button class="row pl-me" data-av="card">${ava(u, cardFromScore(), "lg")}<span class="main"><span class="t" style="font-size:var(--t-xl)">@${esc(u || "you")}</span><span class="s">${sc?.score != null ? `${num(sc.score)} ${esc(sc.band)}` : `${num(0)} · No calls scored yet`}${card?.followers ? ` · ${card.followers} follower${card.followers === 1 ? "" : "s"}` : ""}</span><span class="s" style="color:var(--accent);font-weight:700">View your profile</span></span><span class="chev">›</span></button>
     <div class="label pg">People and privacy</div><div class="hl">
       ${row("following", "Following", following().length ? `${following().length} player${following().length === 1 ? "" : "s"} · only you can see who` : "Players you follow show here, only to you")}
       <div class="row"><span class="main"><span class="t">Public leaderboard</span><span class="s">Show my username, score and rank to everyone</span></span>${sw("avPub", store.data?.public === true, "Public leaderboard")}</div>

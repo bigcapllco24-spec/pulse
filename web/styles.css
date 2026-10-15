@@ -711,7 +711,7 @@ button.ava { cursor: pointer; }
 .sealed { display: grid; justify-items: center; gap: 8px; text-align: center; width: 100%; border: 1.5px dashed var(--accent); background: var(--accent-soft); border-radius: 18px; padding: 20px 16px; color: var(--text); font: inherit; cursor: pointer; margin-bottom: 12px; }
 .sealed b { font-size: var(--t-l); }
 .shfoot { position: sticky; bottom: calc(-18px - var(--safe-b)); background: var(--surface); padding: 10px 0 calc(18px + var(--safe-b)); margin: 8px 0 calc(-18px - var(--safe-b)); border-top: 1px solid var(--line); z-index: 1; }
-.pl-post { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; display: grid; gap: 10px; }
+.pl-post { border-top: 1px solid var(--line); margin: 14px 0 18px; padding-top: 14px; display: grid; gap: 12px; } .pl-post .pl-switchrow > span:first-child { gap: 3px; }
 .pl-switchrow { display: flex; align-items: center; gap: 12px; cursor: pointer; } .pl-switchrow > span:first-child { flex: 1; display: grid; } .pl-switchrow .hint { margin: 0; }
 .optc { display: flex; gap: 12px; align-items: flex-start; border: 1.5px solid var(--line); border-radius: 16px; padding: 12px 14px; cursor: pointer; margin-top: 8px; }
 .optc.on { border-color: var(--accent); background: var(--accent-soft); } .optc.off { opacity: .55; cursor: default; }
@@ -751,6 +751,7 @@ button.ava { cursor: pointer; }
 .grp-f { padding: 10px 16px calc(10px + var(--safe-b)); border-top: 1px solid var(--line); background: var(--glass); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
 body.fbmode .grp { outline: 2px dashed var(--accent); outline-offset: -4px; }
 @media (prefers-reduced-motion: reduce) { .grp { transition: none; } }
+.chfold { flex: none; margin-left: 10px; padding: 6px 2px; }
 body.grpopen .tabbar { display: none; } /* the group page is its own screen: no tab bar under or over it */
 
 /* ---------- Predict tab, 1.0.8: a title row with settings, your profile as one card, the three parts as tiles, room to breathe */
@@ -856,9 +857,10 @@ body.grpopen .tabbar { display: none; } /* the group page is its own screen: no 
 .pl-streak { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; font-size: var(--t-s); font-weight: 700; color: var(--text); }
 .pl-streak svg { width: 15px; height: 15px; fill: none; stroke: var(--b5); stroke-width: 2.2; stroke-linejoin: round; }
 .pl-streak.due { color: var(--warn); }
-.daily { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; background: var(--surface); border: 1px solid var(--accent); border-radius: 16px; padding: 8px 10px 8px 14px; color: var(--text); font: inherit; text-align: left; cursor: pointer; margin-bottom: 4px; }
-.daily-k { font-size: var(--t-xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); flex: none; width: 52px; line-height: 1.2; }
-.daily-m { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; overflow: hidden; } .daily-m b { font-size: var(--t-l); } .daily-m .hint { margin: 0; }
+.daily { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 64px; background: var(--surface); border: 1px solid var(--accent); border-radius: 16px; padding: 10px 12px 10px 16px; color: var(--text); font: inherit; text-align: left; cursor: pointer; margin-bottom: 4px; }
+.daily-m { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.daily-k { font-size: var(--t-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .daily-k .num { color: var(--muted); font-weight: 600; letter-spacing: 0; text-transform: none; }
+.daily-c { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; overflow: hidden; } .daily-c b { font-size: var(--t-l); }
 .daily .btn.sm { flex: none; }
 .dpop { display: grid; gap: 10px; } .dpop .hint { margin: 0; }
 .dpop-main { display: flex; align-items: baseline; gap: 8px; } .dpop-main b { font-size: var(--t-xl); } .dpop-main .num { margin-left: auto; font-size: var(--t-l); font-weight: 600; }

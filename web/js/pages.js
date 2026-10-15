@@ -50,13 +50,14 @@ export function openAddSheet(prefill = "") {
     const q = body.querySelector("#addQ");
     let rows = [];
     const draw = () => {
-      const text = q.value.trim(), inAny = new Set(allSyms().map((s) => s.key)), idx = symbolIndex() || [];
-      const pop = POPULAR.map((k) => idx.find((r) => r.key === k)).filter(Boolean).sort((x, y) => inAny.has(x.key) - inAny.has(y.key)); // not-yet-added first
-      const btn = (r, i, src) => `<button class="result ${inAny.has(r.key) ? "in" : ""}" data-${src}="${i}"><span class="t">${esc(r.t)}</span><span class="n">${esc(r.n)}</span><span class="x">${inAny.has(r.key) ? "✓ Added" : "+ Add"}</span></button>`;
+      // "Added" means added to the watchlist this sheet adds to, not to any list (a coin in another list still shows + Add).
+      const text = q.value.trim(), w = target(), inList = new Set((w?.syms || []).map((s) => s.key)), idx = symbolIndex() || [];
+      const pop = POPULAR.map((k) => idx.find((r) => r.key === k)).filter(Boolean).sort((x, y) => inList.has(x.key) - inList.has(y.key)); // not-yet-added first
+      const btn = (r, i, src) => `<button class="result ${inList.has(r.key) ? "in" : ""}" data-${src}="${i}"><span class="t">${esc(r.t)}</span><span class="n">${esc(r.n)}</span><span class="x">${inList.has(r.key) ? "✓ Added" : "+ Add"}</span></button>`;
       body.querySelector("#addRes").innerHTML = !text
         ? `${pop.length ? `<div class="label" style="margin:10px 0 6px">Most traded coins</div>${pop.map((r, i) => btn(r, i, "p")).join("")}` : ""}${starterHtml()}`
         : rows.map((r, i) => btn(r, i, "i")).join("") || `<p class="hint">No coin matches “${esc(text)}”.</p>`;
-      const pick = (r) => (inAny.has(r.key) ? chooseLists(r, () => mountSearch(body, q.value)) : quickAdd(r, draw));
+      const pick = (r) => (inList.has(r.key) ? chooseLists(r, () => mountSearch(body, q.value)) : quickAdd(r, draw));
       body.querySelectorAll("[data-i]").forEach((b) => (b.onclick = () => pick(rows[+b.dataset.i])));
       body.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => pick(pop[+b.dataset.p])));
       body.querySelectorAll("[data-starter]").forEach((b) => (b.onclick = () => addStarter(b.dataset.starter)));

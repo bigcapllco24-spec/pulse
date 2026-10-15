@@ -31,10 +31,10 @@ export function dialSvg(score, { sub = "out of 900" } = {}) {
   const bands = [...BANDS].reverse().map(([min, name], i, a) => [min, i + 1 < a.length ? a[i + 1][0] : SCORE_MAX, name]); // Building … Exceptional
   const segs = bands.map(([lo, hi, name]) => `<path d="${arc(lo + 3, hi - 3)}" style="stroke:var(--${BAND_CLASS[name]});opacity:${score != null && lo <= score ? 1 : 0.28}"/>`).join("");
   const m = score != null ? P(score) : null;
-  return `<svg class="pc2-dial" viewBox="0 0 300 172" role="img" aria-label="${score != null ? `Score ${score} of 900` : "No score yet"}">${segs}
+  return `<svg class="pc2-dial" viewBox="0 0 300 172" role="img" aria-label="${score != null ? `Score ${score} of 900` : "Score 0: no calls scored yet"}">${segs}
     ${m ? `<circle cx="${m[0].toFixed(1)}" cy="${m[1].toFixed(1)}" r="10" class="pc2-mark"/>` : ""}
-    <text x="150" y="122" text-anchor="middle" class="pc2-big">${score ?? CHANCE}</text>
-    <text x="150" y="148" text-anchor="middle" class="pc2-sub">${esc(score != null ? sub : "where everyone starts")}</text>
+    <text x="150" y="122" text-anchor="middle" class="pc2-big">${score ?? 0}</text>
+    <text x="150" y="148" text-anchor="middle" class="pc2-sub">${esc(score != null ? sub : "no calls scored yet")}</text>
     <text x="32" y="170" text-anchor="middle" class="pc2-end">300</text><text x="268" y="170" text-anchor="middle" class="pc2-end">900</text></svg>`;
 }
 
@@ -87,7 +87,7 @@ export function cardHtml(c, { mine = false, actions = "", common = [] } = {}) {
     <div class="pc2-box">
       <div class="pc2-row"><span class="label">Prediction score</span><button class="linkbtn" data-how>How it works</button></div>
       ${dialSvg(score)}
-      ${score == null ? `<div class="pc2-next"><b>${mine ? `Make ${PROVISIONAL_UNDER} calls to get your score` : "No scored calls yet"}</b><span class="hint">Everyone starts at ${CHANCE}, about what guessing scores.</span>${mine ? `<button class="btn primary block" data-first>Make your first call</button>` : ""}</div>`
+      ${score == null ? `<div class="pc2-next"><b>${mine ? `Make ${PROVISIONAL_UNDER} calls to get your score` : "No scored calls yet"}</b><span class="hint">The first scored call starts it at about ${CHANCE}, what guessing scores.</span>${mine ? `<button class="btn primary block" data-first>Make your first call</button>` : ""}</div>`
         : nb?.name ? `<div class="pc2-next"><div class="pc2-row"><b>${num(nb.need)} point${nb.need === 1 ? "" : "s"} to ${esc(nb.name)}</b><span class="hint">${Math.round(nb.share * 100)}% there</span></div><span class="pc2-bar" aria-hidden="true"><i style="width:${(nb.share * 100).toFixed(1)}%"></i></span><div class="pc2-row hint"><span>${esc(nb.here)} · ${nb.from}</span><span>${esc(nb.name)} · ${nb.to}</span></div></div>`
         : `<div class="pc2-next"><b>Exceptional</b><span class="hint">The top band, from 800.</span></div>`}
       <div class="pc2-key">${[...BANDS].reverse().map(([min, name]) => `<span><i style="background:var(--${BAND_CLASS[name]})"></i>${esc(name)} ${num(min)}</span>`).join("")}</div>
