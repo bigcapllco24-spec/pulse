@@ -1,5 +1,5 @@
 // Prediction game scoring on made-up predictions with known answers.
-import { scorePrediction, closenessText, profileScore, scoreChange, consistency, checkPrediction, canPredict, dailyVol, typicalMove, HORIZONS, CAL, SCORE_MIN, SCORE_MAX } from "../web/js/score.js";
+import { scorePrediction, relabel, closenessText, profileScore, scoreChange, consistency, checkPrediction, canPredict, dailyVol, typicalMove, HORIZONS, CAL, SCORE_MIN, SCORE_MAX } from "../web/js/score.js";
 
 const NOW = Date.parse("2026-10-11T12:00:00Z"), DAY = 864e5;
 const iso = (ms) => new Date(ms).toISOString();
@@ -77,6 +77,9 @@ const checks = [
   ["fading starts when a prediction is scored: a 1-year result scored today counts double one scored a year ago", near(fadeQ, (2 * trade(yrGood) + trade(yrBad)) / 300, 1e-9)],
   ["long periods dominate: 40×30m, 20×1d, 2×1y blend about 17% / 51% / 33%", near(mix["30m"].weight, 0.17, 0.01) && near(mix["1d"].weight, 0.51, 0.01) && near(mix["1y"].weight, 0.33, 0.01)],
   ["one exact prediction is provisional and stays close to chance level (550)", one.provisional && one.score > 550 && one.score < 600],
+  ["a call on the wrong side of the price is never better than Off (DOGE, 16 Oct)", (() => { const s = scorePrediction({ horizon: "1d", p0: 0.0815, target: 0.0830, actual: 0.0812, sigmaD: 0.04 }); return s.label === "Off" && s.direction === 0; })()],
+  ["a near call the right way keeps its closeness label", scorePrediction({ horizon: "1d", p0: 100, target: 102, actual: 101.5, sigmaD: 0.04 }).label === "Spot on"],
+  ["older results are relabelled under the current rule", relabel({ status: "scored", horizon: "1d", p0: 0.0815, target: 0.0830, actual: 0.0812, sigmaD: 0.04, label: "Close" }).label === "Off"],
   ["no predictions means no score yet", none.score === null && none.band === "No score yet"],
   ["every profile score stays between 300 and 900", many.every((s) => s >= SCORE_MIN && s <= SCORE_MAX)],
   ["closer predictions give a higher profile score", better],

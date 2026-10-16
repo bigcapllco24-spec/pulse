@@ -2,7 +2,7 @@
 // challenges, finding and following players, the leaderboard, player cards, and the avatar sheet (your settings).
 // Data lives in store.js (your account and predictions) and social.js (people and groups).
 import { CONFIG } from "../config.js";
-import { store, ls, allSyms, makePrediction, myScore, enablePush, isAdmin, scoredHere, settleHere, nextDue } from "./store.js";
+import { store, ls, allSyms, makePrediction, myScore, enablePush, isAdmin, pendingHere, settleHere, nextDue } from "./store.js";
 import { HORIZONS, PROVISIONAL_UNDER, CHANCE, checkPrediction, canPredict, allowedRange, dailyVol, dueAt, closenessText } from "./score.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { D } from "./data.js";
@@ -128,7 +128,7 @@ function callsView(el) {
   const coins = allSyms().filter((x) => D.series[x.key]?.bars?.length);
   // open: your predictions, plus group picks that don't count to your score (those that do are predictions too)
   // a call scored on this phone the moment it was due moves straight to Scored (marked "confirming" until the server's copy lands)
-  const here = [...scoredHere.values()], isHere = (p) => here.some((r) => r.t === p.t && r.horizon === p.horizon && r.createdAt === p.createdAt);
+  const here = pendingHere(), isHere = (p) => here.some((r) => r.t === p.t && r.horizon === p.horizon && r.createdAt === p.createdAt);
   const open = [...store.preds.filter((p) => !isHere(p)).map((p) => ({ ...p, kind: "pred" })), ...S.picks.filter((p) => !p.counts && p.status !== "scored" && p.status !== "void").map((p) => ({ ...p, kind: "pick" }))]
     .sort((a, b) => Date.parse(dueAt(a)) - Date.parse(dueAt(b)));
   const done = [...here, ...store.results].sort((a, b) => Date.parse(b.resolvedAt || 0) - Date.parse(a.resolvedAt || 0));
@@ -154,7 +154,7 @@ function callsView(el) {
   el.querySelector("#plAll")?.addEventListener("click", () => openSheet("Scored calls", `<div class="hl">${done.map(resultRow).join("")}</div>`, wireRes));
 }
 // ---------- the daily coin: one coin a day for everyone (habit.js); yesterday's crowd shows once it's scored
-function dailyState(here = [...scoredHere.values()]) {
+function dailyState(here = pendingHere()) {
   const now = Date.now(), day = istDay(now), dc = dailyCoin(day), all = [...store.preds, ...store.results, ...here];
   const mine = all.find((p) => p.coin === dc.key && p.horizon === "1d" && istDay(Date.parse(p.createdAt)) === day);
   const left = msUntilNextDay(now);
@@ -209,6 +209,7 @@ function openResult(r) {
       <div class="row"><span class="main"><span class="t">Price when you called</span><span class="s">${esc(when(r.createdAt, r.horizon))}</span></span><b class="num">${esc(m$(r.p0))}</b></div>
       <div class="row"><span class="main"><span class="t">Your call</span></span><b class="num">${esc(m$(r.target))}</b></div>
       <div class="row"><span class="main"><span class="t">Price at the end</span><span class="s">${esc(when(dueAt(r), r.horizon))}</span></span><b class="num">${esc(m$(r.actual))}</b></div>
+      ${(() => { const up = r.target > r.p0, went = r.actual === r.p0 ? null : r.actual > r.p0; return `<div class="row"><span class="main"><span class="t">Direction</span><span class="s">You called ${up ? "up" : "down"}, it went ${went == null ? "nowhere" : went ? "up" : "down"}</span></span><b class="${went == null ? "" : went === up ? "up" : "down"}">${went == null ? "Flat" : went === up ? "Right" : "Wrong"}</b></div>`; })()}
     </div>
     ${wh ? `<div class="pc2-box" style="margin-top:12px"><span class="label">What happened</span><p style="margin:0">${esc(wh.text)}</p></div>` : ""}
     <p class="hint">A typical move is how far ${esc(r.t)} usually travels in ${esc(HORIZONS[r.horizon].label)}, from its last 30 days. These facts describe the past only. A learning game, not advice.</p>`);
@@ -318,7 +319,7 @@ export function openBoard(tab = "everyone") {
 const cardOf = (c, a, actions = "") => cardHtml(c, { mine: a === me(), actions, common: a === me() ? [] : myGroups().filter((g) => a in (g.members || {})) });
 // your own card, with your record worked out from this phone's results (fresher than the card the job writes)
 export function myFullCard() {
-  const scored = [...scoredHere.values(), ...store.results].filter((r) => r.status === "scored"), mix = mixOf(scored), n = mix.reduce((a, x) => a + x, 0);
+  const scored = [...pendingHere(), ...store.results].filter((r) => r.status === "scored"), mix = mixOf(scored), n = mix.reduce((a, x) => a + x, 0);
   const base = { ...myCard(), ...cardFromScore() }, st = myStreak();
   return { ...base, mix, spot: mix[0], closePlus: n ? Math.round(((mix[0] + mix[1] + mix[2]) / n) * 100) : base.closePlus ?? null, streak: st.n,
     badges: [...new Set([...(base.badges || []).filter((b) => !/-day streak$/.test(b)), ...streakBadges(Math.max(st.best, base.bestStreak || 0))])] };

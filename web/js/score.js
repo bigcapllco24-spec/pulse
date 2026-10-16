@@ -96,8 +96,21 @@ export function scorePrediction(p) {
     miss, missFlat, closeness, skill, direction,
     // shown to people
     pctOff: (p.target / p.actual - 1) * 100, // + means the call was above the actual price
-    label: CLOSENESS_LABELS.find(([max]) => miss < max)[1],
+    label: labelFor(miss, direction),
   };
+}
+// The closeness label, from the miss in typical moves. A call that went the wrong way is never better than "Off":
+// near the price but on the wrong side isn't close (feedback, 16 Oct).
+const ORDER = CLOSENESS_LABELS.map(([, l]) => l);
+function labelFor(miss, direction) {
+  const l = CLOSENESS_LABELS.find(([max]) => miss < max)[1];
+  return direction === 0 && ORDER.indexOf(l) < ORDER.indexOf("Off") ? "Off" : l;
+}
+// A stored result with its label worked out again under today's rule (results scored before 16 Oct carry the old one).
+export function relabel(r) {
+  if (r?.status !== "scored") return r;
+  const s = scorePrediction(r);
+  return s && s.label !== r.label ? { ...r, label: s.label } : r;
 }
 // The line shown for a scored prediction, e.g. "0.6% above · Very close".
 export const closenessText = (s) => `${Math.abs(s.pctOff) < 0.05 ? "Exact" : `${Math.abs(s.pctOff).toFixed(Math.abs(s.pctOff) < 10 ? 1 : 0)}% ${s.pctOff > 0 ? "above" : "below"}`} · ${s.label}`;

@@ -6,7 +6,7 @@
 //   accounts/{uid}/results/{id}                    scored or voided predictions, written here only
 //   accounts/{uid}.pscore                          { score, band, provisional, n, at }, written here only
 import { settle, rowCache, krakenRows } from "../../web/js/predict.js";
-import { profileScore } from "../../web/js/score.js";
+import { profileScore, relabel } from "../../web/js/score.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -45,7 +45,7 @@ export async function settlePredictions(db, accounts, { now = Date.now(), fetchR
     }
     // Every run, not only when something resolved: older results fade, so the score moves with time.
     if (a.open ? !resolved : !open.length && !a.pscore) continue; // the quick run updates only scores that changed
-    const results = (await db.list(`accounts/${a.id}/results`)).filter((r) => r.status === "scored");
+    const results = (await db.list(`accounts/${a.id}/results`)).filter((r) => r.status === "scored").map(relabel); // labels under today's rule
     scoredBy.set(a.id, results);
     if (!results.length) continue;
     const ps = profileScore(results, now);

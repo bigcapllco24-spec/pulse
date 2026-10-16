@@ -2,7 +2,7 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 15 Oct 2026 (**version 1.1.3**, service worker `pulse-shell-v51`, firestore.rules published 13 Oct 8:51 AM IST; 1.1.0 needs no rules change). Version lives in `web/config.js` and shows at the
+Last updated 16 Oct 2026 (**version 1.1.4**, service worker `pulse-shell-v52`, firestore.rules published 13 Oct 8:51 AM IST; 1.1.0 needs no rules change). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
 ## 1. What Pulse is
@@ -207,6 +207,10 @@ The prediction game is what turns the app from something people read into someth
    | 2 or more | Far off |
 
    The same % can earn different labels: 3% off is "Far off" over 30 minutes but "Spot on" over a year.
+   **A call that went the wrong way is never better than "Off"** (1.1.4, after Veer's DOGE call: called up 1.8%,
+   it fell 0.4%, 0.55 typical moves off, which used to show "Close"). Results stored before then are relabelled when
+   read, in the app and in the data job (`relabel` in score.js). The trade score itself is unchanged. The scored-call
+   sheet has a Direction row ("You called up, it went down · Wrong").
 3. **Trade score (internal, 0 to 100, never shown):** closeness e^(−miss), plus direction (did the price move
    the way the call said), plus skill (whether the call beat "no change").
 4. **Profile score (300 to 900):**

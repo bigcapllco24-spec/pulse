@@ -2,7 +2,7 @@
 // Firestore document is accounts/{uid}, readable and writable only by that sign-in.
 // Without a Firebase config the app runs in demo mode and keeps everything in this browser.
 import { CONFIG } from "../config.js";
-import { HORIZONS, checkPrediction, canPredict, profileScore, dueAt } from "./score.js";
+import { HORIZONS, checkPrediction, canPredict, profileScore, dueAt, relabel } from "./score.js";
 import { settle, rowCache, SETTLE_DELAY } from "./predict.js";
 
 const FB = "https://www.gstatic.com/firebasejs/10.14.1/";
@@ -81,6 +81,7 @@ export async function init() {
   store.data = { ...DEFAULT_ACCOUNT(), ...(ls.get(LSACC) || {}) };
   store.alerts = ls.get(LSALERTS, []);
   ({ open: store.preds = [], results: store.results = [] } = ls.get(LS.preds, {}));
+  store.results = store.results.map(relabel);
   store.ready = true;
   navigator.storage?.persist?.().catch(() => {}); // ask the browser to keep this site's storage (and so the sign-in)
   connecting = connect();
@@ -139,7 +140,7 @@ function attach(id, ref) {
   const rows = (q) => q.docs.map((d) => ({ id: d.id, ...isoDates(d.data({ serverTimestamps: "estimate" })) }));
   const keepPreds = () => { ls.set(LS.preds, { open: store.preds, results: store.results.slice(0, 100) }); store.emit("preds"); };
   fb.unsubs.push(f.onSnapshot(f.collection(db, "accounts", id, "predictions"), (q) => { store.preds = rows(q); keepPreds(); }, () => {}));
-  fb.unsubs.push(f.onSnapshot(f.query(f.collection(db, "accounts", id, "results"), f.orderBy("resolvedAt", "desc"), f.limit(300)), (q) => { store.results = rows(q); keepPreds(); }, () => {}));
+  fb.unsubs.push(f.onSnapshot(f.query(f.collection(db, "accounts", id, "results"), f.orderBy("resolvedAt", "desc"), f.limit(300)), (q) => { store.results = rows(q).map(relabel); keepPreds(); }, () => {}));
   watchLists();
   store.emit("account");
 }
@@ -400,6 +401,13 @@ export async function settleDemoPredictions(fetchRows) {
 // prices the data job uses, so the result and the score show at once; the job's copy replaces it within minutes.
 export const scoredHere = new Map(); // prediction key → the prediction with its result
 const keyOf = (p) => `${p.t}_${p.horizon}_${p.createdAt}`;
+// Calls scored here whose server copy hasn't arrived yet. Once it's in results, the phone's copy goes, so a call is
+// never listed or counted twice (feedback, 16 Oct: the same DOGE call showed twice, once "confirming").
+export function pendingHere() {
+  const done = new Set(store.results.map(keyOf));
+  for (const k of [...scoredHere.keys()]) if (done.has(k)) scoredHere.delete(k);
+  return [...scoredHere.values()];
+}
 let settling = false;
 export async function settleHere(fetchRows, now = Date.now()) {
   if (store.mode === "demo") return settleDemoPredictions(fetchRows);
@@ -425,7 +433,7 @@ export const nextDue = () => Math.min(Infinity, ...store.preds.map((p) => Date.p
 // The profile score: written by the data job for live accounts, worked out on the phone in demo mode, and on the phone
 // straight away when a prediction has just been scored here (the job writes the same number a few minutes later).
 export function myScore() {
-  const here = [...scoredHere.values()].filter((r) => r.status === "scored");
+  const here = pendingHere().filter((r) => r.status === "scored");
   if (store.mode !== "demo" && here.length && store.results.length < 300) {
     const ps = profileScore([...store.results.filter((r) => r.status === "scored"), ...here]);
     if (ps.score != null) return { score: ps.score, band: ps.band, provisional: ps.provisional, n: ps.n, here: true };
