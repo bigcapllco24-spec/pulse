@@ -294,6 +294,7 @@ def run(pw, base):
         ch = eventually(lambda: docs(f"groups/{gid}/challenges"), 12)
         check("groups: starting a challenge saves it with ana's pick", ch and ana in (ch[0].get("picked") or {}), json.dumps(ch)[:200])
         if ch:
+            if android.is_visible("#grBack"): android.click("#grBack"); android.wait_for_timeout(400)  # the group page covers the tabs
             android.click(".tabbar [data-tab=play]")
             if eventually(lambda: android.locator("[data-pick]").count() > 0, 15):
                 android.click("[data-pick] >> nth=0"); android.wait_for_selector("#kGo", timeout=10000)

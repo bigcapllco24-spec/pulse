@@ -462,7 +462,11 @@ export async function settleDemoPredictions(fetchRows) {
 // Scored here, the moment it's due: a live prediction is scored on the phone with the same code and the same Kraken
 // prices the data job uses, so the result and the score show at once; the job's copy replaces it within minutes.
 export const scoredHere = new Map(); // prediction key → the prediction with its result
-const keyOf = (p) => `${p.t}_${p.horizon}_${p.createdAt}`;
+// The same moment can arrive written two ways: to the millisecond from the phone ("…:12.345Z") and to the microsecond
+// (or with no fraction) from the server ("…:12.345678Z", "…:12Z"). Compared as written, a call scored on the phone
+// never matched its server copy and was counted twice (live tests, 17 Oct 2026). So the key uses the millisecond.
+const msOf = (s) => String(s || "").replace(/(:\d\d)(?:\.(\d+))?Z$/, (_, sec, f = "") => `${sec}.${(f + "000").slice(0, 3)}Z`);
+const keyOf = (p) => `${p.t}_${p.horizon}_${msOf(p.createdAt)}`;
 // Calls scored here whose server copy hasn't arrived yet. Once it's in results, the phone's copy goes, so a call is
 // never listed or counted twice (feedback, 16 Oct: the same DOGE call showed twice, once "confirming").
 export function pendingHere() {
