@@ -19,7 +19,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # A code push publishes nothing unless every test passes, the real-database tests included (tests.yml).
+  # The 2-hourly data runs don't change code, so they skip the tests.
+  tests:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/tests.yml
   build:
+    needs: tests
+    if: always() && (needs.tests.result == 'success' || (needs.tests.result == 'skipped' && github.event_name != 'push'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -45,6 +52,13 @@ jobs:
           COINGECKO_DEMO_KEY: ${{ secrets.COINGECKO_DEMO_KEY }}
           SITE_URL: ${{ vars.SITE_URL }}
         run: node pipeline/run.mjs web/data
+      # The database rules go live with the code that needs them (pipeline/deploy-rules.mjs publishes firestore.rules
+      # only when they differ from the live ones; rules that don't compile stop the deploy here).
+      - name: Publish the database rules
+        if: github.event_name == 'push'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node pipeline/deploy-rules.mjs
       # The repository keeps readable code; the site gets the same code minified (about a third smaller to download
       # and parse). The modules stay separate files, so nothing else changes. Checked by tests/e2e.py on a minified copy.
       - name: Minify the app's code

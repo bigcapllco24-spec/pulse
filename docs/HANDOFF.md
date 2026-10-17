@@ -5,6 +5,25 @@ things safely, and what's open.
 Last updated 17 Oct 2026 (**version 1.2.0** on branch `mvp`, service worker `pulse-shell-v53`; firestore.rules CHANGED in 1.2.0 and must be published with it, see section 0). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
+## 0b. 1.2.7: sign-in that holds, and real-database tests (17 Oct 2026)
+
+- **Sign-in:** a username opens the account from any phone or browser, with no limit. Sign-out keeps the phone's
+  own sign-in (as 1.1.4 did) behind a flag (`pl.signedOut`), so signing out and in never piles up device entries.
+  Log-in reads the account first and adds the phone only if it isn't on it yet; a refusal is reported as it is,
+  and the name is never claimed for a new account. Creating an account after signing out gets a fresh sign-in.
+- **Rules:** the device limit of 10 is gone (it locked @vxxrc01 out). **The deploy now publishes firestore.rules**
+  (`pipeline/deploy-rules.mjs`, only when they differ), so the live rules can't fall behind the app again.
+- **Real-database tests** (`tests/live.py`, `.github/workflows/tests.yml`): the app against the Firebase emulators
+  with firestore.rules, on WebKit (iPhone) and Chromium (Android, slow connection), typing key by key: sign-up, the
+  first call, Call it with every option, sign out and in, a wrong name, a second phone on the same account and live
+  sync, finding and following a new player, the rules (strangers, taken names, own score, bad values), the scoring
+  jobs, results appearing on the phone, player cards, public calls for followers only, groups by link, a challenge
+  and a pick. **A push to main deploys only if these and scripts/check.sh pass.** Failures show as annotations on
+  the GitHub run. The app reaches the emulators only when a test sets `CONFIG.emulator`; the jobs when
+  `FIRESTORE_EMULATOR_HOST` is set.
+- Found by these tests and fixed: a new player couldn't be followed until the 2-hour job made their card; a call
+  scored on the phone was counted twice once the server's copy arrived (timestamps compared as text).
+
 ## 0a. 1.2.2: speed pass (17 Oct 2026)
 
 Measured on a throttled phone profile (4× slower CPU, 1.6 Mbps, 150 ms latency): "Updating…" on a normal reopen went

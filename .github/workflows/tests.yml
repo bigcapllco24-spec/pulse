@@ -4,6 +4,7 @@ name: Tests
 # (Android, slow connection), and the data jobs scoring calls against the same database.
 on:
   push:
+    branches-ignore: [main]   # on main, the deploy runs these first (workflow_call) and publishes only if they pass
   workflow_call:
   workflow_dispatch:
 
