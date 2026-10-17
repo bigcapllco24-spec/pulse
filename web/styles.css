@@ -980,3 +980,26 @@ body.grpopen .tabbar { display: none; } /* the group page is its own screen: no 
 .lvlup { display: grid; justify-items: center; text-align: center; gap: 8px; padding-top: 8px; } .ava.lv.xl { width: 96px; height: 96px; font-size: 36px; border-width: 5px; } .ava.lv.xl .lvb { min-width: 26px; height: 26px; font-size: 13px; right: -6px; bottom: -6px; }
 .pcard2 { display: grid; justify-items: center; text-align: center; gap: 6px; } .pc2-name { font-size: var(--t-xl); margin-top: 4px; }
 .dsec.read h3 { text-transform: none; letter-spacing: 0; font-size: var(--t-l); color: var(--text); display: flex; gap: 10px; align-items: baseline; } .dsec.read h3 .num { color: var(--accent); } .dsec.read p { margin: 0; color: var(--muted); line-height: 1.5; }
+
+/* ---- Call it in three steps (1.2.8): one decision per screen */
+.cdir { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+.cdir button { height: 112px; border-radius: 20px; border: 1.5px solid var(--line); background: var(--bg); font-size: var(--t-xl, 22px); font-weight: 800; cursor: pointer; }
+.cdir .up { color: var(--up); } .cdir .dn { color: var(--down); }
+.cdir button:active { transform: scale(.98); }
+.cback { margin: 0 0 6px; padding: 0; color: var(--muted); font-weight: 700; }
+.cq { font-size: var(--t-l, 19px); font-weight: 800; margin: 0; }
+.cq .up { color: var(--up); } .cq .dn { color: var(--down); }
+.csizes { display: grid; gap: 10px; margin-top: 16px; }
+.csize { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-radius: 16px; border: 1.5px solid var(--line); background: var(--bg); color: var(--text); text-align: left; cursor: pointer; }
+.csize span { display: grid; gap: 2px; } .csize small { color: var(--muted); font-size: var(--t-s); }
+.csize > b { font-size: var(--t-m, 17px); }
+.csize[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.cownbtn { margin-top: 12px; padding: 0; color: var(--accent); font-weight: 700; }
+.cown { display: block; margin-top: 12px; } .cown input { width: 100%; padding: 14px 16px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--bg); color: var(--text); font-size: 17px; }
+.cmore { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.cmore .linkbtn { padding: 0; color: var(--muted); font-size: var(--t-s); } .cmore b { color: var(--text); font-weight: 600; }
+.cdone { display: grid; justify-items: center; text-align: center; gap: 6px; }
+.cdone .done-ring { width: 64px; height: 64px; }
+.cdone p { color: var(--muted); margin: 6px 0 0; }
+.opt-l { font-weight: 400; color: var(--muted); text-transform: none; letter-spacing: 0; }
+.cdone .done-ring circle { animation: ring .7s ease-out forwards; } .cdone .done-ring path { animation: ring .4s .55s ease-out forwards; }

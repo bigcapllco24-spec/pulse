@@ -78,6 +78,13 @@ service cloud.firestore {
           && request.resource.data.createdAt == request.time
           && (!request.resource.data.keys().hasAny(['g', 'c', 'endAt'])
               || (request.resource.data.keys().hasAll(['g', 'c', 'endAt']) && inChallenge(acct, request.resource.data)));
+        // 1.2.8: "how sure" and "based on" are asked after the call is locked in, so they can be added (only those
+        // two, only to your own open call, within 15 minutes of making it). The call itself never changes.
+        allow update: if canUse(acct)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sure', 'basis'])
+          && (!('sure' in request.resource.data) || request.resource.data.sure in ['hunch', 'fairly', 'very'])
+          && (!('basis' in request.resource.data) || request.resource.data.basis in ['chart', 'indicators', 'news', 'gut'])
+          && request.time < resource.data.createdAt + duration.value(15, 'm');
         allow delete: if isOwner(acct) && !exists(/databases/$(db)/documents/accounts/$(acct));
       }
       match /results/{rid} {

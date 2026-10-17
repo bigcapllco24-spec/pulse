@@ -446,6 +446,14 @@ export async function makePrediction({ sym, horizon, target, p0, sigmaD, group =
   // Only say "already open" when that's what the server can mean: a call on this coin and period from another phone.
   throw new Error(`Couldn't save the call. If you made a ${PERIOD(horizon)} call on ${sym.t} on another phone, it's still open; otherwise try again.`);
 }
+// "How sure" and "based on", added to a call just after it's locked in (the step after Lock in; both optional).
+export async function addCallDetails({ sym, horizon, sure = null, basis = null }) {
+  const extra = { ...(sure ? { sure } : {}), ...(basis ? { basis } : {}) };
+  if (!Object.keys(extra).length) return;
+  const id = `${sym.t}_${horizon}`;
+  if (store.mode === "demo") { store.preds = store.preds.map((p) => (p.id === id && p.actual == null ? { ...p, ...extra } : p)); saveDemoPreds(); return; }
+  await fb.f.updateDoc(fb.f.doc(fb.db, "accounts", store.id, "predictions", id), extra);
+}
 function saveDemoPreds() { ls.set(LS.demoPreds, { open: store.preds, results: store.results }); store.emit("preds"); }
 // Demo mode settles predictions on the phone, the same way the data job does for live accounts.
 export async function settleDemoPredictions(fetchRows) {

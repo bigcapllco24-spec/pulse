@@ -149,16 +149,22 @@ def log_in(p, name):
     p.wait_for_function("!document.querySelector('#gate') || !document.querySelector('#obMsg')?.hidden", timeout=20000)
     return time.time() - t0, (p.inner_text("#obMsg") if p.locator("#obMsg").count() and p.is_visible("#obMsg") else "")
 
-def make_call(p, period="1d", pct=None, sure=None, basis=None, public=None):
-    p.click(".card.active .callit"); p.wait_for_selector("#pGo", timeout=10000)
+def make_call(p, period="1d", pct=None, sure=None, basis=None, public=None, up=True):
+    """Call it the way a person does (1.2.8): period and Higher/Lower, how far (or type your own), Lock in, then the
+    optional extras on the Locked in step."""
+    p.click(".card.active .callit"); p.wait_for_selector("#sheet [data-dir]", timeout=10000)
     if p.locator(f"#sheet [data-h='{period}']").count(): p.click(f"#sheet [data-h='{period}']"); p.wait_for_timeout(300)
-    if pct is not None: typein(p, "#pPct", pct); p.wait_for_timeout(300)
-    if sure: p.click(f"[data-sure='{sure}']")
-    if basis: p.click(f"[data-basis='{basis}']")
-    if public is not None and p.is_checked("#pPub") != public: p.click("#pPub + span")
-    p.wait_for_timeout(200); p.click("#pGo")
-    p.wait_for_function("document.querySelector('#sheet').hidden || /Locked|couldn|already|refused/i.test(document.querySelector('#sheet').innerText)", timeout=20000)
-    return p.inner_text("#sheet") if p.is_visible("#sheet") else ""
+    p.click(f"#sheet [data-dir='{1 if up else -1}']"); p.wait_for_selector("#pGo", timeout=5000)
+    if pct is not None: p.click("#pOwnOpen"); typein(p, "#pOwn", f"{pct}%"); p.wait_for_timeout(300)
+    if public is not None and ("Public" in p.inner_text("#pPubT")) != public: p.click("#pPubT"); p.wait_for_timeout(200)
+    p.click("#pGo")
+    p.wait_for_function("document.querySelector('#pDone') || /couldn|already|refused/i.test(document.querySelector('#sheet').innerText)", timeout=20000)
+    text = p.inner_text("#sheet")
+    if p.locator("#pDone").count():
+        if sure: p.click(f"[data-sure='{sure}']")
+        if basis: p.click(f"[data-basis='{basis}']")
+        p.click("#pDone"); p.wait_for_timeout(600)
+    return text
 
 def no_errors(p, label):
     check(f"{p.kind}: no JavaScript errors ({label})", not p.errs, " | ".join(p.errs[:3])); p.errs.clear()
@@ -179,11 +185,11 @@ def run(pw, base):
 
     # ---- 2. Call it with everything: own %, how sure, based on, public
     msg = make_call(iphone, "1d", pct="2.5", sure="very", basis="news", public=True)
-    d = eventually(lambda: doc(f"accounts/{ana}/predictions/BTC_1d"))
+    d = eventually(lambda: (lambda x: x if x and x.get("sure") else None)(doc(f"accounts/{ana}/predictions/BTC_1d")))
     check("iphone: Call it saves a 1-day call with how sure, what it was based on and public", d and d.get("sure") == "very" and d.get("basis") == "news" and d.get("pub") is True, (json.dumps(d) if d else "nothing saved") + " | " + msg[:120])
     iphone.wait_for_timeout(800)
     check("iphone: the card shows 2 calls waiting", "2 calls waiting" in iphone.inner_text(".card.active"), iphone.inner_text(".card.active .head2")[:120])
-    iphone.click(".card.active .callit"); iphone.wait_for_selector("#pGo")
+    iphone.click(".card.active .callit"); iphone.wait_for_selector("#sheet [data-dir]")
     check("iphone: a period with an open call can't be called again (1 day shows waiting)", iphone.is_disabled("#sheet [data-h='1d']") and iphone.is_disabled("#sheet [data-h='1h']"))
     iphone.click("#sheet [data-close]"); iphone.wait_for_timeout(400)
     no_errors(iphone, "calls")
@@ -243,6 +249,14 @@ def run(pw, base):
     check("rules: nobody can write their own score", st == 403, str(st))
     st, _ = http("PATCH", f"{DOCS}/accounts/{s_uid}/predictions/BTC_1d?currentDocument.exists=false", {"fields": {"coin": {"stringValue": "CRYPTO:BTC"}, "t": {"stringValue": "BTC"}, "horizon": {"stringValue": "1d"}, "target": {"doubleValue": 100}, "sure": {"stringValue": "certain"}}}, token=s_tok)
     check("rules: a call with a made-up 'how sure' value is refused", st == 403, str(st))
+    # a call's details can be added after it's locked in, but the call itself can never change
+    name = f"projects/{PROJECT}/databases/(default)/documents/accounts/{s_uid}/predictions/ETH_1d"
+    st, _ = http("POST", f"{DOCS}:commit", {"writes": [{"update": {"name": name, "fields": {"coin": {"stringValue": "CRYPTO:ETH"}, "t": {"stringValue": "ETH"}, "horizon": {"stringValue": "1d"}, "target": {"doubleValue": 100.0}, "clientP0": {"doubleValue": 99.0}, "clientSigma": {"doubleValue": 0.03}}}, "updateTransforms": [{"fieldPath": "createdAt", "setToServerValue": "REQUEST_TIME"}], "currentDocument": {"exists": False}}]}, token=s_tok)
+    check("rules: a player can make a call on their own account", st == 200, str(st))
+    st, _ = http("PATCH", f"{DOCS}/accounts/{s_uid}/predictions/ETH_1d?updateMask.fieldPaths=sure&updateMask.fieldPaths=basis", {"fields": {"sure": {"stringValue": "very"}, "basis": {"stringValue": "chart"}}}, token=s_tok)
+    check("rules: how sure and based on can be added to your call just after making it", st == 200, str(st))
+    st, _ = http("PATCH", f"{DOCS}/accounts/{s_uid}/predictions/ETH_1d?updateMask.fieldPaths=target", {"fields": {"target": {"doubleValue": 150.0}}}, token=s_tok)
+    check("rules: a locked-in call's price can't be changed", st == 403, str(st))
 
     # ---- 6. the data jobs score calls; the app shows the results; public calls reach followers
     now = time.time() * 1000
