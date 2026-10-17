@@ -15,7 +15,8 @@ results = []
 def check(name, ok, detail=""):
     results.append((name, bool(ok), detail))
     if VERBOSE or not ok:
-        print(("PASS " if ok else "FAIL ") + name + (f"  [{detail}]" if detail else ""), flush=True)
+        gha = "::error::" if not ok and __import__("os").environ.get("GITHUB_ACTIONS") else ""  # failures show on the run's page
+        print(gha + ("PASS " if ok else "FAIL ") + name + (f"  [{detail}]" if detail else ""), flush=True)
 
 # The test browser can't reach Firebase, so the app is served with Firebase switched off (demo mode).
 import pathlib as _pl, random as _random

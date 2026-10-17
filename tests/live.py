@@ -305,5 +305,5 @@ if __name__ == "__main__":
     fails = [r for r in results if not r[1]]
     for n, ok, d in results:
         if not ok and not VERBOSE: pass  # already printed by check()
-    print(f"live: {len(results) - len(fails)}/{len(results)} checks passed")
+    print(("::notice::" if os.environ.get("GITHUB_ACTIONS") else "") + f"live: {len(results) - len(fails)}/{len(results)} checks passed")
     sys.exit(1 if fails else 0)
