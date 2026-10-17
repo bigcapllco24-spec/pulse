@@ -976,3 +976,4 @@ body.grpopen .tabbar { display: none; } /* the group page is its own screen: no 
 .mtop { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .mtopb { display: flex; gap: 6px; }
 .mrow { gap: 10px; } .mrow .main .s b { font-weight: 600; color: var(--muted); } .mrow .main .s b.warnt { color: var(--warn); }
 .mrow .r { display: grid; justify-items: end; gap: 1px; } .mrow .r b { font-size: var(--t-l); } .mrow .r span { font-size: var(--t-s); font-weight: 700; }
+.replay { margin: 4px 0 14px; } .replay svg { width: 100%; height: 130px; display: block; } .replay svg text { font-family: var(--num); } .replay .pc2-row { margin-top: 4px; }

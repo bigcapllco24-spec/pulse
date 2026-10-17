@@ -5,6 +5,7 @@ import { CONFIG } from "../config.js";
 import { store, ls, allSyms, makePrediction, myScore, enablePush, isAdmin, pendingHere, settleHere, nextDue } from "./store.js";
 import { HORIZONS, PROVISIONAL_UNDER, CHANCE, checkPrediction, canPredict, allowedRange, dailyVol, dueAt, closenessText, typicalMove } from "./score.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
+import { krakenBars } from "./data.js";
 import { D } from "./data.js";
 import { $, esc, money, pct, toast, haptic, openSheet, setSheetBody, closeSheet } from "./ui.js";
 import { APP, showTab } from "./app.js";
@@ -14,12 +15,15 @@ import { cardHtml, HOW_SCORE, svgIcon, BAND_CLASS, SHORT } from "./card.js";
 import { mixOf, streakOf, streakBadges, istDay, dailyCoin, msUntilNextDay, whatHappened } from "./habit.js";
 import { openShareSheet } from "./share.js";
 import { levelOf, ringClass } from "./progress.js";
-import { S, onSocial, me, myName, bandOf, RANK_MIN, CH_PERIODS, PICK_MINS, GROUP_MAX, getCards, getCard, findPlayers, getBoard, myCard, following, isFollowing, follow, setPublic, setPickDefault,
+import { S, onSocial, me, myName, bandOf, RANK_MIN, CH_PERIODS, PICK_MINS, GROUP_MAX, GROUPS_MAX, getCards, getCard, findPlayers, getBoard, myCard, following, isFollowing, follow, setPublic, setPickDefault,
   myGroups, groupLink, createGroup, peekGroup, joinGroup, settleChallengesHere, nextChallengeEnd, leaveGroup, removeMember, renameGroup, invite, declineInvite, challengesOf, myPick, picksOpen, waitingForMe, isSeen, markSeen,
   unseenResults, canCount, startChallenge, makePick, REACTIONS, react, groupTable } from "./social.js";
 
 const PERIODS = Object.keys(HORIZONS);
-const LABEL_CLASS = { "Spot on": "good", "Very close": "good", Close: "mid", Off: "low", "Far off": "bad", "Not counted": "low" };
+const LABEL_CLASS = { "Spot on": "good", "Very close": "good", Close: "mid", Off: "low", "Far off": "bad", "Wrong way": "bad", "Not counted": "low" };
+// What a scored call shows (1.2.0): its closeness label, or "Wrong way" when the price went the other way from the call.
+export const wrongWay = (r) => r?.status === "scored" && r.p0 != null && r.actual != null && r.actual !== r.p0 && (r.target > r.p0) !== (r.actual > r.p0);
+export const shownLabel = (r) => (wrongWay(r) ? "Wrong way" : r.label);
 const m$ = (x) => money(x, "CRYPTO");
 const num = (s) => `<span class="num">${s}</span>`;
 const ord = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
@@ -79,7 +83,7 @@ export function renderPlay() {
   const el = $("play"), view = APP.playView === "friends" ? "friends" : "calls";
   if (view === "friends") {
     el.innerHTML = `<button class="btn ghost sm" id="plBack" style="padding-left:0">‹ Calls</button><h1 style="margin:10px 0 4px">With friends</h1><p class="hint" style="margin:0 0 18px">Call the same coins as people you know.</p><div class="pl-view" data-view="friends"></div>`;
-    el.querySelector("#plBack").onclick = () => { APP.playView = "calls"; renderPlay(); el.parentElement.scrollTop = 0; };
+    el.querySelector("#plBack").onclick = () => { APP.playView = "calls"; renderPlay(); $("play").parentElement.scrollTop = 0; };
     groupsView(el.querySelector(".pl-view"));
     return;
   }
@@ -119,7 +123,7 @@ function callsView(el) {
   const friendRows = [
     ...waits.slice(0, 2).map((ch) => `<button class="row" data-pick="${esc(ch.g)}|${esc(ch.id)}"><span class="main"><span class="t">${esc(groupName(ch.g))}</span><span class="s">Group, needs your pick, ${esc(until(ch.joinUntil))} left</span></span><span class="linkbtn">Pick</span></button>`),
     ...groups.filter((g) => !waits.some((w) => w.g === g.id)).slice(0, 2).map((g) => `<button class="row" data-g="${esc(g.id)}"><span class="main"><span class="t">${esc(g.name)}</span><span class="s">Group · ${Object.keys(g.members || {}).length} players</span></span><span class="chev">›</span></button>`),
-    ...lists.slice(0, 2).map((l) => `<button class="row" data-list="${esc(l.id)}"><span class="main"><span class="t">${esc(l.name)}</span><span class="s">Shared list · ${(l.syms || []).length} coins · ${Object.keys(l.members || {}).length} members</span></span><span class="chev">›</span></button>`),
+    ...lists.slice(0, 2).map((l) => `<button class="row" data-list="${esc(l.id)}"><span class="main"><span class="t">${esc(l.name)}</span><span class="s">Shared list · ${(l.symbols || []).length} coins · ${Object.keys(l.members || {}).length} members</span></span><span class="chev">›</span></button>`),
   ];
   el.innerHTML = `<button class="progcard" id="plProg"><span class="pc-top"><b>${esc(v.text)}</b><span class="chev">›</span></span><span class="pl-prog" aria-hidden="true"><i style="width:${Math.min(100, (n / VERDICT_AT) * 100)}%"></i></span><span class="hint">${esc(bits)}</span></button>
     <div class="secrow"><span class="label">Today</span></div>
@@ -131,7 +135,7 @@ function callsView(el) {
     <div class="secrow"><span class="label">Scored</span>${done.length > 3 ? `<button class="linkbtn" id="plAll">See all ${done.length}</button>` : ""}</div>
     ${done.length ? `<div class="hl pl-scored">${done.slice(0, 3).map(resultRow).join("")}</div>` : `<p class="hint pl-empty">Scored calls show here, with how close each one was.</p>`}`;
   el.querySelector("#plProg").onclick = () => showTab("you");
-  el.querySelector("#plFriends").onclick = () => { APP.playView = "friends"; renderPlay(); el.parentElement.scrollTop = 0; };
+  el.querySelector("#plFriends").onclick = () => { APP.playView = "friends"; renderPlay(); $("play").parentElement.scrollTop = 0; };
   el.querySelector("[data-daily]")?.addEventListener("click", () => { const { dc, mine, blocked } = dailyState(here); if (!mine && !blocked) openPredictSheet(dc, () => APP.tab === "play" && renderPlay(), "1d"); });
   el.querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openGroup(b.dataset.g)));
   el.querySelectorAll("[data-list]").forEach((b) => (b.onclick = () => openListPage(b.dataset.list)));
@@ -157,23 +161,46 @@ export const myLevel = () => levelOf([...store.results, ...pendingHere()]);
 const levelText = () => `Level ${myLevel().level}`;
 // a shared list's page lives with the settings pages for now (Sharing › Shared lists)
 function openListPage(id) { APP.backTo = "play"; showTab("profile", "lists", id); }
-// ---------- one scored call: how close it was, and what happened over its period (facts only)
+// ---------- the replay (1.2.0): one scored call, played back on a small chart, with what happened over its period
 function openResult(r) {
   if (!r || r.status !== "scored") return;
-  const wh = whatHappened(r, D.news?.stories || []);
-  openSheet(`${esc(r.t)} · ${SHORT[r.horizon]}`, `<div class="pc2-row" style="margin-bottom:10px"><span class="lab ${LABEL_CLASS[r.label] || ""}">${esc(r.label)}</span><span class="hint num">${esc(closenessText(r).split(" · ")[0])}</span></div>
+  const wh = whatHappened(r, D.news?.stories || []), up = r.target > r.p0, went = r.actual === r.p0 ? null : r.actual > r.p0, wrong = wrongWay(r);
+  const missPct = Math.abs(r.actual / r.target - 1) * 100;
+  openSheet(`${esc(r.t)} · ${SHORT[r.horizon]}`, `<div class="pc2-row" style="margin-bottom:6px"><span class="lab ${LABEL_CLASS[shownLabel(r)] || ""}" style="font-size:var(--t-xl)">${esc(shownLabel(r))}</span><span class="hint num">${esc(closenessText(r).split(" · ")[0])}</span></div>
+    <p class="hint" style="margin:0 0 10px">${wrong ? `You called ${up ? "up" : "down"}, it went ${went ? "up" : "down"}.` : `Right direction. ${missPct < 0.05 ? "Exact." : `Missed by ${missPct.toFixed(1)}%.`}`}</p>
+    <div class="replay" id="rpChart"><p class="hint">Loading the price path…</p></div>
     <div class="hl">
       <div class="row"><span class="main"><span class="t">Price when you called</span><span class="s">${esc(when(r.createdAt, r.horizon))}</span></span><b class="num">${esc(m$(r.p0))}</b></div>
-      <div class="row"><span class="main"><span class="t">Your call</span></span><b class="num">${esc(m$(r.target))}</b></div>
+      <div class="row"><span class="main"><span class="t">Your call</span>${r.sure || r.basis ? `<span class="s">${esc([SURE.find((x) => x[0] === r.sure)?.[1], BASIS.find((x) => x[0] === r.basis)?.[1] && `based on ${BASIS.find((x) => x[0] === r.basis)[1].toLowerCase()}`].filter(Boolean).join(" · "))}</span>` : ""}</span><b class="num">${esc(m$(r.target))}</b></div>
       <div class="row"><span class="main"><span class="t">Price at the end</span><span class="s">${esc(when(dueAt(r), r.horizon))}</span></span><b class="num">${esc(m$(r.actual))}</b></div>
-      ${(() => { const up = r.target > r.p0, went = r.actual === r.p0 ? null : r.actual > r.p0; return `<div class="row"><span class="main"><span class="t">Direction</span><span class="s">You called ${up ? "up" : "down"}, it went ${went == null ? "nowhere" : went ? "up" : "down"}</span></span><b class="${went == null ? "" : went === up ? "up" : "down"}">${went == null ? "Flat" : went === up ? "Right" : "Wrong"}</b></div>`; })()}
     </div>
     ${wh ? `<div class="pc2-box" style="margin-top:12px"><span class="label">What happened</span><p style="margin:0">${esc(wh.text)}</p></div>` : ""}
-    <p class="hint">A typical move is how far ${esc(r.t)} usually travels in ${esc(HORIZONS[r.horizon].label)}, from its last 30 days. These facts describe the past only. A learning game, not advice.</p>`);
+    <p class="hint">A typical move is how far ${esc(r.t)} usually travels in ${esc(HORIZONS[r.horizon].label)}, from its last 30 days. These facts describe the past only. Not advice.</p>`, (body) => {
+    drawReplay(body.querySelector("#rpChart"), r).catch(() => { const el = body.querySelector("#rpChart"); if (el) el.innerHTML = `<p class="hint">The price path couldn't load just now.</p>`; });
+  });
+}
+// the replay chart: closes from the call to its end, the call as a dashed line, start and end dots
+async function drawReplay(el, r) {
+  const from = Date.parse(r.createdAt), to = Date.parse(dueAt(r)), span = to - from;
+  const iv = span <= 36e5 * 2 ? 1 : span <= 864e5 * 2 ? 15 : span <= 864e5 * 60 ? 240 : 1440;
+  const bars = (await krakenBars(r.t, iv)).filter((b) => { const t = Date.parse(b.t.length > 10 ? b.t + ":00Z" : b.t + "T00:00:00Z"); return t >= from - iv * 60000 && t <= to + iv * 60000; });
+  if (!el.isConnected) return;
+  const vals = bars.map((b) => b.c); if (vals.length < 2) { el.innerHTML = `<p class="hint">Not enough candles to draw this one.</p>`; return; }
+  const W = 340, H = 120, lo = Math.min(...vals, r.target, r.p0, r.actual), hi = Math.max(...vals, r.target, r.p0, r.actual), pad = (hi - lo) * 0.1 || 1;
+  const R = 84, Y = (v) => 8 + (1 - (v - (lo - pad)) / (hi - lo + 2 * pad)) * (H - 16), X = (i) => (i / (vals.length - 1)) * (W - R);
+  const d = vals.map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join("");
+  const upc = r.actual >= r.p0 ? "var(--up)" : "var(--down)";
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Price from ${m$(r.p0)} to ${m$(r.actual)}; you called ${m$(r.target)}">
+    <line x1="0" x2="${W - R}" y1="${Y(r.target).toFixed(1)}" y2="${Y(r.target).toFixed(1)}" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>
+    <path d="${d}" fill="none" stroke="${upc}" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    <circle cx="${X(0).toFixed(1)}" cy="${Y(r.p0).toFixed(1)}" r="3.5" fill="var(--text)"/><circle cx="${X(vals.length - 1).toFixed(1)}" cy="${Y(r.actual).toFixed(1)}" r="4" fill="${upc}"/>
+    <text x="${W - R + 8}" y="${(Y(r.target) + 4).toFixed(1)}" font-size="10" font-weight="700" fill="var(--accent)">call ${esc(m$(r.target).replace("$", ""))}</text>
+    <text x="${W - R + 8}" y="${(Y(r.actual) + (Math.abs(Y(r.actual) - Y(r.target)) < 12 ? (Y(r.actual) > Y(r.target) ? 14 : -8) : 4)).toFixed(1)}" font-size="10" font-weight="700" fill="${upc}">end ${esc(m$(r.actual).replace("$", ""))}</text>
+  </svg><div class="pc2-row hint"><span>${esc(when(r.createdAt, r.horizon))}</span><span>${esc(when(dueAt(r), r.horizon))}</span></div>`;
 }
 function resultRow(p, i) {
   return p.status === "scored"
-    ? `<button class="row" data-res="${i}"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">${num(esc(closenessText(p).split(" · ")[0]))} · ${num(esc(m$(p.target)))} called, it was ${num(esc(m$(p.actual)))}${p.g ? ` · ${esc(groupName(p.g))}` : ""}${p.here ? " · confirming" : ""}</span></span><span class="lab ${LABEL_CLASS[p.label] || ""}">${esc(p.label)}</span></button>`
+    ? `<button class="row" data-res="${i}"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">${num(esc(closenessText(p).split(" · ")[0]))} · ${num(esc(m$(p.target)))} called, it was ${num(esc(m$(p.actual)))}${p.g ? ` · ${esc(groupName(p.g))}` : ""}${p.here ? " · confirming" : ""}</span></span><span class="lab ${LABEL_CLASS[shownLabel(p)] || ""}">${esc(shownLabel(p))}</span></button>`
     : `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s" style="white-space:normal">${esc(p.voidReason || "Not counted.")}</span></span><span class="lab low">Not counted</span></div>`;
 }
 
@@ -193,9 +220,16 @@ function groupsView(el) {
       return `<button class="gcard" data-g="${esc(g.id)}"><span class="gcard-top"><b>${esc(g.name)}</b>${tag || `<span class="chev">›</span>`}</span>
         <span class="gcard-bot"><span class="stack" aria-hidden="true">${ms.slice(0, 5).map(([a, u]) => ava(u, a === me() ? myCard() : S.cards.get(a), "xs")).join("")}${n > 5 ? `<span class="ava xs more">+${n - 5}</span>` : ""}</span><span class="s">${s}</span></span></button>`; }).join("")}</div>`
       : `<div class="pl-intro"><b>Play with friends</b><p class="hint">A group calls the same coin over the same time and sees who was closest. Prices stay hidden until it's scored.</p></div>`}
-    <button class="pl-newg" id="plNewG"><span class="plus" aria-hidden="true">+</span><span class="main"><b>Start a group</b><span class="s">Up to ${GROUP_MAX} players. Share its link, or invite players from their card.</span></span></button>`;
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px"><button class="btn primary" id="plNewG">Start a group</button><button class="btn" id="plJoinG">Join with a link</button></div>
+    <div class="label pl-sec">Shared lists</div>
+    ${[...store.lists.values()].length ? `<div class="hl">${[...store.lists.values()].map((l) => `<button class="row" data-list="${esc(l.id)}"><span class="main"><span class="t">${esc(l.name)}</span><span class="s">${(l.symbols || []).length} coins · ${esc(Object.values(l.members || {}).slice(0, 3).map((u) => "@" + u).join(", ") || "just you")}</span></span><span class="chev">›</span></button>`).join("")}</div>` : `<p class="hint pl-empty">Follow a list of coins with friends. Anyone with its link can add coins.</p>`}
+    <button class="btn block" id="plNewL" style="margin-top:12px">New shared list</button>
+    <p class="hint" style="margin-top:14px">Groups hold up to ${GROUP_MAX} players, and you can be in ${GROUPS_MAX}. Picks stay sealed until a challenge ends.</p>`;
   el.querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openGroup(b.dataset.g)));
   el.querySelector("#plNewG").onclick = () => openNewGroup();
+  el.querySelector("#plJoinG").onclick = () => { const l = prompt("Paste the group's link"); const m = l && l.match(/#\/g\/[a-z0-9]{20,}/); if (m) openLink(m[0]); else if (l) toast("That doesn't look like a group link."); };
+  el.querySelectorAll("[data-list]").forEach((b) => (b.onclick = () => { APP.backTo = "play"; showTab("profile", "lists", b.dataset.list); }));
+  el.querySelector("#plNewL").onclick = () => { APP.backTo = "play"; showTab("profile", "lists"); };
   el.querySelectorAll("[data-join]").forEach((b) => (b.onclick = async () => { b.disabled = true; try { await joinGroup(b.dataset.join); haptic(); toast("You're in."); openGroup(b.dataset.join); } catch (e) { toast(e.message, { ms: 4500 }); b.disabled = false; } }));
   el.querySelectorAll("[data-decline]").forEach((b) => (b.onclick = async () => { b.disabled = true; await declineInvite(b.dataset.decline).catch(() => {}); }));
   // member letters on the rows are coloured by their cards, fetched once

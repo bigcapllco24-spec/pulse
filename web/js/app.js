@@ -28,7 +28,7 @@ export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], 
 export function currentSyms() {
   const list = store.data?.settings?.list || "all";
   // a watchlist, or a shared list (1.2.0: "Scroll these in the feed")
-  let syms = list === "all" ? allSyms() : (watchlists().find((w) => w.id === list)?.syms || (store.lists.get(list)?.syms || []).filter((x) => x.m === "CRYPTO") || allSyms());
+  let syms = list === "all" ? allSyms() : (watchlists().find((w) => w.id === list)?.syms || (store.lists.get(list)?.symbols || []).filter((x) => x.m === "CRYPTO") || allSyms());
   if (!syms.length) syms = allSyms();
   const order = chartSettings().order;
   const chg = (s) => view(s.key, dailyOf(chartSettings()))?.daily.now.changePct;

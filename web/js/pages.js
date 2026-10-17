@@ -138,7 +138,7 @@ export function openListsFor(sym) {
 export function openSwitcher(onDone = () => buildFeed()) {
   const cur = store.data?.settings?.list || "all";
   const all = allSyms().length;
-  openSheet("Show in your feed", `<p class="hint" style="margin:0 0 8px">Pick a watchlist. The feed and Your market follow it.</p>${[["all", "All my coins", all, ""], ...watchlists().map((w) => [w.id, w.name, (w.syms || []).length, ""]), ...[...store.lists.values()].map((l) => [l.id, l.name, (l.syms || []).length, "Shared"])].map(([id, name, n, tag]) =>
+  openSheet("Show in your feed", `<p class="hint" style="margin:0 0 8px">Pick a watchlist. The feed and Your market follow it.</p>${[["all", "All my coins", all, ""], ...watchlists().map((w) => [w.id, w.name, (w.syms || []).length, ""]), ...[...store.lists.values()].map((l) => [l.id, l.name, (l.symbols || []).length, "Shared"])].map(([id, name, n, tag]) =>
     `<button class="row" data-l="${esc(id)}"><span class="main"><span class="t">${esc(name)}${tag ? ` <span class="pill">${tag}</span>` : ""}</span><span class="s">${n} coin${n === 1 ? "" : "s"}</span></span>${id === cur ? `<span style="color:var(--accent);font-weight:800">✓</span>` : ""}</button>`).join("")}
     <div style="display:flex;gap:8px;margin-top:12px"><button class="btn sm" id="nwl">New watchlist</button><button class="btn sm" id="mwl">Share a list</button></div>
     <div class="label" style="margin:18px 0 8px">Order</div><div class="opts">${[["watchlist", "Watchlist order"], ["move", "Biggest move"], ["news", "Most news"], ["rsi", "Lowest RSI"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-o="${k}" aria-pressed="${chartSettings().order === k}">${l}</button>`).join("")}</div>`, (body) => {
@@ -368,7 +368,8 @@ function pLists(el, back) {
     <form class="box" id="lForm"><div class="field"><label for="lName">New shared list</label><input id="lName" maxlength="40" required placeholder="e.g. Weekend watchlist"></div><p class="hint">Members see each other by username${store.data?.username ? `: you're @${esc(store.data.username)}` : ". You'll pick one when you create or join a list"}.</p><button class="btn primary block">Create</button></form>
     ${lists.map((l) => `<div class="box"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h3>${esc(l.name)}</h3><span><button class="btn sm" data-copy="${esc(l.id)}">Invite link</button> <button class="btn ghost sm" data-leave="${esc(l.id)}">Leave</button></span></div>
       <p class="hint">Members: ${esc(Object.values(l.members || {}).join(", ") || "just you")}</p><p>${(l.symbols || []).map((s) => esc(s.t)).join(", ") || `<span class="hint">Empty</span>`}</p>
-      ${(l.symbols || []).length ? `<button class="btn sm" data-copyto="${esc(l.id)}">Copy into a watchlist</button>` : ""}</div>`).join("")}`;
+      ${(l.symbols || []).length ? `<button class="btn primary sm" data-scroll="${esc(l.id)}">Scroll these in the feed</button> <button class="btn sm" data-copyto="${esc(l.id)}">Copy into a watchlist</button>` : ""}</div>`).join("")}`;
+  el.querySelectorAll("[data-scroll]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, list: b.dataset.scroll } }); APP.needsRebuild = true; showTab("feed"); }));
   const re = () => { pLists(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
   el.querySelector("#lForm").onsubmit = (e) => {
     e.preventDefault();
