@@ -4,6 +4,7 @@
 //
 // Everyone is kept by account id, with their username alongside for display. Prices called in a group stay in each
 // player's own picks until the data job scores them; groups only ever see who picked, then how close each was.
+import { levelAt } from "./progress.js";
 import { store, save, ls, randomId, fbx, connected, isoDates, myScore, makePrediction } from "./store.js";
 import { HORIZONS, BANDS, checkPrediction, canPredict, challengeResults, addPoints } from "./score.js";
 import { settle, rowCache, SETTLE_DELAY } from "./predict.js";
@@ -33,7 +34,8 @@ export const bandOf = (score) => (score == null ? null : BANDS.find(([min]) => s
 const CAST = [["kiran", 862, 340], ["lumen", 841, 198], ["tara.q", 829, 260], ["omar", 822, 155], ["asha", 814, 212], ["nilufer", 771, 90], ["rohan", 705, 64], ["ashwin", 655, 40], ["dev", 598, 22], ["aslan", 552, 4]]
   .map(([u, score, n], i) => ({ a: "demo_" + u, u, score, band: bandOf(score), prov: n < RANK_MIN, n, followers: [1204, 640, 512, 388, 1204, 77, 38, 12, 5, 0][i], public: true,
     spot: Math.round(n * 0.19), closePlus: 68 - i * 3, best: ["1d", "1h", "1y", "1d"][i % 4], badges: n >= 100 ? ["First Spot on", "10 scored", "100 scored"] : n >= 10 ? ["First Spot on", "10 scored"] : [],
-    since: "2026-10", line: Array.from({ length: 12 }, (_, k) => ({ d: `2026-10-${String(k + 1).padStart(2, "0")}`, s: score - (11 - k) * 4 })) }));
+    since: "2026-10", line: Array.from({ length: 12 }, (_, k) => ({ d: `2026-10-${String(k + 1).padStart(2, "0")}`, s: score - (11 - k) * 4 })),
+    level: levelAt(n), right: Math.min(95, 50 + Math.round((score - 550) / 8)) }));
 const DEMO = "pl.demoSocial";
 const demo = () => ls.get(DEMO, { groups: {}, ch: {}, picks: [] });
 const keepDemo = (d) => { ls.set(DEMO, d); loadDemo(); };
@@ -125,6 +127,24 @@ export async function findPlayers(text) {
 }
 // The public leaderboard: the top 100 players who chose to be on it (refreshed by the data job every 2 hours).
 let boardAt = 0;
+// Most followed (1.2.0): what the search screen shows before anyone types. The job writes boards/followed.
+let followedAt = 0;
+export async function getFollowedBoard() {
+  if (!live()) return { rows: CAST.filter((p) => p.followers > 0).sort((x, y) => y.followers - x.followers).slice(0, 30).map((p) => ({ a: p.a, u: p.u, score: p.score, band: p.band, n: p.n, followers: p.followers })) };
+  if (S.followed && Date.now() - followedAt < 300e3) return S.followed;
+  await connected();
+  const { f, db } = fbx(), d = await f.getDoc(f.doc(db, "boards", "followed"));
+  followedAt = Date.now();
+  return (S.followed = d.exists() ? d.data() : { rows: [] });
+}
+// A player's public scored calls (1.2.0): the ones they chose to show, newest first. Readable by their followers.
+export async function getPublicCalls(acct) {
+  if (!live()) { const p = CAST.find((x) => x.a === acct); if (!p) return []; if (!isFollowing(acct)) return null; const r = (k) => [p.u.length * 7 + k * 13, p.u.charCodeAt(0) + k]; return Array.from({ length: Math.min(6, p.n) }, (_, k) => { const [a, b] = r(k), p0 = 100 + (a % 50), up = b % 3 !== 0, target = p0 * (up ? 1.02 : 0.98), actual = p0 * (1 + ((b % 7) - 3) / 100); return { id: "d" + k, t: ["BTC", "ETH", "SOL", "XRP"][k % 4], coin: "CRYPTO:" + ["BTC", "ETH", "SOL", "XRP"][k % 4], horizon: ["1d", "1h", "1d", "30m"][k % 4], p0, target, actual, label: ["Close", "Spot on", "Off", "Very close", "Far off", "Close"][k], pctOff: ((actual / target) - 1) * 100, createdAt: new Date(Date.now() - (k + 1) * 864e5).toISOString(), resolvedAt: new Date(Date.now() - k * 864e5).toISOString(), sure: ["fairly", "very", "hunch"][k % 3], basis: ["chart", "news", null, "indicators"][k % 4] }; }); }
+  await connected();
+  const { f, db } = fbx();
+  try { const q = await f.getDocs(f.query(f.collection(db, "players", acct, "calls"), f.orderBy("resolvedAt", "desc"), f.limit(100))); return q.docs.map((d) => ({ id: d.id, ...d.data() })); }
+  catch (e) { if (/permission|insufficient/i.test(e.code || e.message || "")) return null; throw e; } // null: not allowed (not a follower)
+}
 export async function getBoard() {
   if (!live()) { const r = rankedDemo(); return (S.board = { rows: r.slice(0, 100), of: r.length, at: nowIso() }); }
   if (S.board && Date.now() - boardAt < 300e3) return S.board;

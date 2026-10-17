@@ -2,22 +2,22 @@
 // challenges, finding and following players, the leaderboard, player cards, and the avatar sheet (your settings).
 // Data lives in store.js (your account and predictions) and social.js (people and groups).
 import { CONFIG } from "../config.js";
-import { store, ls, allSyms, makePrediction, myScore, enablePush, isAdmin, pendingHere, settleHere, nextDue } from "./store.js";
+import { store, ls, save, allSyms, makePrediction, myScore, enablePush, isAdmin, pendingHere, settleHere, nextDue } from "./store.js";
 import { HORIZONS, PROVISIONAL_UNDER, CHANCE, checkPrediction, canPredict, allowedRange, dailyVol, dueAt, closenessText, typicalMove } from "./score.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { krakenBars } from "./data.js";
 import { D } from "./data.js";
-import { $, esc, money, pct, toast, haptic, openSheet, setSheetBody, closeSheet } from "./ui.js";
+import { $, esc, money, pct, toast, haptic, openSheet, setSheetBody, closeSheet, ago } from "./ui.js";
 import { APP, showTab } from "./app.js";
 import { renderYou } from "./you.js";
 import { setFeedbackMode } from "./feedback.js";
-import { cardHtml, HOW_SCORE, svgIcon, BAND_CLASS, SHORT } from "./card.js";
+import { svgIcon, BAND_CLASS, SHORT } from "./card.js";
 import { mixOf, streakOf, streakBadges, istDay, dailyCoin, msUntilNextDay, whatHappened } from "./habit.js";
 import { openShareSheet } from "./share.js";
-import { levelOf, ringClass } from "./progress.js";
+import { levelOf, ringClass, ringOf, ringName, callsFor, UNLOCKS } from "./progress.js";
 import { S, onSocial, me, myName, bandOf, RANK_MIN, CH_PERIODS, PICK_MINS, GROUP_MAX, GROUPS_MAX, getCards, getCard, findPlayers, getBoard, myCard, following, isFollowing, follow, setPublic, setPickDefault,
   myGroups, groupLink, createGroup, peekGroup, joinGroup, settleChallengesHere, nextChallengeEnd, leaveGroup, removeMember, renameGroup, invite, declineInvite, challengesOf, myPick, picksOpen, waitingForMe, isSeen, markSeen,
-  unseenResults, canCount, startChallenge, makePick, REACTIONS, react, groupTable } from "./social.js";
+  unseenResults, canCount, startChallenge, makePick, REACTIONS, react, groupTable, getFollowedBoard, getPublicCalls } from "./social.js";
 
 const PERIODS = Object.keys(HORIZONS);
 const LABEL_CLASS = { "Spot on": "good", "Very close": "good", Close: "mid", Off: "low", "Far off": "bad", "Wrong way": "bad", "Not counted": "low" };
@@ -51,6 +51,8 @@ export function initPlay() {
   setInterval(() => { if (APP.tab === "play" && $("sheet").hidden && !document.hidden) { rerender(); if (APP.openGroup) drawGroup(); } }, 30000); // countdowns
   // score calls and challenges on this phone the moment they're due (the data job confirms them a few minutes later)
   store.on((w) => w === "preds" && scheduleScoring()); onSocial(scheduleScoring);
+  store.on((w) => (w === "preds" || w === "account" || w === "all") && checkLevelUp());
+  setTimeout(checkLevelUp, 3000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { tried = false; scheduleScoring(); } });
   scheduleScoring();
   badge();
@@ -118,7 +120,7 @@ function callsView(el) {
     const due = dueAt(p), grp = p.g ? ` · ${esc(groupName(p.g))}` : "";
     return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">Called ${num(esc(m$(p.target)))}${grp}${p.kind === "pick" ? " · group only" : ""}</span></span><b class="num">${esc(Date.now() >= Date.parse(due) ? "scoring…" : leftText(due, p.horizon))}</b></div>`;
   };
-  const bits = [`${n} of about ${VERDICT_AT} calls`, st.n ? `${st.n}-day streak` : "", levelText()].filter(Boolean).join(" · ");
+  const bits = [n < VERDICT_AT ? `${n} of about ${VERDICT_AT} calls` : `${n} calls scored`, st.n ? `${st.n}-day streak` : "", levelText()].filter(Boolean).join(" · ");
   const waits = waitingForMe(), groups = myGroups(), lists = [...store.lists.values()];
   const friendRows = [
     ...waits.slice(0, 2).map((ch) => `<button class="row" data-pick="${esc(ch.g)}|${esc(ch.id)}"><span class="main"><span class="t">${esc(groupName(ch.g))}</span><span class="s">Group, needs your pick, ${esc(until(ch.joinUntil))} left</span></span><span class="linkbtn">Pick</span></button>`),
@@ -155,6 +157,23 @@ function dailyBox(here) {
   const { dc, mine, blocked, left } = dailyState(here);
   const right = mine ? `<span class="lab good">You're in</span>` : blocked ? `<span class="hint">1-day call open</span>` : `<span class="linkbtn">Call</span>`;
   return `<div class="hl"><button class="row" data-daily><span class="main"><span class="t">Today's coin: ${esc(dc.n)}</span><span class="s">${mine ? `Called ${esc(m$(mine.target))}, scored ${esc(when(dueAt(mine), "1d"))}` : `Everyone calls it, ${esc(left)} left`}</span></span>${right}</button></div>`;
+}
+// Level up (1.2.0): shown once when the level rises, with what it opens. Remembered on this phone.
+const LS_LEVEL = "pl.level";
+function checkLevelUp() {
+  if (!store.ready || !store.data?.username) return;
+  const { level } = myLevel(), seen = ls.get(LS_LEVEL);
+  if (seen == null) { ls.set(LS_LEVEL, level); return; }
+  if (level <= seen) return;
+  ls.set(LS_LEVEL, level);
+  if (level < 2 || !$("sheet").hidden || $("gate")) return;
+  const next = callsFor(level + 1), name = ringName(level), newRing = ringOf(level) !== ringOf(level - 1);
+  openSheet("Level up", `<div class="lvlup">${levelAvatar(myName(), level, "lg xl")}<span class="hint" style="color:var(--accent);font-weight:600">${newRing ? `Level ${level}, and a new ring colour: ${name}` : `Level ${level}`}</span>
+      <h2 style="margin:6px 0 0">${callsFor(level)} calls scored</h2>
+      <p class="hint" style="max-width:300px;margin:10px auto 0">${esc(UNLOCKS[level] || "Keep going. Levels show how much you've played; your score shows how well.")}</p></div>
+    <div class="pc2-box" style="margin-top:20px;gap:6px"><div class="pc2-row"><b>Next: level ${level + 1}</b><span class="hint">${next - callsFor(level)} calls to go</span></div><span class="pl-prog" aria-hidden="true"><i style="width:0%"></i></span>${UNLOCKS[level + 1] ? `<span class="hint">${esc(UNLOCKS[level + 1])}</span>` : ""}</div>
+    <button class="btn primary block" data-close style="margin-top:16px">Keep going</button>
+    <p class="hint" style="text-align:center">Levels show how much you've played, not how good you are. Your score shows that.</p>`, (body) => { body.querySelector("[data-close]").onclick = closeSheet; haptic([10, 40, 16]); });
 }
 // the level line on the progress card (progress.js): effort, not skill
 export const myLevel = () => levelOf([...store.results, ...pendingHere()]);
@@ -304,8 +323,6 @@ export function openBoard(tab = "everyone") {
   });
 }
 
-// ---------- a player's card (card.js): the same card is a sheet for other players and your own full profile page
-const cardOf = (c, a, actions = "") => cardHtml(c, { mine: a === me(), actions, common: a === me() ? [] : myGroups().filter((g) => a in (g.members || {})) });
 // your own card, with your record worked out from this phone's results (fresher than the card the job writes)
 export function myFullCard() {
   const scored = [...pendingHere(), ...store.results].filter((r) => r.status === "scored"), mix = mixOf(scored), n = mix.reduce((a, x) => a + x, 0);
@@ -314,61 +331,45 @@ export function myFullCard() {
     badges: [...new Set([...(base.badges || []).filter((b) => !/-day streak$/.test(b)), ...streakBadges(Math.max(st.best, base.bestStreak || 0))])] };
 }
 export const myStreak = () => streakOf([...store.preds, ...store.results, ...S.picks.filter((p) => !p.counts)]);
-function wireCard(root) {
-  root.querySelector("[data-how]")?.addEventListener("click", () => openSheet("How the score works", HOW_SCORE));
-  root.querySelector("[data-first]")?.addEventListener("click", () => { closeProfile(); APP.playView = "calls"; showTab("play"); });
-}
 export async function openPlayerCard(a) {
-  if (a === me()) { openProfile(); return; }
+  if (a === me()) { showTab("you"); return; }
   openSheet("Player", `<p class="hint">Loading…</p>`);
   let c; try { c = await getCard(a); } catch { c = null; }
   if (!c) { setSheetBody(`<div class="empty">This player's card isn't ready yet. Cards update every 2 hours.</div>`); return; }
   const draw = () => {
-    const on = isFollowing(a);
-    setSheetBody(cardOf(c, a, `<div class="pc-acts"><button class="btn ${on ? "" : "primary"}" id="pcFollow">${on ? "Following" : "Follow"}</button><button class="btn" id="pcInvite">Invite to a group</button></div>`)
-      + `<p class="hint">Scores and results only; price calls are never shown. A learning game, not advice.</p>`);
-    const sh = $("sheet"); wireCard(sh);
+    const on = isFollowing(a), common = myGroups().filter((g) => a in (g.members || {})), lvl = c.level || 0;
+    const v = c.score == null || c.prov ? (c.n ? "Too early to tell" : "No calls scored yet") : c.score >= 600 ? "Reading it well" : "Still learning";
+    const w = c.n ? Math.round(190 / Math.sqrt(c.n)) : null;
+    setSheetBody(`<div class="pcard2">
+      ${levelAvatar(c.u, lvl, "lg")}<b class="pc2-name">@${esc(c.u)}</b>
+      <span class="hint">${[`Level ${lvl}`, `${c.followers || 0} follower${c.followers === 1 ? "" : "s"}`, c.rank ? `#${c.rank} of ${c.of}` : ""].filter(Boolean).join(" · ")}</span></div>
+      <div class="pc2-box you-score" style="margin-top:16px"><span class="hint">${esc(v)}</span>
+        <span style="display:flex;align-items:baseline;gap:10px"><b class="num you-big ${c.score >= 600 && !c.prov ? "good" : ""}" style="font-size:44px">${c.score ?? "–"}</b>${c.score != null && w ? `<span class="hint">likely ${Math.max(300, c.score - w)} to ${Math.min(900, c.score + w)}</span>` : ""}</span>
+        <span class="hint">${c.n ? `From ${c.n} scored call${c.n === 1 ? "" : "s"}` : "Everyone starts at 550"}</span></div>
+      <div class="you-tiles"><div class="pc2-box"><b class="num">${c.right != null ? `${c.right}%` : "–"}</b><span>Right direction</span></div><div class="pc2-box"><b class="num">${c.closePlus != null ? `${c.closePlus}%` : "–"}</b><span>Close or better</span></div></div>
+      ${c.best || common.length ? `<p class="hint" style="margin:12px 0 0">${[c.best ? `Strongest at ${HORIZONS[c.best]?.label || c.best} calls.` : "", common.length ? `You're both in ${esc(common.map((g) => g.name).join(", "))}.` : ""].filter(Boolean).join(" ")}</p>` : ""}
+      <button class="row dcard" id="pcCalls" style="margin-top:14px"><span class="main"><span class="t">Scored calls, public</span><span class="s">${on ? "The calls @" + esc(c.u) + " has made public, once scored" : "Follow to see the calls they've made public"}</span></span><span class="chev">›</span></button>
+      <div class="pc-acts" style="margin-top:14px"><button class="btn ${on ? "" : "primary"}" id="pcFollow">${on ? "Following" : "Follow"}</button><button class="btn" id="pcInvite">Invite to a group</button></div>
+      <p class="hint" style="text-align:center">Only calls made public show, and only once they're scored. Open calls are never shown. Never advice.</p>`);
+    const sh = $("sheet");
     sh.querySelector("#pcFollow")?.addEventListener("click", async () => { try { await follow(a, !on); haptic(); if (!on) c.followers = (c.followers || 0) + 1; else c.followers = Math.max(0, (c.followers || 0) - 1); draw(); } catch (e) { toast(e.message); } });
     sh.querySelector("#pcInvite")?.addEventListener("click", () => chooseGroupToInvite(a, c.u));
+    sh.querySelector("#pcCalls")?.addEventListener("click", () => openPublicCalls(a, c));
   };
   draw();
 }
-// ---------- your profile: a page of its own (from the top of Predict), with the way to settings on it
-let profOn = false;
-function openProfile() {
-  let el = $("prof");
-  if (!el) { el = document.createElement("section"); el.id = "prof"; el.className = "grp"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); document.body.appendChild(el); }
-  profOn = true; el.hidden = false; document.body.classList.add("grpopen"); requestAnimationFrame(() => el.classList.add("on"));
-  if (!history.state?.prof) history.pushState({ prof: 1 }, "");
-  drawProfile();
+// A player's public scored calls (1.2.0): what happened, after it happened. Tap one for its replay.
+async function openPublicCalls(a, c) {
+  openSheet(`@${esc(c.u)} · scored calls`, `<p class="hint">Loading…</p>`, async (body) => {
+    let list; try { list = await getPublicCalls(a); } catch { list = []; }
+    if (list === null) { body.innerHTML = `<div class="empty">Follow @${esc(c.u)} to see the calls they've made public.</div>`; return; }
+    if (!list.length) { body.innerHTML = `<div class="empty">@${esc(c.u)} hasn't made any scored calls public yet.</div>`; return; }
+    const right = list.filter((r) => (r.target > r.p0) === (r.actual > r.p0)).length;
+    body.innerHTML = `<p class="hint" style="margin:0 0 10px">${list.length} public of ${c.n || list.length} scored. Right direction in ${Math.round((right / list.length) * 100)}%.</p><div class="hl">${list.map((r, i) => `<button class="row" data-pc="${i}"><span class="main"><span class="t">${esc(r.t)}, ${esc(HORIZONS[r.horizon]?.label || r.horizon)}</span><span class="s">${esc(ago(r.resolvedAt))} · called ${num(esc(m$(r.target)))} from ${num(esc(m$(r.p0)))}</span></span><span class="lab ${LABEL_CLASS[shownLabel(r)] || ""}">${esc(shownLabel(r))}</span></button>`).join("")}</div>
+      <p class="hint" style="margin-top:12px">What happened, after it happened. Open calls are never shown. Not advice.</p>`;
+    body.querySelectorAll("[data-pc]").forEach((b) => (b.onclick = () => openResult({ ...list[+b.dataset.pc], status: "scored" })));
+  });
 }
-function drawProfile() {
-  const el = $("prof"); if (!el || !profOn) return;
-  const c = myFullCard(), fl = following().length, pub = store.data?.public === true;
-  const row = (id, ic, t, sub, plain = false) => `<button class="row irow" id="${id}"><span class="ic${plain ? " n" : ""}">${svgIcon(ic)}</span><span class="main"><span class="t">${t}</span><span class="s">${sub}</span></span><span class="chev">›</span></button>`;
-  el.innerHTML = `<div class="grp-h"><button class="iconbtn ghost" id="prBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button><span class="grp-t"><b>Your profile</b><span class="hint">What other players see</span></span><button class="iconbtn ghost" id="prShare" aria-label="Share your card">${svgIcon("share")}</button></div>
-    <div class="grp-b prof-b">${cardHtml(c, { mine: true })}
-      <div class="prof-list">
-        ${row("prFollowing", "people", "Following", fl ? `${fl} player${fl === 1 ? "" : "s"} · only you see who` : "Find players to follow from Ranks")}
-        ${row("prBoard", "bars", "Public leaderboard", pub ? (c.rank ? `You're on it · rank #${c.rank}` : "You're on it") : "You're not on it")}
-        ${row("prSettings", "sliders", "Settings", "Username, alerts, chart style, appearance, notifications", true)}
-      </div>
-      <p class="hint" style="text-align:center">Other players see your username, score, band, followers, rank, streak and record. Your price calls are never shown. A learning game, not advice.</p></div>`;
-  wireCard(el);
-  el.querySelector("#prBack").onclick = backFromProfilePage;
-  el.querySelector("#prShare").onclick = () => openShareSheet(myFullCard());
-  el.querySelector("#prFollowing").onclick = () => openFollowing();
-  el.querySelector("#prBoard").onclick = () => (pub ? openBoard("everyone") : openJoinBoard());
-  el.querySelector("#prSettings").onclick = () => openAvatarSheet();
-}
-export function closeProfile() {
-  const el = $("prof"); if (!el || el.hidden) return;
-  profOn = false; el.classList.remove("on"); if (!APP.openGroup) document.body.classList.remove("grpopen");
-  setTimeout(() => { if (!profOn) { el.hidden = true; el.innerHTML = ""; } }, 260);
-}
-const backFromProfilePage = () => (history.state?.prof ? history.back() : closeProfile());
-addEventListener("popstate", () => { if (profOn && !history.state?.prof) { closeSheet(); closeProfile(); } });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && profOn && !APP.openGroup && $("sheet").hidden) backFromProfilePage(); });
 const cardFromScore = () => { const sc = myScore(); return sc ? { u: myName(), score: sc.score, band: sc.band, prov: sc.provisional, n: sc.n } : { u: myName(), score: null, n: 0, prov: true }; };
 function chooseGroupToInvite(a, u) {
   const gs = myGroups().filter((g) => !(a in (g.members || {})));
@@ -384,18 +385,18 @@ function chooseGroupToInvite(a, u) {
 
 // ---------- find players
 export function openSearch() {
-  openSheet("Find players", `<label class="uname"><span>@</span><input id="fpIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="username" aria-label="Username"></label><div id="fpRes" style="margin-top:8px"></div>`, (body) => {
+  openSheet("Find players", `<label class="uname"><span>@</span><input id="fpIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="search a username" aria-label="Username"></label><div id="fpRes" style="margin-top:8px"></div>`, (body) => {
     const inp = body.querySelector("#fpIn"), res = body.querySelector("#fpRes");
     let seq = 0;
-    const row = (c) => `<div class="row"><button class="pl-hit" data-a="${esc(c.a)}">${ava(c.u, c, "sm")}<span class="main"><span class="t">@${esc(c.u)}</span><span class="s">${c.score != null ? `${num(c.score)} ${esc(c.band || "")}` : "New player"} · ${num((c.followers || 0).toLocaleString("en-IN"))} follower${c.followers === 1 ? "" : "s"}</span></span></button>
+    const row = (c) => `<div class="row"><button class="pl-hit" data-a="${esc(c.a)}">${levelAvatar(c.u, c.level || 0, "sm")}<span class="main"><span class="t">@${esc(c.u)}</span><span class="s">${c.score != null ? `${num(c.score)}` : "New player"} · ${num((c.followers || 0).toLocaleString("en-IN"))} follower${c.followers === 1 ? "" : "s"}</span></span></button>
       <button class="btn sm ${isFollowing(c.a) ? "" : "primary"}" data-f="${esc(c.a)}">${isFollowing(c.a) ? "Following" : "Follow"}</button></div>`;
     const wire = (list) => {
       res.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openPlayerCard(b.dataset.a)));
       res.querySelectorAll("[data-f]").forEach((b) => (b.onclick = async () => { const a = b.dataset.f, on = !isFollowing(a); try { await follow(a, on); haptic(); b.textContent = on ? "Following" : "Follow"; b.classList.toggle("primary", !on); } catch (e) { toast(e.message); } }));
     };
     const top = async () => {
-      try { const b = await getBoard(), ids = (b.rows || []).slice(0, 5).filter((r) => r.a !== me()), cards = await getCards(ids.map((r) => r.a)); const list = ids.map((r, i) => ({ ...r, ...(cards[i] || {}) }));
-        res.innerHTML = list.length ? `<div class="label" style="margin-top:12px">Top of the leaderboard</div><div class="hl">${list.map(row).join("")}</div>` : `<p class="hint">Type the start of a username.</p>`; wire(list); } catch { res.innerHTML = ""; }
+      try { const b = await getFollowedBoard(), ids = (b.rows || []).filter((r) => r.a !== me()).slice(0, 10), cards = await getCards(ids.map((r) => r.a)); const list = ids.map((r, i) => ({ ...r, ...(cards[i] || {}), followers: r.followers }));
+        res.innerHTML = list.length ? `<div class="label" style="margin-top:12px">Most followed</div><div class="hl">${list.map(row).join("")}</div><p class="hint" style="margin-top:12px">People you follow only see a count, never who follows them. Open calls are never shown, by anyone.</p>` : `<p class="hint">Type the start of a username.</p>`; wire(list); } catch { res.innerHTML = `<p class="hint">Type the start of a username.</p>`; }
     };
     const go = async () => {
       const q = inp.value.trim().replace(/^@/, ""), my = ++seq;
@@ -447,7 +448,7 @@ export function openGroup(g, { fresh = false } = {}) {
 // Back (the button, Escape, or the phone's back): the page slides away
 export function closeGroup() {
   const el = $("grp"); if (!el || el.hidden) return;
-  grpOff?.(); grpOff = null; APP.openGroup = null; if (!profOn) document.body.classList.remove("grpopen");
+  grpOff?.(); grpOff = null; APP.openGroup = null; document.body.classList.remove("grpopen");
   el.classList.remove("on"); setTimeout(() => { if (!APP.openGroup) { el.hidden = true; el.innerHTML = ""; } }, 260);
   if (APP.tab === "play") renderPlay(); badge();
 }
@@ -731,11 +732,12 @@ export function openAvatarSheet() {
   const sc = myScore(), card = myCard(), u = myName(), unread = store.alerts.filter((a) => !a.read).length;
   const row = (k, t, s, extra = `<span class="chev">›</span>`) => `<button class="row" data-av="${k}"><span class="main"><span class="t">${t}</span>${s ? `<span class="s">${s}</span>` : ""}</span>${extra}</button>`;
   const sw = (id, on, label) => `<span class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""} aria-label="${label}"><span></span></span>`;
-  openSheet("Account", `<button class="row pl-me" data-av="card">${ava(u, cardFromScore(), "lg")}<span class="main"><span class="t" style="font-size:var(--t-xl)">@${esc(u || "you")}</span><span class="s">${sc?.score != null ? `${num(sc.score)} ${esc(sc.band)}` : `${num(0)} · No calls scored yet`}${card?.followers ? ` · ${card.followers} follower${card.followers === 1 ? "" : "s"}` : ""}</span><span class="s" style="color:var(--accent);font-weight:700">View your profile</span></span><span class="chev">›</span></button>
+  openSheet("Settings", `<button class="row pl-me" data-av="card">${ava(u, cardFromScore(), "lg")}<span class="main"><span class="t" style="font-size:var(--t-xl)">@${esc(u || "you")}</span><span class="s">${sc?.score != null ? `${num(sc.score)} ${esc(sc.band)}` : `${num(0)} · No calls scored yet`}${card?.followers ? ` · ${card.followers} follower${card.followers === 1 ? "" : "s"}` : ""}</span><span class="s" style="color:var(--accent);font-weight:700">View your profile</span></span><span class="chev">›</span></button>
     <div class="label pg">People and privacy</div><div class="hl">
       ${row("following", "Following", following().length ? `${following().length} player${following().length === 1 ? "" : "s"} · only you can see who` : "Players you follow show here, only to you")}
       <div class="row"><span class="main"><span class="t">Public leaderboard</span><span class="s">Show my username, score and rank to everyone</span></span>${sw("avPub", store.data?.public === true, "Public leaderboard")}</div>
       <div class="row"><span class="main"><span class="t">Group picks count to my score</span><span class="s">The default when you pick in a group; you can change it each time</span></span>${sw("avCnt", store.data?.pickDefault !== "group", "Group picks count to my score")}</div>
+      <div class="row"><span class="main"><span class="t">My scored calls are public</span><span class="s">To followers, once scored. Public or private, both count to your score. You can change it on each call.</span></span>${sw("avCalls", store.data?.callsPublic !== false, "My scored calls are public")}</div>
     </div>
     <div class="label pg">Charts and alerts</div><div class="hl">
       ${row("chart", "Chart style", "Time range, candles and lines")}
@@ -745,7 +747,7 @@ export function openAvatarSheet() {
     </div>
     <div class="label pg">Sharing</div><div class="hl">${row("lists", "Shared lists", "Follow a list of coins with friends")}</div>
     <div class="label pg">App</div><div class="hl">
-      ${row("account", "Account", `Username (${esc(u ? "@" + u : "not set")}), sign-in id, delete your data`)}
+      ${row("account", "Account", `Username (${esc(u ? "@" + u : "not set")}), password, recovery code, sign out`)}
       ${row("appearance", "Appearance", "Dark, light or match phone")}
       ${row("feedback", "Give feedback", "Hold anything for 3 seconds, or switch on tap-to-comment")}
       ${row("legal", "Legal and disclaimer", "Terms, privacy, grievance contact")}
@@ -762,6 +764,7 @@ export function openAvatarSheet() {
     body.querySelectorAll("[data-av]").forEach((b) => (b.onclick = () => go(b.dataset.av)));
     body.querySelector("#avPub").onchange = async (e) => { await setPublic(e.target.checked); toast(e.target.checked ? "You'll show on the public leaderboard at the next update." : "You're off the public leaderboard from the next update."); };
     body.querySelector("#avCnt").onchange = (e) => setPickDefault(e.target.checked ? "counts" : "group");
+    body.querySelector("#avCalls").onchange = (e) => save({ callsPublic: e.target.checked });
     const showAdmin = () => { const a = body.querySelector("[data-admin]"); if (a && admin) { a.outerHTML = row("inbox", "Feedback inbox", "Admin · everyone's notes, newest first"); body.querySelector('[data-av="inbox"]').onclick = () => go("inbox"); } };
     if (admin === null) isAdmin().then((x) => { admin = x; showAdmin(); }); else showAdmin();
   });

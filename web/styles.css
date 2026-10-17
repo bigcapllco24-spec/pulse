@@ -977,3 +977,6 @@ body.grpopen .tabbar { display: none; } /* the group page is its own screen: no 
 .mrow { gap: 10px; } .mrow .main .s b { font-weight: 600; color: var(--muted); } .mrow .main .s b.warnt { color: var(--warn); }
 .mrow .r { display: grid; justify-items: end; gap: 1px; } .mrow .r b { font-size: var(--t-l); } .mrow .r span { font-size: var(--t-s); font-weight: 700; }
 .replay { margin: 4px 0 14px; } .replay svg { width: 100%; height: 130px; display: block; } .replay svg text { font-family: var(--num); } .replay .pc2-row { margin-top: 4px; }
+.lvlup { display: grid; justify-items: center; text-align: center; gap: 8px; padding-top: 8px; } .ava.lv.xl { width: 96px; height: 96px; font-size: 36px; border-width: 5px; } .ava.lv.xl .lvb { min-width: 26px; height: 26px; font-size: 13px; right: -6px; bottom: -6px; }
+.pcard2 { display: grid; justify-items: center; text-align: center; gap: 6px; } .pc2-name { font-size: var(--t-xl); margin-top: 4px; }
+.dsec.read h3 { text-transform: none; letter-spacing: 0; font-size: var(--t-l); color: var(--text); display: flex; gap: 10px; align-items: baseline; } .dsec.read h3 .num { color: var(--accent); } .dsec.read p { margin: 0; color: var(--muted); line-height: 1.5; }

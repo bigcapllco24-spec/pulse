@@ -129,6 +129,10 @@ service cloud.firestore {
     // follower count and record, never a price call.
     match /players/{acct} {
       allow get, list: if signedIn();
+      // a player's public scored calls (1.2.0): written by the job; read by the player and the people who follow them
+      match /calls/{call} {
+        allow get, list: if isOwner(acct) || (signedIn() && acct in acctDoc(request.auth.uid).data.get('following', []));
+      }
     }
     match /boards/{id} {
       allow get: if signedIn();

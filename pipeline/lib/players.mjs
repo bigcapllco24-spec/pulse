@@ -8,6 +8,7 @@
 // A card never holds a price call. Followers are counted from everyone's "following" lists (which stay private).
 import { HORIZONS } from "../../web/js/score.js";
 import { mixOf, streakOf, streakBadges } from "../../web/js/habit.js";
+import { levelOf } from "../../web/js/progress.js";
 
 const CLOSE = new Set(["Spot on", "Very close", "Close"]);
 export const RANK_MIN = 10; // scored calls before a public player is ranked (the score stops being provisional)
@@ -25,7 +26,8 @@ export function record(results, now = Date.now(), open = []) {
   const spot = results.filter((r) => r.label === "Spot on").length;
   const st = streakOf([...results, ...open], now); // calls still open count too: a streak is about making calls
   const badges = [spot && "First Spot on", n >= 10 && "10 scored", n >= 100 && "100 scored", new Set(results.map((r) => r.horizon)).size === Object.keys(HORIZONS).length && "All 4 periods", ...streakBadges(st.best)].filter(Boolean);
-  return { spot, closePlus: n ? Math.round((close / n) * 100) : null, best, badges, mix: mixOf(results), streak: st.n, bestStreak: st.best };
+  const right = results.filter((r) => r.p0 != null && r.actual != null && (r.target > r.p0) === (r.actual > r.p0)).length;
+  return { spot, closePlus: n ? Math.round((close / n) * 100) : null, right: n ? Math.round((right / n) * 100) : null, best, badges, mix: mixOf(results), streak: st.n, bestStreak: st.best, level: levelOf(results).level };
 }
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -45,7 +47,7 @@ export async function publishPlayers(db, accounts, scored = new Map(), { now = D
     const ps = a.pscore || null, prev = old.get(a.id);
     const line = (Array.isArray(prev?.line) ? prev.line : []).filter((x) => x.d > from && x.d !== today);
     if (ps?.score != null) line.push({ d: today, s: ps.score });
-    const rec = scored.has(a.id) ? record(scored.get(a.id), now, open.get(a.id) || []) : { spot: prev?.spot ?? 0, closePlus: prev?.closePlus ?? null, best: prev?.best ?? null, badges: prev?.badges ?? [], mix: prev?.mix ?? null, streak: prev?.streak ?? 0, bestStreak: prev?.bestStreak ?? 0 };
+    const rec = scored.has(a.id) ? record(scored.get(a.id), now, open.get(a.id) || []) : { spot: prev?.spot ?? 0, closePlus: prev?.closePlus ?? null, right: prev?.right ?? null, level: prev?.level ?? 0, best: prev?.best ?? null, badges: prev?.badges ?? [], mix: prev?.mix ?? null, streak: prev?.streak ?? 0, bestStreak: prev?.bestStreak ?? 0 };
     const doc = { u: a.username, score: ps?.score ?? null, band: ps?.band ?? null, prov: ps ? !!ps.provisional : true, n: ps?.n || 0,
       followers: followers.get(a.id) || 0, public: a.public === true, rank: rank.get(a.id) || null, of: ranked.length,
       ...rec, since: String(a.createdAt || "").slice(0, 7), line };
@@ -55,8 +57,32 @@ export async function publishPlayers(db, accounts, scored = new Map(), { now = D
   const keep = new Set(named.map((a) => a.id));
   for (const id of old.keys()) if (!keep.has(id)) await db.del(`players/${id}`); // account deleted, or no username
   await db.set("boards/public", { rows: ranked.slice(0, 100).map((a) => ({ a: a.id, u: a.username, score: a.pscore.score, band: a.pscore.band, n: a.pscore.n })), of: ranked.length, at: new Date(now).toISOString() });
+  // most followed (1.2.0): what the search screen shows before anyone types
+  const most = named.filter((a) => (followers.get(a.id) || 0) > 0).sort((x, y) => (followers.get(y.id) || 0) - (followers.get(x.id) || 0) || (y.pscore?.score || 0) - (x.pscore?.score || 0)).slice(0, 30);
+  await db.set("boards/followed", { rows: most.map((a) => ({ a: a.id, u: a.username, score: a.pscore?.score ?? null, band: a.pscore?.band ?? null, n: a.pscore?.n || 0, followers: followers.get(a.id) || 0 })), at: new Date(now).toISOString() });
+  // public scored calls (1.2.0): the scored calls a player chose to show, newest first, for their followers
+  await publishCalls(db, scored, log);
   log(`players: ${named.length} cards (${wrote} updated), ${ranked.length} on the public board`);
   return { cards: named.length, wrote, ranked: ranked.length };
+}
+
+// players/{acct}/calls/{rid}: a player's scored calls marked public (pub: true), the newest 100, with what happened.
+// Open calls are never published, by anyone.
+export async function publishCalls(db, scored, log = console.log) {
+  let wrote = 0;
+  for (const [acct, results] of scored) {
+    const pub = results.filter((r) => r.pub === true && r.status === "scored").sort((a, b) => Date.parse(b.resolvedAt) - Date.parse(a.resolvedAt)).slice(0, 100);
+    const old = new Map((await db.list(`players/${acct}/calls`)).map((c) => [c.id, c]));
+    const keep = new Set();
+    for (const r of pub) {
+      const id = r.id || `${r.t}_${r.horizon}_${r.resolvedAt}`, doc = { coin: r.coin, t: r.t, horizon: r.horizon, target: r.target, p0: r.p0, actual: r.actual, label: r.label, pctOff: r.pctOff ?? null, createdAt: r.createdAt, resolvedAt: r.resolvedAt, sure: r.sure || null, basis: r.basis || null };
+      keep.add(id);
+      if (old.has(id) && same(Object.fromEntries(Object.keys(doc).map((k) => [k, old.get(id)[k] ?? null])), Object.fromEntries(Object.entries(doc).map(([k, v]) => [k, v ?? null])))) continue;
+      await db.set(`players/${acct}/calls/${id}`, doc); wrote++;
+    }
+    for (const id of old.keys()) if (!keep.has(id)) await db.del(`players/${acct}/calls/${id}`); // made private, or trimmed
+  }
+  if (wrote) log(`public calls: ${wrote} written`);
 }
 
 // Groups: keeps member names in step with usernames, drops members whose account is gone, hands a group whose owner

@@ -5,7 +5,8 @@ import { store, myScore, pendingHere } from "./store.js";
 import { CHANCE, SCORE_MIN, SCORE_MAX, PROVISIONAL_UNDER, HORIZONS } from "./score.js";
 import { $, esc, openSheet } from "./ui.js";
 import { myName, myCard } from "./social.js";
-import { verdictOf, VERDICT_AT, myLevel, ranksView, openAvatarSheet, myFullCard, levelAvatar } from "./play.js";
+import { verdictOf, VERDICT_AT, myLevel, ranksView, openAvatarSheet, myFullCard, levelAvatar, SURE, BASIS } from "./play.js";
+import { APP, showTab } from "./app.js";
 import { openShareSheet } from "./share.js";
 import { HOW_SCORE, svgIcon, cardHtml } from "./card.js";
 import { UNLOCKS, callsFor } from "./progress.js";
@@ -31,6 +32,11 @@ export function renderYou() {
   const byH = Object.keys(HORIZONS).map((h) => { const rs = scored.filter((r) => r.horizon === h); const ok = rs.filter((r) => (r.target > r.p0) === (r.actual > r.p0)).length; return { h, n: rs.length, p: pc(ok, rs.length) }; });
   const bars = (rows) => `<div class="ybars">${rows.map((r) => `<div class="ybar"><span>${esc(r.label)}</span>${r.p == null ? `<em class="hint">${esc(r.note || "No calls yet")}</em>` : `<i aria-hidden="true"><b style="width:${r.p}%"></b></i><strong class="num">${r.p}%</strong>`}</div>`).join("")}</div>`;
   const full = lv.level >= 3;
+  const okOf = (rs) => rs.filter((r) => (r.target > r.p0) === (r.actual > r.p0)).length;
+  const bySure = SURE.map(([k, l]) => { const rs = scored.filter((r) => r.sure === k); return { label: l, p: pc(okOf(rs), rs.length), note: rs.length ? "" : "No calls yet" }; });
+  const byBasis = BASIS.map(([k, l]) => { const rs = scored.filter((r) => r.basis === k); return { label: l === "Gut" ? "Gut feeling" : l, p: pc(okOf(rs), rs.length), note: rs.length ? "" : "No calls yet" }; });
+  const sureP = bySure.map((x) => x.p), sureLine = sureP[2] != null && sureP[1] != null ? (sureP[2] > sureP[1] + 5 ? "Your very sure calls do better than your fairly sure ones." : sureP[2] < sureP[1] - 5 ? "Your very sure calls do no better than your fairly sure ones." : "Being surer hasn't made much difference yet.") : "Needs a few calls of each kind.";
+  const bestBasis = byBasis.filter((x) => x.p != null).sort((a, b) => b.p - a.p)[0];
   el.innerHTML = `<div class="you-top">
       <button class="you-me" id="youCard" aria-label="Your player card">${levelAvatar(u, lv.level, "lg")}<span class="main"><span class="t">@${esc(u || "you")}</span><span class="s">${esc(sub)}</span></span></button>
       <span class="pl-topb"><button class="iconbtn ghost" id="youShare" aria-label="Share your card">${svgIcon("share")}</button><button class="iconbtn ghost" id="youSet" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button></span>
@@ -53,12 +59,15 @@ export function renderYou() {
       <div class="pc2-box"><b class="num">${n ? `${pc(closePlus, n)}%` : `–`}</b><span>Close or better</span><em class="hint">${n ? `${closePlus} of ${n} calls` : "Spot on, Very close or Close"}</em></div>
     </div>
     ${n && n < VERDICT_AT ? `<p class="hint" style="margin:10px 0 0">Too few calls to read much into these yet.</p>` : ""}
-    ${full ? `<h2 class="you-h2">By time period</h2><p class="hint" style="margin:0 0 10px">Right direction, by how long the call was.</p>${bars(byH.map((x) => ({ label: HORIZONS[x.h].label, p: x.p, note: x.n ? "" : "No calls yet" })))}`
+    ${full ? `<h2 class="you-h2">Does being sure help?</h2><p class="hint" style="margin:0 0 10px">Right direction, by how sure you said you were. ${esc(sureLine)}</p>${bars(bySure)}
+      <h2 class="you-h2">What works for you</h2><p class="hint" style="margin:0 0 10px">Right direction, by what your call was based on.${bestBasis ? ` ${esc(bestBasis.label)} calls are your strongest.` : ""}</p>${bars(byBasis)}
+      <h2 class="you-h2">By time period</h2><p class="hint" style="margin:0 0 10px">Right direction, by how long the call was.</p>${bars(byH.map((x) => ({ label: HORIZONS[x.h].label, p: x.p, note: x.n ? "" : "No calls yet" })))}`
       : `<div class="you-lock"><b>Opens at level 3 (${callsFor(3)} calls)</b><span class="hint">${esc(UNLOCKS[3])}</span></div>`}
     <div class="you-box">
       <h2 class="you-h2" style="margin-top:0">What your score doesn't show</h2>
       <p class="hint">It shows how well you read moves. Making money also depends on:</p>
       <ul class="you-list"><li>How much you put in</li><li>Borrowing to trade (leverage)</li><li>When you cut a loss</li><li>How you act with real money on the line</li><li>Fees and tax</li></ul>
+      <button class="btn block" id="youLearn" style="margin-top:14px">Read the basics, 6 short reads</button>
     </div>
     <h2 class="you-h2">Where you rank</h2>
     <div class="pl-view" data-view="ranks"></div>
@@ -69,4 +78,5 @@ export function renderYou() {
   el.querySelector("#youShare").onclick = () => openShareSheet(myFullCard());
   el.querySelector("#youSet").onclick = () => openAvatarSheet();
   el.querySelector("#youHow").onclick = () => openSheet("How the score works", HOW_SCORE);
+  el.querySelector("#youLearn").onclick = () => { APP.backTo = "you"; showTab("profile", "learn"); };
 }

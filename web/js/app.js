@@ -3,7 +3,7 @@
 import { CONFIG } from "../config.js";
 import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists, settleDemoPredictions } from "./store.js";
 import { initSocial, settleDemoChallenges } from "./social.js";
-import { initPlay, renderPlay, openPredictSheet, openLink, badge, openAvatarSheet, closeGroup, closeProfile } from "./play.js";
+import { initPlay, renderPlay, openPredictSheet, openLink, badge, openAvatarSheet, closeGroup } from "./play.js";
 import { krakenRows } from "./predict.js";
 import { loadSymbols, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
@@ -594,7 +594,7 @@ addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { i
 // Tabs: Feed, Calls ("play") and You. "dash" is Your market (the feed as a list), opened from the feed's top bar, and
 // "profile" is the settings pages, opened from You; the tab bar keeps showing where they were opened from.
 export function showTab(tab, sub, arg) {
-  closeGroup(); closeProfile(); // the group and profile pages sit over the tabs; going anywhere else closes them
+  closeGroup(); // the group page sits over the tabs; going anywhere else closes it
   if (tab === "profile" && !sub) { tab = "you"; }
   APP.tab = tab;
   $("sFeed").hidden = tab !== "feed"; $("sDash").hidden = tab !== "dash"; $("sPlay").hidden = tab !== "play"; $("sYou").hidden = tab !== "you"; $("sProfile").hidden = tab !== "profile";
