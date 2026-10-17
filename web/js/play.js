@@ -3,7 +3,7 @@
 // Data lives in store.js (your account and predictions) and social.js (people and groups).
 import { CONFIG } from "../config.js";
 import { store, ls, allSyms, makePrediction, myScore, enablePush, isAdmin, pendingHere, settleHere, nextDue } from "./store.js";
-import { HORIZONS, PROVISIONAL_UNDER, CHANCE, checkPrediction, canPredict, allowedRange, dailyVol, dueAt, closenessText } from "./score.js";
+import { HORIZONS, PROVISIONAL_UNDER, CHANCE, checkPrediction, canPredict, allowedRange, dailyVol, dueAt, closenessText, typicalMove } from "./score.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { D } from "./data.js";
 import { $, esc, money, pct, toast, haptic, openSheet, setSheetBody, closeSheet } from "./ui.js";
@@ -563,41 +563,67 @@ function watchPrice(body, id, sym, horizon, onValid) {
 // lock-in: a short buzz (where the phone supports it) and a press-and-ripple on the button
 function lockFeel(btn) { haptic([10, 40, 16]); btn.classList.remove("thump"); void btn.offsetWidth; btn.classList.add("thump"); }
 
-// The prediction sheet, from the Predict chip on a card or a coin on the Calls view. Can also start a group challenge.
+// Call it (1.2.0): the period, higher or lower, a size (a little, a usual move, a big move) or your own move as a
+// percentage or a price, how sure you are, what it's based on, and whether followers may see it once scored. Can
+// also post the call to a group as a challenge.
+export const SURE = [["hunch", "A hunch"], ["fairly", "Fairly sure"], ["very", "Very sure"]];
+export const BASIS = [["chart", "Chart"], ["indicators", "Indicators"], ["news", "News"], ["gut", "Gut"]];
+const SIZES = [["A little", 0.5], ["A usual move", 1], ["A big move", 2]];
 export function openPredictSheet(sym, onDone, prefer = null) {
   const p0 = lastPrice(sym.key), sigmaD = sigmaOf(sym.key);
   if (!p0 || sigmaD == null) { toast(`${sym.t} prices haven't loaded yet.`); return; }
   const free = PERIODS.filter((h) => canPredict(store.preds, sym.key, h));
-  let horizon = prefer && free.includes(prefer) ? prefer : free.includes("1d") ? "1d" : free[0], post = false, g = myGroups()[0]?.id || null;
-  openSheet(`Predict ${esc(sym.t)}`, "", (body) => {
-    const draw = (keep = "") => {
+  let horizon = prefer && free.includes(prefer) ? prefer : free.includes("1d") ? "1d" : free[0];
+  let dir = 1, size = 1, own = null, sure = "fairly", basis = null, pub = store.data?.callsPublic !== false, post = false, g = myGroups()[0]?.id || null;
+  const price = () => (own != null ? own : p0 * Math.exp(dir * SIZES[size][1] * typicalMove(sigmaD, horizon)));
+  openSheet(`Call ${esc(sym.t)}`, "", (body) => {
+    const draw = () => {
       if (!horizon) {
-        body.innerHTML = `<p>You have an open prediction on every period for ${esc(sym.t)}. Each one can be made again once it has been scored.</p><button class="btn block" id="pSee">See your calls</button>`;
+        body.innerHTML = `<p>You have a call waiting on every period for ${esc(sym.t)}. Each one can be made again once it has been scored.</p><button class="btn block" id="pSee">See your calls</button>`;
         body.querySelector("#pSee").onclick = () => { closeSheet(); APP.playView = "calls"; showTab("play"); };
         return;
       }
-      const groups = myGroups(), canPost = groups.length && CH_PERIODS.includes(horizon);
-      body.innerHTML = `<div class="utabs" role="group" aria-label="Time period">${PERIODS.map((h) => { const open = !canPredict(store.preds, sym.key, h); return `<button data-h="${h}" aria-selected="${h === horizon}" ${open ? "disabled" : ""}>${SHORT[h]}${open ? " · open" : ""}</button>`; }).join("")}</div>
-        ${priceField("pIn", sym, horizon, keep)}
-        <p class="hint">Scored against the price at <b>${esc(when(new Date(Date.now() + HORIZONS[horizon].days * 864e5).toISOString(), horizon))}</b>.</p>
-        ${canPost ? `<div class="pl-post"><label class="pl-switchrow"><span><b>Also post to a group</b><span class="hint">Members get ${PICK_MINS[horizon] >= 60 ? `${PICK_MINS[horizon] / 60} hour${PICK_MINS[horizon] === 60 ? "" : "s"}` : `${PICK_MINS[horizon]} minutes`} to call the same end time</span></span><span class="switch"><input type="checkbox" id="pPost" ${post ? "checked" : ""}><span></span></span></label>
-          ${post ? `<div class="opts">${groups.map((x) => `<button class="opt" data-pg="${esc(x.id)}" aria-pressed="${x.id === g}">${esc(x.name)}</button>`).join("")}</div>` : ""}</div>` : ""}
-        <button class="btn primary block" id="pGo" disabled>${post && canPost ? "Lock in and start challenge" : "Lock in prediction"}</button>
-        <p class="hint" style="text-align:center;margin-top:10px">Can't be changed or cancelled once locked. ${post && canPost ? "The group sees you called, not your price, until it's scored. " : ""}A learning game, not advice.</p>`;
-      const go = body.querySelector("#pGo"), f = watchPrice(body, "pIn", sym, horizon, (ok) => (go.disabled = !ok));
-      body.querySelectorAll("[data-h]").forEach((b) => (b.onclick = () => { horizon = b.dataset.h; draw(f.inp.value); }));
-      body.querySelector("#pPost")?.addEventListener("change", (e) => { post = e.target.checked; draw(f.inp.value); });
-      body.querySelectorAll("[data-pg]").forEach((b) => (b.onclick = () => { g = b.dataset.pg; draw(f.inp.value); }));
+      const groups = myGroups(), canPost = groups.length && CH_PERIODS.includes(horizon), tm = typicalMove(sigmaD, horizon), usual = (Math.expm1(tm) * 100).toFixed(horizon === "1y" ? 0 : 1);
+      const target = price(), chk = checkPrediction({ horizon, p0, target, sigmaD }), ownPct = own != null ? ((own / p0 - 1) * 100) : null;
+      body.innerHTML = `<div class="utabs" role="group" aria-label="Time period">${PERIODS.map((h) => { const open = !canPredict(store.preds, sym.key, h); return `<button data-h="${h}" aria-selected="${h === horizon}" ${open ? "disabled" : ""}>${SHORT[h]}${open ? " · waiting" : ""}</button>`; }).join("")}</div>
+        <p class="hint" style="margin:10px 0 0">Now <b class="num">${esc(money(p0, sym.m))}</b>. In ${esc(HORIZONS[horizon].label)} ${esc(sym.t)} usually moves about ${usual}%. Scored ${esc(when(new Date(Date.now() + HORIZONS[horizon].days * 864e5).toISOString(), horizon))}.</p>
+        <div class="ob-dir" style="margin-top:14px"><button class="opt big" data-dir="1" aria-pressed="${dir === 1}">Higher</button><button class="opt big dn" data-dir="-1" aria-pressed="${dir === -1}">Lower</button></div>
+        <div class="label" style="margin-top:16px">By how much?</div>
+        <div class="sizes3">${SIZES.map(([l, k], i) => `<button class="size3" data-k="${i}" aria-pressed="${own == null && i === size}"><b class="num">${esc(money(p0 * Math.exp(dir * k * tm), sym.m))}</b><span>${l}</span></button>`).join("")}</div>
+        <div class="ownrow"><span class="hint">Or your own:</span><label class="ownf"><input id="pPct" class="num" inputmode="decimal" placeholder="${(dir * 2 * Math.expm1(tm) * 100 / 2).toFixed(1)}" value="${own != null ? ownPct.toFixed(2) : ""}"><span>%</span></label><span class="hint">or</span><label class="ownf wide"><input id="pPx" class="num" inputmode="decimal" placeholder="${esc(money(target, sym.m).replace("$", ""))}" value="${own != null ? own : ""}"><span>$</span></label></div>
+        <p class="hint ${own != null && !chk.ok ? "bad" : ""}" id="pOwnMsg" style="margin:6px 0 0">${own != null && !chk.ok ? esc(chk.error) : "Type either one; the other fills in."}</p>
+        <div class="label" style="margin-top:16px">How sure are you?</div>
+        <div class="sizes3">${SURE.map(([k, l]) => `<button class="size3 sm" data-sure="${k}" aria-pressed="${sure === k}">${l}</button>`).join("")}</div>
+        <div class="label" style="margin-top:16px">Based on <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">optional</span></div>
+        <div class="opts">${BASIS.map(([k, l]) => `<button class="opt" data-basis="${k}" aria-pressed="${basis === k}">${l}</button>`).join("")}</div>
+        <label class="pl-switchrow" style="margin-top:14px"><span><b>Show to followers once scored</b><span class="hint">Counts to your score either way</span></span><span class="switch"><input type="checkbox" id="pPub" ${pub ? "checked" : ""}><span></span></span></label>
+        ${canPost ? `<label class="pl-switchrow"><span><b>Also post to a group</b><span class="hint">Members get ${PICK_MINS[horizon] >= 60 ? `${PICK_MINS[horizon] / 60} hour${PICK_MINS[horizon] === 60 ? "" : "s"}` : `${PICK_MINS[horizon]} minutes`} to call the same end time</span></span><span class="switch"><input type="checkbox" id="pPost" ${post ? "checked" : ""}><span></span></span></label>
+          ${post ? `<div class="opts">${groups.map((x) => `<button class="opt" data-pg="${esc(x.id)}" aria-pressed="${x.id === g}">${esc(x.name)}</button>`).join("")}</div>` : ""}` : ""}
+        <button class="btn primary block" id="pGo" style="margin-top:16px" ${chk.ok ? "" : "disabled"}>${post && canPost ? "Lock in and start challenge" : `Lock in, ${esc(sym.t)} at ${esc(money(target, sym.m))}`}</button>
+        <p class="hint" style="text-align:center;margin-top:10px">Locked calls can't be changed. ${post && canPost ? "The group sees you called, not your price, until it's scored. " : ""}Not advice.</p>`;
+      body.querySelectorAll("[data-h]").forEach((b) => (b.onclick = () => { horizon = b.dataset.h; own = null; draw(); }));
+      body.querySelectorAll("[data-dir]").forEach((b) => (b.onclick = () => { dir = +b.dataset.dir; own = null; haptic(); draw(); }));
+      body.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => { size = +b.dataset.k; own = null; haptic(); draw(); }));
+      body.querySelectorAll("[data-sure]").forEach((b) => (b.onclick = () => { sure = b.dataset.sure; draw(); }));
+      body.querySelectorAll("[data-basis]").forEach((b) => (b.onclick = () => { basis = basis === b.dataset.basis ? null : b.dataset.basis; draw(); }));
+      body.querySelector("#pPub").onchange = (e) => (pub = e.target.checked);
+      body.querySelector("#pPost")?.addEventListener("change", (e) => { post = e.target.checked; draw(); });
+      body.querySelectorAll("[data-pg]").forEach((b) => (b.onclick = () => { g = b.dataset.pg; draw(); }));
+      // your own move: a percentage or a price; the other field follows, and the presets step aside
+      const pctIn = body.querySelector("#pPct"), pxIn = body.querySelector("#pPx"), go = body.querySelector("#pGo"), msg = body.querySelector("#pOwnMsg");
+      const useOwn = (v) => { own = v; const c = checkPrediction({ horizon, p0, target: v, sigmaD }); body.querySelectorAll("[data-k]").forEach((b) => b.setAttribute("aria-pressed", "false")); go.disabled = !c.ok; go.textContent = `Lock in, ${sym.t} at ${money(v, sym.m)}`; msg.className = "hint " + (c.ok ? "good" : "bad"); msg.textContent = c.ok ? `${pct((v / p0 - 1) * 100, 1)} from now, a call ${v > p0 ? "up" : "down"}` : c.error; };
+      pctIn.oninput = () => { const x = parseFloat(pctIn.value.replace(/[^0-9.\-]/g, "")); if (!isFinite(x) || !pctIn.value.trim()) { own = null; return draw(); } const v = p0 * (1 + x / 100); pxIn.value = money(v, sym.m).replace("$", ""); useOwn(v); };
+      pxIn.oninput = () => { const v = parseFloat(pxIn.value.replace(/[^0-9.]/g, "")); if (!isFinite(v) || !pxIn.value.trim()) { own = null; return draw(); } pctIn.value = ((v / p0 - 1) * 100).toFixed(2); useOwn(v); };
       go.onclick = async () => {
         go.disabled = true; const label = go.textContent; go.textContent = "Locking in…";
+        const target = price();
         try {
-          if (post && canPost) await startChallenge({ g, sym, horizon, target: f.val(), p0: f.p0, sigmaD: f.sigmaD, counts: true });
-          else await makePrediction({ sym, horizon, target: f.val(), p0: f.p0, sigmaD: f.sigmaD });
+          if (post && canPost) await startChallenge({ g, sym, horizon, target, p0, sigmaD, counts: true });
+          else await makePrediction({ sym, horizon, target, p0, sigmaD, sure, basis, pub });
           lockFeel(go); go.textContent = "Locked in";
-          setTimeout(() => { closeSheet(); toast(post && canPost ? `Locked in. ${groupName(g)} has a ${SHORT[horizon]} challenge on ${sym.t}.` : `Locked in: ${sym.t} at ${money(f.val(), sym.m)} in ${HORIZONS[horizon].label}.`, { ms: 4500 }); onDone?.(); }, 420);
-        } catch (e) { const m = body.querySelector("#pInMsg"); m.className = "hint bad"; m.textContent = e.message || "Couldn't save. Try again."; go.disabled = false; go.textContent = label; }
+          setTimeout(() => { closeSheet(); toast(post && canPost ? `Locked in. ${groupName(g)} has a ${SHORT[horizon]} challenge on ${sym.t}.` : `Locked in: ${sym.t} at ${money(target, sym.m)} in ${HORIZONS[horizon].label}.`, { ms: 4500 }); onDone?.(); }, 420);
+        } catch (e) { msg.className = "hint bad"; msg.textContent = e.message || "Couldn't save. Try again."; go.disabled = false; go.textContent = label; }
       };
-      setTimeout(() => f.inp.focus(), 250);
     };
     draw();
   });

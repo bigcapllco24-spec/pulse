@@ -82,8 +82,13 @@ export function mainChart(win, ov, opts) {
   body += `<line x1="0" x2="${pw}" y1="${ly.toFixed(1)}" y2="${ly.toFixed(1)}" class="lastline"/>`;
   let lvHtml = "";
   for (const l of lv) {
-    const y = Y(l.price), x0 = Math.max(0, X(l.from || 0) - step / 2), cls = l.kind[0] === "R" ? "r" : l.kind[0] === "S" ? "s" : "p";
+    const y = Y(l.price), x0 = Math.max(0, X(l.from || 0) - step / 2), cls = l.kind === "C" ? "c" : l.kind[0] === "R" ? "r" : l.kind[0] === "S" ? "s" : "p";
     body += `<line x1="${x0.toFixed(1)}" x2="${pw}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" class="lvl ${cls}"/>`;
+    if (l.kind === "C") { // your own call (1.2.0): a dashed line from when it was made, tagged with the price called
+      body += `<circle cx="${(x0 + (l.from ? step / 2 : 0)).toFixed(1)}" cy="${y.toFixed(1)}" r="2.6" class="lvdot"/>`;
+      lvHtml += `<button class="lvtag c" data-call="${l.id || ""}" style="top:${((y / H) * 100).toFixed(2)}%;right:${((PR / W) * 100).toFixed(2)}%">${l.label || "Your call"} ${f(l.price)}</button>`;
+      continue;
+    }
     const tag = l.touches ? `${l.kind} ${f(l.price)} · ${l.touches > 1 ? l.touches + "×" : l.kind === "R" ? "high" : "low"}` : `${l.kind} ${f(l.price)}`; // S = support, R = resistance
     lvHtml += `<button class="lvtag ${cls}" data-learn="${l.touches ? "SR" : "PIV"}" style="top:${((y / H) * 100).toFixed(2)}%;right:${((PR / W) * 100).toFixed(2)}%">${tag}</button>`;
   }

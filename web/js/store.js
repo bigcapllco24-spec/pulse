@@ -465,11 +465,11 @@ export async function setUsername(raw) {
 // ---- prediction game. One open prediction per coin and period; it can't be changed or cancelled once made.
 const PERIOD = (h) => HORIZONS[h].label.replace(/^1 /, "");
 // group: { g, c, endAt } when the prediction is also a group pick (demo mode only; live ones go in social.js's batch)
-export async function makePrediction({ sym, horizon, target, p0, sigmaD, group = null }) {
-  if (!canPredict(store.preds, sym.key, horizon)) throw new Error(`You already have an open ${PERIOD(horizon)} prediction on ${sym.t}.`);
+export async function makePrediction({ sym, horizon, target, p0, sigmaD, group = null, sure = null, basis = null, pub = null }) {
+  if (!canPredict(store.preds, sym.key, horizon)) throw new Error(`You already have an open ${PERIOD(horizon)} call on ${sym.t}.`);
   const chk = checkPrediction({ horizon, p0, target, sigmaD });
   if (!chk.ok) throw new Error(chk.error);
-  const doc = { coin: sym.key, t: sym.t, horizon, target, clientP0: p0, clientSigma: sigmaD };
+  const doc = { coin: sym.key, t: sym.t, horizon, target, clientP0: p0, clientSigma: sigmaD, ...(sure ? { sure } : {}), ...(basis ? { basis } : {}), ...(pub != null ? { pub } : {}) };
   if (store.mode === "demo") {
     store.preds = [...store.preds, { id: `${sym.t}_${horizon}`, ...doc, ...(group || {}), createdAt: new Date().toISOString() }];
     saveDemoPreds(); return;
@@ -477,7 +477,7 @@ export async function makePrediction({ sym, horizon, target, p0, sigmaD, group =
   await connected();
   if (!store.id) throw new Error("Couldn't reach the server. Try again in a moment.");
   try { await fb.f.setDoc(fb.f.doc(fb.db, "accounts", store.id, "predictions", `${sym.t}_${horizon}`), { ...doc, createdAt: fb.f.serverTimestamp() }); }
-  catch (e) { throw new Error(e?.code === "permission-denied" ? `You already have an open ${PERIOD(horizon)} prediction on ${sym.t}.` : "Couldn't save. Try again."); }
+  catch (e) { throw new Error(e?.code === "permission-denied" ? `You already have an open ${PERIOD(horizon)} call on ${sym.t}.` : "Couldn't save. Try again."); }
 }
 function saveDemoPreds() { ls.set(LS.demoPreds, { open: store.preds, results: store.results }); store.emit("preds"); }
 // Demo mode settles predictions on the phone, the same way the data job does for live accounts.

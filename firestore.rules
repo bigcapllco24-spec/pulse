@@ -61,8 +61,12 @@ service cloud.firestore {
       match /predictions/{pid} {
         allow get, list: if canUse(acct);
         allow create: if canUse(acct)
-          && request.resource.data.keys().hasOnly(['coin', 't', 'horizon', 'target', 'createdAt', 'clientP0', 'clientSigma', 'g', 'c', 'endAt'])
+          && request.resource.data.keys().hasOnly(['coin', 't', 'horizon', 'target', 'createdAt', 'clientP0', 'clientSigma', 'g', 'c', 'endAt', 'sure', 'basis', 'pub'])
           && request.resource.data.horizon in ['30m', '1h', '1d', '1y']
+          // 1.2.0: how sure (hunch, fairly, very), what it was based on, and whether followers may see it once scored
+          && (!('sure' in request.resource.data) || request.resource.data.sure in ['hunch', 'fairly', 'very'])
+          && (!('basis' in request.resource.data) || request.resource.data.basis in ['chart', 'indicators', 'news', 'gut'])
+          && (!('pub' in request.resource.data) || request.resource.data.pub is bool)
           && request.resource.data.t is string && request.resource.data.coin == 'CRYPTO:' + request.resource.data.t
           && pid == request.resource.data.t + '_' + request.resource.data.horizon
           && request.resource.data.target is number && request.resource.data.target > 0
