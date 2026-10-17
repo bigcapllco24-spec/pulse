@@ -10,12 +10,13 @@ import { $, esc, money, toast, haptic } from "./ui.js";
 
 const FIRST_COIN = "CRYPTO:BTC", FIRST_H = "1h";
 const SEEN = "pl.firstCall"; // the first-call step has been shown (made or skipped) on this phone
+const SETPW_LATER = "pl.setPwLater"; // an account from before passwords chose "Later"; asked again after a day
 let gate = null, onDone = null;
 
 // Is anything needed before the app can be used? (The feed draws behind the gate meanwhile.)
 export function needsOnboarding() {
   if (!store.data?.username || signedOut()) return "welcome";
-  if (store.mode !== "demo" && store.ready && store.id && !hasPassword() && ownsSignIn()) return "setpw";
+  if (store.mode !== "demo" && store.ready && store.id && !hasPassword() && ownsSignIn() && Date.now() - (ls.get(SETPW_LATER) || 0) > 864e5) return "setpw";
   return null;
 }
 export function startOnboarding(done) {
@@ -170,8 +171,10 @@ function setpw() {
     <h1>Add a password</h1>
     <p>${esc(CONFIG.appName)} accounts now have a password, so only you can open yours. You'll also get a recovery code.</p>
     ${field("obP", "Password", "pw", "new-password")}<p class="hint" id="obPMsg">At least ${PASSWORD_MIN} characters.</p>
-    <button class="btn primary block" id="obGo" disabled>Save password</button>`);
+    <button class="btn primary block" id="obGo" disabled>Save password</button>
+    <button class="btn ghost block" id="obLater">Later</button>`);
   const pw = $("obP"), pm = $("obPMsg"), go = $("obGo");
+  gate.querySelector("#obLater").onclick = () => { ls.set(SETPW_LATER, Date.now()); finish(); }; // asked again next day
   pw.oninput = () => { const e = checkPassword(pw.value); pm.textContent = pw.value ? e || "Good." : `At least ${PASSWORD_MIN} characters.`; pm.className = "hint " + (pw.value ? (e ? "bad" : "good") : ""); go.disabled = !!e; };
   go.onclick = async () => {
     go.disabled = true; go.textContent = "Saving…";
