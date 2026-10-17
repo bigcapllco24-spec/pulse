@@ -208,7 +208,7 @@ def run(pw, base):
         android.click("#fpRes [data-a]"); android.wait_for_selector("#pcFollow", timeout=10000); android.click("#pcFollow")
         check("android: Follow saves @ana_live in ben's following list", eventually(lambda: ana in (doc(f"accounts/{ben}") or {}).get("following", [])), json.dumps(doc(f"accounts/{ben}") or {})[:200])
         android.click("#pcCalls"); android.wait_for_timeout(1500)
-        check("android: ana's calls aren't shown while they're open", "open calls are never shown" in android.inner_text("#sheet").lower() and not android.locator("#sheet [data-pc]").count(), android.inner_text("#sheet")[:160])
+        check("android: ana's calls aren't shown while they're open", eventually(lambda: "hasn't made any scored calls public" in android.inner_text("#sheet"), 8) and not android.locator("#sheet [data-pc]").count(), android.inner_text("#sheet")[:160])
         android.click("#sheet [data-close]"); android.wait_for_timeout(400)
     no_errors(android, "people")
 
@@ -252,8 +252,11 @@ def run(pw, base):
     check("jobs: the public call keeps how sure, based on and public in its result", any(r.get("pub") is True and r.get("sure") == "very" and r.get("basis") == "news" for r in scored), json.dumps(scored)[:300])
     iphone.click(".tabbar [data-tab=play]")
     check("iphone: the scored calls appear in Calls without reopening the app", eventually(lambda: "scored" in iphone.inner_text("#play").lower() and iphone.locator("#play [data-res]").count() >= 2, 15), iphone.inner_text("#play")[:200])
-    iphone.click(".tabbar [data-tab=you]")
-    check("iphone: You counts the 2 scored calls", eventually(lambda: "2 calls so far" in iphone.inner_text("#you"), 10), iphone.inner_text("#you")[:160])
+    state = lambda p: p.evaluate("JSON.stringify({body: document.body.className, gate: document.querySelector('#gate')?.innerText.slice(0,200), sheet: document.querySelector('#sheet').hidden ? null : document.querySelector('#sheet').innerText.slice(0,200), signedOut: localStorage.getItem('pl.signedOut'), user: (JSON.parse(localStorage.getItem('pl.account')||'{}')).username})")
+    if not iphone.is_visible(".tabbar [data-tab=you]"): check("iphone: the app stays open after calls are scored (no screen in the way)", False, state(iphone))
+    else:
+        iphone.click(".tabbar [data-tab=you]")
+        check("iphone: You counts the 2 scored calls", eventually(lambda: "2 calls so far" in iphone.inner_text("#you"), 10), iphone.inner_text("#you")[:160] + " " + state(iphone))
     out = tempfile.mkdtemp()
     ok = job("pipeline/run.mjs", out)
     check("jobs: the 2-hour data job runs against the database", ok)
