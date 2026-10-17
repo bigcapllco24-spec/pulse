@@ -658,8 +658,7 @@ export function applyTheme() {
   // nothing waits on the network before the first chart is drawn
   APP.catalogue = [];
   fetch("data/indicators.json").then((r) => r.json()).then((c) => (APP.catalogue = c)).catch(() => {});
-  let onboarding = false;
-  try { ({ onboarding } = await init()); } catch { toast(store.error || "Couldn't start. Check your connection."); }
+  try { await init(); } catch { toast(store.error || "Couldn't start. Check your connection."); }
   // Cleaner cards (v2): candles on their own by default; moving averages and the lower panel are opt-in.
   const ch = store.data?.settings?.chart;
   if (store.data && !store.data.settings?.coinsOnly) {

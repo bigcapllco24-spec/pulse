@@ -360,7 +360,7 @@ export async function loginUsername(raw, step = () => {}) {
   const { db, f, auth } = fb, me = auth.currentUser.uid;
   // plain HTTPS requests: each answers in under a second, where the live connection can take many seconds to open
   const u = await go(`Finding @${name}`, restGet(`usernames/${name}`));
-  if (!u?.acct) return setUsername(name);
+  if (!u?.acct) throw new Error(`There's no account called @${name}. Check the spelling, or go back and create it.`);
   const acct = u.acct, ref = f.doc(db, "accounts", acct);
   if (acct !== me) {
     try {
@@ -418,8 +418,17 @@ export async function makePrediction({ sym, horizon, target, p0, sigmaD, group =
   }
   await connected();
   if (!store.id) throw new Error("Couldn't reach the server. Try again in a moment.");
-  try { await fb.f.setDoc(fb.f.doc(fb.db, "accounts", store.id, "predictions", `${sym.t}_${horizon}`), { ...doc, createdAt: fb.f.serverTimestamp() }); }
-  catch (e) { throw new Error(e?.code === "permission-denied" ? `You already have an open ${PERIOD(horizon)} call on ${sym.t}.` : "Couldn't save. Try again."); }
+  const write = (d) => fb.f.setDoc(fb.f.doc(fb.db, "accounts", store.id, "predictions", `${sym.t}_${horizon}`), { ...d, createdAt: fb.f.serverTimestamp() });
+  try { await write(doc); return; }
+  catch (e) { if (e?.code !== "permission-denied") throw new Error("Couldn't save the call. Check your connection and try again."); }
+  // Refused. Database rules from before 1.2.0 don't know "how sure", "based on" or "public": the call is saved without
+  // them rather than lost (they're kept once the 1.2.0 rules are published).
+  if (sure || basis || pub != null) {
+    const { sure: _s, basis: _b, pub: _p, ...plain } = doc;
+    try { await write(plain); return; } catch { /* refused for another reason */ }
+  }
+  // Only say "already open" when that's what the server can mean: a call on this coin and period from another phone.
+  throw new Error(`Couldn't save the call. If you made a ${PERIOD(horizon)} call on ${sym.t} on another phone, it's still open; otherwise try again.`);
 }
 function saveDemoPreds() { ls.set(LS.demoPreds, { open: store.preds, results: store.results }); store.emit("preds"); }
 // Demo mode settles predictions on the phone, the same way the data job does for live accounts.

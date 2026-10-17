@@ -15,6 +15,7 @@ if [[ $only == all || $only == syntax ]]; then
   if grep -nE '\.on(keydown|keypress|keyup)\s*=\s*\([^)]*\)\s*=>\s*[^{ ]' web/js/*.js; then echo "FAIL syntax: key handler without braces (above)"; bad=1; fi
   [[ $bad == 0 ]] && echo "syntax: all files parse" || status=1
 fi
+[[ $only == all || $only == lint ]] && run node tests/lint.mjs
 [[ $only == all || $only == pipeline ]] && run node tests/pipeline.test.mjs
 [[ $only == all || $only == levels ]] && run node tests/levels.test.mjs
 [[ $only == all || $only == score ]] && run node tests/score.test.mjs $verbose
