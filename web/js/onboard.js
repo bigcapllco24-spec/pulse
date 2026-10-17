@@ -3,7 +3,7 @@
 // over the app; the feed keeps loading behind it. An account from before passwords is asked to set one.
 import { CONFIG } from "../config.js";
 import { store, ls, checkUsername, usernameFree, createAccountPassword, loginPassword, setPassword, hasPassword, ownsSignIn,
-  newRecoveryCode, saveRecoveryCode, requestReset, resetStatus, makePrediction, enablePush, checkPassword, PASSWORD_MIN, USERNAME_CHANGES } from "./store.js";
+  newRecoveryCode, saveRecoveryCode, requestReset, resetStatus, makePrediction, enablePush, checkPassword, PASSWORD_MIN, USERNAME_CHANGES, signedOut } from "./store.js";
 import { HORIZONS, typicalMove } from "./score.js";
 import { D } from "./data.js";
 import { $, esc, money, toast, haptic } from "./ui.js";
@@ -14,7 +14,7 @@ let gate = null, onDone = null;
 
 // Is anything needed before the app can be used? (The feed draws behind the gate meanwhile.)
 export function needsOnboarding() {
-  if (!store.data?.username) return "welcome";
+  if (!store.data?.username || signedOut()) return "welcome";
   if (store.mode !== "demo" && store.ready && store.id && !hasPassword() && ownsSignIn()) return "setpw";
   return null;
 }

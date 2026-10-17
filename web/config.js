@@ -2,7 +2,7 @@
 // demo mode: everything is saved on this phone only.
 export const CONFIG = {
   appName: "Pulse", // working name; change freely
-  version: "1.1.4", // shown in the account sheet, Account and Legal; bump with each release
+  version: "1.2.0", // shown in the account sheet, Account and Legal; bump with each release
   // Firebase project "pulseapp". These values are public by design; firestore.rules protects the data.
   firebase: {
     apiKey: "AIzaSyBc0zWWmkgrMbVjldxIWBESsRboAcSYBZU",

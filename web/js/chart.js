@@ -22,7 +22,9 @@ export function mainChart(win, ov, opts) {
   for (const [, o] of overs) for (const k of keysOf(o)) (ov[k] || []).forEach((x) => x != null && isFinite(x) && vals.push(x));
   let lo = Math.min(...vals), hi = Math.max(...vals);
   // support/resistance or pivot lines: keep those near the visible prices and widen the scale to fit them
-  const span0 = hi - lo || hi * 0.02, lv = (opts.levels || []).filter((l) => l.price >= lo - span0 * 0.25 && l.price <= hi + span0 * 0.25);
+  const span0 = hi - lo || hi * 0.02, nearLv = (l, k) => l.price >= lo - span0 * k && l.price <= hi + span0 * k;
+  // your own calls (kind C) widen the scale up to a full span; further away they sit at the edge as a marker
+  const lv = (opts.levels || []).filter((l) => (l.kind === "C" ? nearLv(l, 1) : nearLv(l, 0.25))), far = (opts.levels || []).filter((l) => l.kind === "C" && !nearLv(l, 1));
   for (const l of lv) { lo = Math.min(lo, l.price); hi = Math.max(hi, l.price); }
   const pad = (hi - lo) * 0.06 || hi * 0.01 || 1; lo -= pad; hi += pad;
   const Y = (v) => PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB);
@@ -92,6 +94,7 @@ export function mainChart(win, ov, opts) {
     const tag = l.touches ? `${l.kind} ${f(l.price)} · ${l.touches > 1 ? l.touches + "×" : l.kind === "R" ? "high" : "low"}` : `${l.kind} ${f(l.price)}`; // S = support, R = resistance
     lvHtml += `<button class="lvtag ${cls}" data-learn="${l.touches ? "SR" : "PIV"}" style="top:${((y / H) * 100).toFixed(2)}%;right:${((PR / W) * 100).toFixed(2)}%">${tag}</button>`;
   }
+  for (const l of far) lvHtml += `<button class="lvtag c edge" data-call="${l.id || ""}" style="top:${l.price > hi ? 2 : 86}%;right:${((PR / W) * 100).toFixed(2)}%">${l.label || "Your call"} ${f(l.price)} ${l.price > hi ? "↑" : "↓"}</button>`;
   // time axis like TradingView: month names (the year at each January), or day numbers on short ranges
   const ticks = timeTicks(win, opts.days || 91);
   for (const t of ticks) body += `<line x1="${X(t.i).toFixed(1)}" x2="${X(t.i).toFixed(1)}" y1="${PT}" y2="${H - PB}" class="grid vgrid"/>`;

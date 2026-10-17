@@ -239,7 +239,7 @@ export async function renameGroup(g, rawName) {
   const { f, db } = fbx();
   await f.updateDoc(f.doc(db, "groups", g), { name });
 }
-// Invite a player by account: they see it in Predict → Groups. Returns false if an invite is already waiting for them.
+// Invite a player by account: they see it on Calls → With friends. Returns false if an invite is already waiting for them.
 export async function invite(g, a) {
   const grp = S.groups.get(g);
   if (!grp) throw new Error("Open the group first.");

@@ -1,4 +1,4 @@
-// The Predict tab and everything people do together: your score as your identity, making calls, groups and their
+// The Calls tab and everything people do together: your score as your identity, making calls, groups and their
 // challenges, finding and following players, the leaderboard, player cards, and the avatar sheet (your settings).
 // Data lives in store.js (your account and predictions) and social.js (people and groups).
 import { CONFIG } from "../config.js";
@@ -75,7 +75,7 @@ const rerender = () => { const pg = $("play").parentElement, y = pg.scrollTop; r
 // The Calls tab's badge: picks waiting for you and invites.
 export function badge() {
   const n = waitingForMe().length + S.invites.length, b = document.querySelector('.tabbar [data-tab="play"] .badge'); // picks and invites waiting for you
-  if (b) { b.hidden = !n; b.textContent = n; }
+  if (b) { b.hidden = !n; b.textContent = n || ""; }
 }
 const groupsNeedYou = () => waitingForMe().length + unseenResults().length + S.invites.length > 0;
 
@@ -304,7 +304,7 @@ export function openBoard(tab = "everyone") {
           rows = (b.rows || []).map((r) => ({ ...r, prov: false }));
           foot = `Public players with ${RANK_MIN}+ scored calls${b.at ? `, updated ${esc(new Date(b.at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }))}` : ""}. Skill scores in a learning game. Not advice.`;
           if (!rows.some((r) => r.a === me())) meRow = mine?.rank ? { ...self, place: mine.rank } : null;
-          if (!mine?.rank) note = store.data?.public !== true ? "You're not on this board: join it from Ranks → Everyone." : (sc?.n || 0) < RANK_MIN ? `You're ranked once ${RANK_MIN} of your calls are scored (${sc?.n || 0} so far).` : "You'll show here at the next update (every 2 hours).";
+          if (!mine?.rank) note = store.data?.public !== true ? "You're not on this board: join it from You → Where you rank → Everyone." : (sc?.n || 0) < RANK_MIN ? `You're ranked once ${RANK_MIN} of your calls are scored (${sc?.n || 0} so far).` : "You'll show here at the next update (every 2 hours).";
         } else if (tab === "following") {
           const cs = (await getCards(following())).filter(Boolean);
           rows = [...cs, self].filter((r) => r.score != null || r.a === me()).sort((x, y) => (y.score ?? -1) - (x.score ?? -1));
@@ -373,7 +373,7 @@ async function openPublicCalls(a, c) {
 const cardFromScore = () => { const sc = myScore(); return sc ? { u: myName(), score: sc.score, band: sc.band, prov: sc.provisional, n: sc.n } : { u: myName(), score: null, n: 0, prov: true }; };
 function chooseGroupToInvite(a, u) {
   const gs = myGroups().filter((g) => !(a in (g.members || {})));
-  if (!myGroups().length) { toast("Start a group first, from Predict → Groups."); return; }
+  if (!myGroups().length) { toast("Start a group first, from Calls → With friends."); return; }
   if (!gs.length) { toast(`@${u} is already in all your groups.`); return; }
   openSheet(`Invite @${esc(u)}`, `<div class="hl">${gs.map((g) => `<button class="row" data-ig="${esc(g.id)}"><span class="main"><span class="t">${esc(g.name)}</span><span class="s">${Object.keys(g.members || {}).length} of ${GROUP_MAX} players</span></span><span class="chev">›</span></button>`).join("")}</div>`, (body) => {
     body.querySelectorAll("[data-ig]").forEach((b) => (b.onclick = async () => {

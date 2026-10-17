@@ -552,7 +552,7 @@ function wire(c, it) {
   c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); openChartSheet(it.sym, () => redrawCards()); });
   c.querySelector("[data-pred]")?.addEventListener("click", (e) => { e.stopPropagation(); openPredictSheet(it.sym, () => redrawCards(it.sym.key)); });
 }
-// Prediction game: the Predict chip on a card, with how many predictions are open on that coin.
+// Call it (1.2.0): the small button under the price, with how many calls are waiting on that coin.
 function predChip(s) {
   const open = store.preds.filter((p) => p.coin === s.key).sort((a, b) => Date.parse(dueAt(a)) - Date.parse(dueAt(b)));
   const next = open[0], left = next ? Math.max(0, Math.round((Date.parse(dueAt(next)) - Date.now()) / 60000)) : 0;
@@ -685,7 +685,7 @@ export function applyTheme() {
     if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") keepScroll("dash"); if (store.ready && needsOnboarding() && !onboarding()) startOnboarding(); }
     if (what === "alerts" && APP.tab === "dash") keepScroll("dash");
     if (what === "preds" && APP.tab === "feed" && APP.built) redrawCards(); else if (what === "preds") APP.needsRebuild = true; // cards show calls waiting and draw them on the chart
-    // the Predict tab follows new and scored predictions, and your name or score changing
+    // the Calls tab follows new and scored calls, and your name or score changing
     if ((what === "preds" || what === "account") && APP.tab === "play" && $("sheet").hidden) keepScroll("play");
     if ((what === "preds" || what === "account") && APP.tab === "you" && $("sheet").hidden) keepScroll("you");
     badge();

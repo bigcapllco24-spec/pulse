@@ -6,7 +6,7 @@ import { HORIZONS, checkPrediction, canPredict, profileScore, dueAt, relabel } f
 import { settle, rowCache, SETTLE_DELAY } from "./predict.js";
 
 const FB = "https://www.gstatic.com/firebasejs/10.14.1/";
-const LS = { code: "pl.code", demoPw: "pl.demoPw", demo: "pl.demoAccount", demoAlerts: "pl.demoAlerts", demoLists: "pl.demoLists", hidden: "pl.hidden", demoPreds: "pl.demoPreds", preds: "pl.preds" };
+const LS = { code: "pl.code", demoPw: "pl.demoPw", demoOut: "pl.demoOut", demo: "pl.demoAccount", demoAlerts: "pl.demoAlerts", demoLists: "pl.demoLists", hidden: "pl.hidden", demoPreds: "pl.demoPreds", preds: "pl.preds" };
 const ls = {
   get(k, d = null) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
@@ -272,9 +272,10 @@ export async function enablePush() {
 }
 
 export function signOutDevice() {
-  ls.del(LS.code); ls.del(LSACC); ls.del(LSALERTS); ls.del(LS.preds); ls.del(LSLINK); ls.del(LS.demoPw);
   const done = () => { location.hash = ""; location.reload(); };
-  if (store.mode === "demo" || !fb) return done();
+  if (store.mode === "demo") { ls.set(LS.demoOut, 1); return done(); } // demo: the account stays on the phone, behind the log-in screen
+  ls.del(LS.code); ls.del(LSACC); ls.del(LSALERTS); ls.del(LS.preds); ls.del(LSLINK);
+  if (!fb) return done();
   fb.auth.signOut().catch(() => {}).then(done); // the next visit starts as a fresh anonymous sign-in
 }
 
@@ -302,6 +303,7 @@ const authError = (e) => {
   return e?.message || "Something went wrong. Try again.";
 };
 // Does this sign-in have a password? (Accounts from before 1.2.0 were username only.)
+export const signedOut = () => store.mode === "demo" && !!ls.get(LS.demoOut);
 export const hasPassword = () => (store.mode === "demo" ? !!ls.get(LS.demoPw) : !!fb?.auth?.currentUser?.providerData?.some((p) => p.providerId === "password"));
 // Can a password be set here? Only on the sign-in that owns the account, not on a phone that opened it by username.
 export const ownsSignIn = () => store.mode === "demo" || (!!store.id && fb?.auth?.currentUser?.uid === store.id);
@@ -311,7 +313,7 @@ export async function createAccountPassword(rawName, pw) {
   const { name, error } = checkUsername(rawName);
   if (error) throw new Error(error);
   const pe = checkPassword(pw); if (pe) throw new Error(pe);
-  if (store.mode === "demo") { await setUsername(name); ls.set(LS.demoPw, await sha256hex(pw)); return name; }
+  if (store.mode === "demo") { if (ls.get(LS.demoOut)) { ls.del(LS.demoOut); ls.del(LS.demoPreds); store.data = DEFAULT_ACCOUNT(); store.preds = []; store.results = []; } await setUsername(name); ls.set(LS.demoPw, await sha256hex(pw)); return name; }
   await within(loadFirebase());
   const { auth, authMod } = fb;
   if (hasPassword()) throw new Error("This phone already has an account. Sign out first to make another.");
@@ -331,6 +333,7 @@ export async function loginPassword(rawName, pw, step = () => {}) {
     const h = ls.get(LS.demoPw);
     if (!store.data?.username || store.data.username !== name) throw new Error("No account with that username.");
     if (h && h !== (await sha256hex(pw))) throw new Error("Wrong password.");
+    ls.del(LS.demoOut); store.emit("account");
     return name;
   }
   step("Signing in");
@@ -384,7 +387,7 @@ export async function requestReset(rawName, code, pw) {
   if (store.mode === "demo") {
     if (store.data?.username !== name) throw new Error("No account with that username.");
     if (store.data.recoveryHash !== (await sha256hex(normCode(code)))) throw new Error("That code doesn't match.");
-    ls.set(LS.demoPw, await sha256hex(pw)); return "done";
+    ls.set(LS.demoPw, await sha256hex(pw)); ls.del(LS.demoOut); return "done";
   }
   await within(loadFirebase());
   const { db, f, auth } = fb, id = auth.currentUser.uid;

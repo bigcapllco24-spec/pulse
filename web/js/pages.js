@@ -1,5 +1,5 @@
 // Coins (watchlists and alerts), the settings pages opened from the avatar sheet, sheets (add coins, watchlists,
-// switcher, chart, indicators, lines) and the username step. The Predict tab and people live in play.js.
+// switcher, chart, indicators, lines), Your market, the settings pages and Learn. The Calls tab and people live in play.js.
 import { CONFIG } from "../config.js";
 import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, listFeedback, setFeedbackStatus, myUid, hasPassword, ownsSignIn, setPassword, newRecoveryCode, saveRecoveryCode, signOutDevice, PASSWORD_MIN } from "./store.js";
 import { leaveAllGroups, deleteMySocial } from "./social.js";
@@ -197,7 +197,7 @@ function coinsView(el) {
   el.querySelectorAll("[data-s]").forEach((b) => (b.onclick = () => { APP.dashSort = b.dataset.s; renderDash(); }));
   el.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { showTab("feed"); buildFeed({ keepKey: b.dataset.open }); }));
 }
-// ---------- settings pages, opened from the avatar sheet on the Predict tab (or from Coins, for alerts and rules).
+// ---------- settings pages, opened from Settings on the You tab (or from a coin's details, for alerts).
 // Each has a Back button to wherever it was opened from. With no page given, the avatar sheet opens instead.
 const PAGES = () => ({ watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal, inbox: pInbox, learn: pLearn });
 export function renderProfile(sub, arg) {
@@ -383,7 +383,7 @@ function pLists(el, back) {
 async function joinFlow(id) {
   history.replaceState(null, "", location.pathname);
   withUsername(async () => {
-    try { await joinList(id, store.data.username); toast("Joined. Find it in Account → Shared lists."); renderProfile("lists"); } catch (e) { toast(e.message, { ms: 5000 }); }
+    try { await joinList(id, store.data.username); toast("Joined. Find it on Calls → With friends."); renderProfile("lists"); } catch (e) { toast(e.message, { ms: 5000 }); }
   });
 }
 // Every account starts by choosing its username: a full-screen first step that can't be skipped. It's the name
