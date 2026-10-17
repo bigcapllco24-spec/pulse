@@ -315,9 +315,9 @@ export function openBoard(tab = "everyone") {
           foot = `Points this month: Spot on 5, Very close 3, Close 2, Off 1, plus 1 for the right direction.`;
         }
       } catch { box.innerHTML = `<div class="empty">Couldn't load this board. Check your connection.</div>`; return; }
-      const line = (r, i) => `<button class="row lbrow${r.a === me() ? " you" : ""}" data-a="${esc(r.a)}"><span class="num lbn">${r.place ?? i + 1}</span>${ava(r.u, r, "sm")}<span class="main"><span class="t">@${esc(r.u)}${r.a === me() ? " · you" : ""}</span><span class="s">${r.pts != null ? `${esc(r.band || "No score yet")}` : `${esc(r.band || "")}${r.n ? ` · ${r.n} scored` : ""}`}</span></span><b class="num lbs">${r.pts != null ? `${r.pts}<small> pts</small>` : r.score ?? "–"}</b></button>`;
+      const line = (r, i) => `<button class="row lbrow${r.a === me() ? " you" : ""}" data-a="${esc(r.a)}" data-u="${esc(r.u || "")}"><span class="num lbn">${r.place ?? i + 1}</span>${ava(r.u, r, "sm")}<span class="main"><span class="t">@${esc(r.u)}${r.a === me() ? " · you" : ""}</span><span class="s">${r.pts != null ? `${esc(r.band || "No score yet")}` : `${esc(r.band || "")}${r.n ? ` · ${r.n} scored` : ""}`}</span></span><b class="num lbs">${r.pts != null ? `${r.pts}<small> pts</small>` : r.score ?? "–"}</b></button>`;
       box.innerHTML = (note ? `<p class="notice" style="margin:0 0 10px">${esc(note)}</p>` : "") + (rows.length ? `<div class="hl">${rows.map(line).join("")}</div>${meRow ? `<div class="hl lbme">${line(meRow, 0)}</div>` : ""}<p class="hint" style="margin-top:10px">${foot}</p>` : `<div class="empty">${tab === "everyone" ? `Nobody's on the public leaderboard yet. Players show here once ${RANK_MIN} of their calls are scored and they choose to join.` : "No scores here yet."}</div><p class="hint">${foot}</p>`);
-      box.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openPlayerCard(b.dataset.a)));
+      box.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openPlayerCard(b.dataset.a, b.dataset.u)));
     };
     draw();
   });
@@ -331,11 +331,14 @@ export function myFullCard() {
     badges: [...new Set([...(base.badges || []).filter((b) => !/-day streak$/.test(b)), ...streakBadges(Math.max(st.best, base.bestStreak || 0))])] };
 }
 export const myStreak = () => streakOf([...store.preds, ...store.results, ...S.picks.filter((p) => !p.counts)]);
-export async function openPlayerCard(a) {
+export async function openPlayerCard(a, u = "") {
   if (a === me()) { showTab("you"); return; }
   openSheet("Player", `<p class="hint">Loading…</p>`);
   let c; try { c = await getCard(a); } catch { c = null; }
-  if (!c) { setSheetBody(`<div class="empty">This player's card isn't ready yet. Cards update every 2 hours.</div>`); return; }
+  // A new player's card is made by the 2-hour data job; until then they can still be followed (17 Oct 2026: the
+  // card said "not ready" and had no Follow button, so someone who just joined couldn't be followed for 2 hours).
+  if (!c && !u) { setSheetBody(`<div class="empty">This player's card isn't ready yet. Cards update every 2 hours.</div>`); return; }
+  c ||= { u, score: null, prov: true, n: 0, followers: 0, level: 0, fresh: true };
   const draw = () => {
     const on = isFollowing(a), common = myGroups().filter((g) => a in (g.members || {})), lvl = c.level || 0;
     const v = c.score == null || c.prov ? (c.n ? "Too early to tell" : "No calls scored yet") : c.score >= 600 ? "Reading it well" : "Still learning";
@@ -388,10 +391,10 @@ export function openSearch() {
   openSheet("Find players", `<label class="uname"><span>@</span><input id="fpIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="search a username" aria-label="Username"></label><div id="fpRes" style="margin-top:8px"></div>`, (body) => {
     const inp = body.querySelector("#fpIn"), res = body.querySelector("#fpRes");
     let seq = 0;
-    const row = (c) => `<div class="row"><button class="pl-hit" data-a="${esc(c.a)}">${levelAvatar(c.u, c.level || 0, "sm")}<span class="main"><span class="t">@${esc(c.u)}</span><span class="s">${c.score != null ? `${num(c.score)}` : "New player"} · ${num((c.followers || 0).toLocaleString("en-IN"))} follower${c.followers === 1 ? "" : "s"}</span></span></button>
+    const row = (c) => `<div class="row"><button class="pl-hit" data-a="${esc(c.a)}" data-u="${esc(c.u || "")}">${levelAvatar(c.u, c.level || 0, "sm")}<span class="main"><span class="t">@${esc(c.u)}</span><span class="s">${c.score != null ? `${num(c.score)}` : "New player"} · ${num((c.followers || 0).toLocaleString("en-IN"))} follower${c.followers === 1 ? "" : "s"}</span></span></button>
       <button class="btn sm ${isFollowing(c.a) ? "" : "primary"}" data-f="${esc(c.a)}">${isFollowing(c.a) ? "Following" : "Follow"}</button></div>`;
     const wire = (list) => {
-      res.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openPlayerCard(b.dataset.a)));
+      res.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openPlayerCard(b.dataset.a, b.dataset.u)));
       res.querySelectorAll("[data-f]").forEach((b) => (b.onclick = async () => { const a = b.dataset.f, on = !isFollowing(a); try { await follow(a, on); haptic(); b.textContent = on ? "Following" : "Follow"; b.classList.toggle("primary", !on); } catch (e) { toast(e.message); } }));
     };
     const top = async () => {
@@ -496,7 +499,7 @@ function drawGroup(toBottom = false) {
   el.querySelectorAll("[data-rx]").forEach((x) => (x.onclick = async () => { const [c, k] = x.dataset.rx.split("|"); try { await react(g, c, k); haptic(); } catch { toast("Couldn't react just now."); } }));
   el.querySelectorAll("[data-again]").forEach((x) => (x.onclick = () => { const ch = list.find((c) => c.id === x.dataset.again); openChallengeSheet(g, { coin: ch.coin, horizon: ch.horizon }); }));
   el.querySelectorAll("[data-share]").forEach((x) => (x.onclick = () => shareResult(g, list.find((c) => c.id === x.dataset.share))));
-  el.querySelectorAll(".grp-b [data-a]").forEach((x) => (x.onclick = () => openPlayerCard(x.dataset.a)));
+  el.querySelectorAll(".grp-b [data-a]").forEach((x) => (x.onclick = () => openPlayerCard(x.dataset.a, x.dataset.u)));
   wirePicks(el);
   const need = Object.keys(grp.members || {}).filter((a) => a !== me() && !S.cards.has(a));
   if (need.length) getCards(need).then(() => APP.openGroup === g && drawGroup()).catch(() => {});
@@ -504,10 +507,10 @@ function drawGroup(toBottom = false) {
 // This month's points table, from the group page's chart button.
 function openGroupTable(g) {
   const t = groupTable(g), played = t.some((r) => r.pts > 0), month = new Date().toLocaleString("en-IN", { month: "long" });
-  openSheet(`${esc(month)} table`, `${played ? `<div class="hl">${t.map((r, i) => `<button class="row" data-a="${esc(r.a)}"><span class="num lbn">${i + 1}</span>${ava(r.u, r.a === me() ? myCard() : S.cards.get(r.a), "xs")}<span class="main"><span class="t">@${esc(r.u)}${r.a === me() ? " · you" : ""}</span><span class="s">${r.all} pts all time</span></span><b class="num">${r.pts}<small class="muted"> pts</small></b></button>`).join("")}</div>`
+  openSheet(`${esc(month)} table`, `${played ? `<div class="hl">${t.map((r, i) => `<button class="row" data-a="${esc(r.a)}" data-u="${esc(r.u || "")}"><span class="num lbn">${i + 1}</span>${ava(r.u, r.a === me() ? myCard() : S.cards.get(r.a), "xs")}<span class="main"><span class="t">@${esc(r.u)}${r.a === me() ? " · you" : ""}</span><span class="s">${r.all} pts all time</span></span><b class="num">${r.pts}<small class="muted"> pts</small></b></button>`).join("")}</div>`
     : `<div class="empty">No results this month yet. Points land when a challenge is scored.</div>`}
     <p class="hint" style="margin-top:10px">Spot on 5, Very close 3, Close 2, Off 1, plus 1 for the right direction. Starts again each month.</p>`, (body) => {
-    body.querySelectorAll("[data-a]").forEach((x) => (x.onclick = () => openPlayerCard(x.dataset.a)));
+    body.querySelectorAll("[data-a]").forEach((x) => (x.onclick = () => openPlayerCard(x.dataset.a, x.dataset.u)));
   });
 }
 function chCard(g, ch, n) {
@@ -563,10 +566,10 @@ function openGroupInfo(g) {
   const grp = S.groups.get(g); if (!grp) return;
   const owner = grp.owner === me(), ms = Object.entries(grp.members || {});
   openSheet(esc(grp.name), `<div class="label">Players · ${ms.length} of ${GROUP_MAX}</div>
-    <div class="hl">${ms.map(([a, u]) => `<div class="row"><button class="pl-hit" data-a="${esc(a)}">${ava(u, a === me() ? myCard() : S.cards.get(a), "sm")}<span class="main"><span class="t">@${esc(u)}${a === me() ? " · you" : ""}</span><span class="s">${a === grp.owner ? "Started the group" : "Player"}</span></span></button>${owner && a !== me() ? `<button class="btn ghost sm danger" data-rm="${esc(a)}" data-u="${esc(u)}">Remove</button>` : ""}</div>`).join("")}</div>
+    <div class="hl">${ms.map(([a, u]) => `<div class="row"><button class="pl-hit" data-a="${esc(a)}" data-u="${esc(u || "")}">${ava(u, a === me() ? myCard() : S.cards.get(a), "sm")}<span class="main"><span class="t">@${esc(u)}${a === me() ? " · you" : ""}</span><span class="s">${a === grp.owner ? "Started the group" : "Player"}</span></span></button>${owner && a !== me() ? `<button class="btn ghost sm danger" data-rm="${esc(a)}" data-u="${esc(u)}">Remove</button>` : ""}</div>`).join("")}</div>
     <div style="display:grid;gap:8px;margin-top:14px"><button class="btn block" id="giShare">Share the group link</button>${owner ? `<button class="btn block" id="giRen">Rename</button>` : ""}<button class="btn block danger" id="giLeave">Leave the group</button></div>
     <p class="hint">${owner ? "You started this group: you can rename it and remove players. If you leave, the next player looks after it." : `Started by @${esc(grp.ownerName)}.`}</p>`, (body) => {
-    body.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openPlayerCard(b.dataset.a)));
+    body.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openPlayerCard(b.dataset.a, b.dataset.u)));
     body.querySelector("#giShare").onclick = () => shareLink(g);
     body.querySelector("#giRen")?.addEventListener("click", async () => { const n = prompt("Rename the group", grp.name); if (n && n.trim()) { try { await renameGroup(g, n); toast("Renamed."); closeSheet(); } catch (e) { toast(e.message); } } });
     body.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => { if (confirm(`Remove @${b.dataset.u} from ${grp.name}?`)) { try { await removeMember(g, b.dataset.rm); toast(`Removed @${b.dataset.u}.`); closeSheet(); } catch { toast("Couldn't remove just now."); } } }));
@@ -774,8 +777,8 @@ function openFollowing() {
     const box = body.querySelector("#flList"), ids = following();
     if (!ids.length) { box.innerHTML = `<div class="empty">You don't follow anyone yet.</div><button class="btn primary block" id="flFind">Find players</button>`; box.querySelector("#flFind").onclick = () => openSearch(); return; }
     const cards = await getCards(ids).catch(() => ids.map(() => null));
-    box.innerHTML = `<div class="hl">${ids.map((a, i) => { const c = cards[i] || { u: "player", score: null }; return `<div class="row"><button class="pl-hit" data-a="${esc(a)}">${ava(c.u, c, "sm")}<span class="main"><span class="t">@${esc(c.u)}</span><span class="s">${c.score != null ? `${c.score} ${esc(c.band || "")}` : "No score yet"}</span></span></button><button class="btn ghost sm" data-uf="${esc(a)}">Unfollow</button></div>`; }).join("")}</div>`;
-    box.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openPlayerCard(b.dataset.a)));
+    box.innerHTML = `<div class="hl">${ids.map((a, i) => { const c = cards[i] || { u: "player", score: null }; return `<div class="row"><button class="pl-hit" data-a="${esc(a)}" data-u="${esc(c.u || "")}">${ava(c.u, c, "sm")}<span class="main"><span class="t">@${esc(c.u)}</span><span class="s">${c.score != null ? `${c.score} ${esc(c.band || "")}` : "No score yet"}</span></span></button><button class="btn ghost sm" data-uf="${esc(a)}">Unfollow</button></div>`; }).join("")}</div>`;
+    box.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => openPlayerCard(b.dataset.a, b.dataset.u)));
     box.querySelectorAll("[data-uf]").forEach((b) => (b.onclick = async () => { await follow(b.dataset.uf, false); b.closest(".row").remove(); }));
   });
 }

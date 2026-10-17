@@ -99,7 +99,9 @@ def phone(pw, kind, base):
     ctx.route("**/config.js", lambda r: r.fulfill(status=200, content_type="text/javascript", body=CONFIG))
     ctx.route("**/api.kraken.com/**", kraken_route)
     p = ctx.new_page(); p.errs = []
-    p.on("pageerror", lambda e: p.errs.append(str(e)))
+    # Safari reports the database's open connection being cut off when the page reloads (signing out reloads it) as
+    # an error; that's the browser closing a request on purpose, not a fault in the app
+    p.on("pageerror", lambda e: None if re.search(r"Firestore/(Listen|Write)/channel.*access control checks", str(e)) else p.errs.append(str(e)))
     p.on("dialog", lambda d: d.accept())
     if kind == "android":  # a slow mobile connection: 1.6 Mbps down, 150 ms
         cdp = ctx.new_cdp_session(p); cdp.send("Network.enable")
