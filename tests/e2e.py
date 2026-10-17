@@ -52,10 +52,17 @@ def onboard(p, name="chart_fan", first_call=False):
     """A new phone: welcome → create account (username) → first call (made or skipped)."""
     p.goto(BASE); p.wait_for_timeout(2500)
     if not p.locator("#obNew").count(): return
-    p.click("#obNew"); p.fill("#obU", name); p.wait_for_timeout(500); p.click("#obGo"); p.wait_for_timeout(2500)
+    p.click("#obNew"); typein(p, "#obU", name); p.wait_for_timeout(500); p.click("#obGo"); p.wait_for_timeout(2500)
     if first_call and p.locator("#obGo").count(): p.click("#obGo"); p.wait_for_timeout(900); p.click("#obGo"); p.wait_for_timeout(700)
     elif p.locator("#obSkip").count(): p.click("#obSkip"); p.wait_for_timeout(600)
     p.wait_for_timeout(800)
+
+def typein(p, sel, text):
+    """Type the way a person does: one key at a time, so key handlers run (a plain fill skips them, and once hid a
+    username box that dropped every key)."""
+    p.fill(sel, ""); p.locator(sel).press_sequentially(text, delay=15)
+    got = p.input_value(sel)
+    if got != text: check(f"typing: {sel} shows what was typed", False, f"typed {text!r}, box shows {got!r}")
 
 def active(p):
     return p.evaluate("(()=>{const c=document.querySelector('.card.active');return c?[c.getAttribute('aria-label'),c.dataset.view||'main',+c.dataset.i]:[null,null,-1]})()")
@@ -83,9 +90,9 @@ def onboarding_test(b):
     check("start: the app's tabs are Feed, Calls and You, with the feed on the left", tabs == "feed:Feed,play:Calls,you:You", tabs)
     p.click("#obNew"); p.wait_for_timeout(300)
     check("account: only a username is asked for (no password field)", p.locator("#gate input").count() == 1 and not p.locator("#gate input[type=password]").count())
-    p.fill("#obU", "ab"); p.wait_for_timeout(450)
+    typein(p, "#obU", "ab"); p.wait_for_timeout(450)
     check("account: a short username is refused before anything is sent", p.is_disabled("#obGo") and "3 to 20" in p.inner_text("#obUMsg"), p.inner_text("#obUMsg"))
-    p.fill("#obU", "chart_fan"); p.wait_for_timeout(500)
+    typein(p, "#obU", "chart_fan"); p.wait_for_timeout(500)
     check("account: a free username enables Create account", not p.is_disabled("#obGo") and "free" in p.inner_text("#obUMsg"))
     p.click("#obGo"); p.wait_for_timeout(2500)
     acct = p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount'))")
@@ -111,7 +118,7 @@ def onboarding_test(b):
     check("sign out: the phone forgets the account and shows the welcome screen again", p.is_visible("#gate") and p.is_visible("#obHave"))
     p.click("#obHave"); p.wait_for_timeout(300)
     check("log in: only a username is asked for", p.locator("#gate input").count() == 1 and not p.locator("#gate input[type=password]").count())
-    p.fill("#obU", "chart_fan"); p.press("#obU", "Enter"); p.wait_for_timeout(1500)
+    typein(p, "#obU", "chart_fan"); p.press("#obU", "Enter"); p.wait_for_timeout(1500)
     pr = demo_preds(p).get("open", [])
     check("log in: the username opens the account again, with its open call", not p.locator("#gate").count() and len(pr) == 1, json.dumps(pr)[:100])
     check("start: no JavaScript errors", not errs, " | ".join(errs[:3]))
@@ -134,7 +141,7 @@ def feed_test(b):
     s = sheet_text(p); sl = s.lower()
     check("call it: the sheet has the four periods, Higher/Lower, three sizes, your own move, how sure, based on and show to followers", all(x in sl for x in ["30 min", "1 hour", "1 day", "1 year", "higher", "lower", "a usual move", "or your own", "how sure", "based on", "show to followers"]) and p.is_visible("#pGo"), s[:200].replace("\n", " "))
     now_px = float(re.search(r"Now \$([\d,.]+)", s).group(1).replace(",", "").rstrip("."))
-    p.fill("#pPct", "2.5"); p.wait_for_timeout(300)
+    typein(p, "#pPct", "2.5"); p.wait_for_timeout(300)
     px = float(p.input_value("#pPx").replace(",", ""))
     check("call it: typing a percentage fills in the price, and the button names it", abs(px / now_px - 1.025) < 0.002 and "Lock in, BTC at" in p.inner_text("#pGo"), f"{now_px} {px} {p.inner_text('#pGo')}")
     p.click("[data-sure='very']"); p.click("[data-basis='news']"); p.wait_for_timeout(200); p.click("#pGo"); p.wait_for_timeout(1200)
@@ -228,7 +235,7 @@ def people_test(b):
     p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(600); p.click("#plFind"); p.wait_for_timeout(900)
     s = sheet_text(p).lower()
     check("find players: before typing, the most-followed public accounts show with score, followers and a Follow button", "most followed" in s and "1,204 followers" in s and p.locator("#fpRes [data-f]").count() >= 5 and "open calls are never shown" in s, s[:160].replace("\n", " "))
-    p.fill("#fpIn", "ro"); p.wait_for_timeout(700)
+    typein(p, "#fpIn", "ro"); p.wait_for_timeout(700)
     check("find players: typing searches usernames", "@rohan" in sheet_text(p) and "most followed" not in sheet_text(p).lower())
     p.click("#fpRes [data-a]"); p.wait_for_timeout(900)
     s = sheet_text(p)
@@ -236,7 +243,7 @@ def people_test(b):
     p.click("#pcCalls"); p.wait_for_timeout(700)
     check("public calls: before following, a player's calls stay hidden", "Follow @rohan to see" in sheet_text(p), sheet_text(p)[:100])
     close_sheet(p)
-    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(300); p.click("#plFind"); p.wait_for_timeout(700); p.fill("#fpIn", "ro"); p.wait_for_timeout(600); p.click("#fpRes [data-a]"); p.wait_for_timeout(800)
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(300); p.click("#plFind"); p.wait_for_timeout(700); typein(p, "#fpIn", "ro"); p.wait_for_timeout(600); p.click("#fpRes [data-a]"); p.wait_for_timeout(800)
     p.click("#pcFollow"); p.wait_for_timeout(600)
     check("follow: Follow adds the player to my private following list", "demo_rohan" in p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount')).following") and "Following" in p.inner_text("#pcFollow"))
     p.click("#pcCalls"); p.wait_for_timeout(900)
@@ -247,12 +254,12 @@ def people_test(b):
     close_sheet(p)
     # groups end to end (demo mode: three made-up friends join every group you start and pick too)
     p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(400); p.click("#plFriends"); p.wait_for_timeout(500)
-    p.click("#plNewG"); p.wait_for_timeout(500); p.fill("#ngIn", "Weekend crew"); p.click("#ngGo"); p.wait_for_timeout(1300)
+    p.click("#plNewG"); p.wait_for_timeout(500); typein(p, "#ngIn", "Weekend crew"); p.click("#ngGo"); p.wait_for_timeout(1300)
     st = social(); gid = next(iter(st.get("groups", {})), None); grp = st["groups"].get(gid, {}) if gid else {}
     check("groups: a new group records who started it and opens on its own page with a link to share", grp.get("owner") == "me" and grp.get("members", {}).get("me") == "chart_fan" and p.is_visible("#grp") and p.is_visible("#grShare") and p.is_visible("#grNew"), json.dumps(grp)[:160])
     p.click("#grNew"); p.wait_for_timeout(600); p.click("#sheet [data-h='1h']"); p.wait_for_timeout(300)
     hint = p.inner_text("#cInMsg"); hi = float(re.search(r"\$([\d,.]+) or higher", hint).group(1).replace(",", ""))
-    p.fill("#cIn", f"{hi * 1.01:.4f}"); p.wait_for_timeout(200); p.click("#cGo"); p.wait_for_timeout(1500)
+    typein(p, "#cIn", f"{hi * 1.01:.4f}"); p.wait_for_timeout(200); p.click("#cGo"); p.wait_for_timeout(1500)
     st = social(); ch = (st.get("ch", {}).get(gid) or [{}])[0]
     check("challenge: starting one is the first pick, the friends pick too, and it ends an hour later for everyone", ch.get("horizon") == "1h" and sorted(ch.get("picked", {}).values()) == ["asha", "chart_fan", "dev", "rohan"], json.dumps(ch)[:200])
     p.click("#grBack"); p.wait_for_timeout(500)
@@ -276,7 +283,7 @@ def screens_test(b):
         p.goto(BASE); p.wait_for_timeout(2000)
         bad = {"welcome": p.evaluate(over, "#gate")}
         p.click("#obNew"); p.wait_for_timeout(300); bad["create"] = p.evaluate(over, "#gate")
-        p.fill("#obU", "sizer"); p.wait_for_timeout(500); p.click("#obGo"); p.wait_for_timeout(2500)
+        typein(p, "#obU", "sizer"); p.wait_for_timeout(500); p.click("#obGo"); p.wait_for_timeout(2500)
         if p.locator("#obSizes").count(): bad["first call"] = p.evaluate(over, "#gate"); p.evaluate("document.querySelector('#obSkip').click()")
         p.wait_for_timeout(1000)
         if theme == "light":
@@ -292,7 +299,7 @@ def screens_test(b):
         p.click("#play [data-res='0']"); p.wait_for_timeout(1200); bad["replay"] = p.evaluate(over, "#sheet"); close_sheet(p)
         p.click("#plFind"); p.wait_for_timeout(800); bad["find players"] = p.evaluate(over, "#sheet"); close_sheet(p)
         p.click("#plFriends"); p.wait_for_timeout(400); bad["with friends"] = p.evaluate(over, "#play")
-        p.click("#plNewG"); p.wait_for_timeout(500); p.fill("#ngIn", "A group with a long name"); p.click("#ngGo"); p.wait_for_timeout(1200); bad["group page"] = p.evaluate(over, "#grp")
+        p.click("#plNewG"); p.wait_for_timeout(500); typein(p, "#ngIn", "A group with a long name"); p.click("#ngGo"); p.wait_for_timeout(1200); bad["group page"] = p.evaluate(over, "#grp")
         foot = p.evaluate("(()=>{const f=document.querySelector('#grp .grp-f'); if(!f) return 'missing'; const r=f.getBoundingClientRect(); return r.bottom<=innerHeight+1 && r.top>=0 ? 'ok' : r.top+'..'+r.bottom})()")
         p.click("#grBack"); p.wait_for_timeout(500)
         p.click(".tabbar [data-tab=you]"); p.wait_for_timeout(700); bad["you"] = p.evaluate(over, "#you")

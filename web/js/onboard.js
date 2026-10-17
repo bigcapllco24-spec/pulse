@@ -83,7 +83,7 @@ function create() {
     try { const n = await setUsername(u.value); haptic(); toast(`Welcome, @${n}.`); ls.get(SEEN) ? finish() : firstcall(); }
     catch (e) { set(e.message || "Couldn't create the account. Try again.", "bad"); go.disabled = false; go.textContent = "Create account"; }
   };
-  go.onclick = submit; u.onkeydown = (e) => e.key === "Enter" && submit();
+  go.onclick = submit; u.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); }); // never return false from a key handler: that drops the keystroke
   setTimeout(() => u.focus(), 200);
 }
 
@@ -99,7 +99,7 @@ function login() {
     try { const n = await loginUsername(u.value, (t) => (go.textContent = `${t}…`)); toast(`Welcome back, @${n}.`); haptic(); finish(); }
     catch (e) { msg.hidden = false; msg.textContent = e.message || "Couldn't log in."; go.disabled = false; go.textContent = was; }
   };
-  go.onclick = submit; u.onkeydown = (e) => e.key === "Enter" && submit();
+  go.onclick = submit; u.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); }); // never return false from a key handler: that drops the keystroke
   setTimeout(() => u.focus(), 200);
 }
 

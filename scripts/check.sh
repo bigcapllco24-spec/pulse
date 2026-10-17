@@ -10,6 +10,9 @@ run() { "$@" || status=1; }
 
 if [[ $only == all || $only == syntax ]]; then
   bad=0; tmpd=$(mktemp -d); for f in web/js/*.js web/*.js pipeline/*.mjs pipeline/lib/*.mjs; do cp "$f" "$tmpd/x.mjs"; node --check "$tmpd/x.mjs" 2>/dev/null || { echo "FAIL syntax: $f"; bad=1; }; done
+  # a key handler written as  el.onkeydown = (e) => cond && go()  returns false for every other key, which drops the
+  # keystroke on phones (1.2.1 username box). Key handlers must use braces.
+  if grep -nE '\.on(keydown|keypress|keyup)\s*=\s*\([^)]*\)\s*=>\s*[^{ ]' web/js/*.js; then echo "FAIL syntax: key handler without braces (above)"; bad=1; fi
   [[ $bad == 0 ]] && echo "syntax: all files parse" || status=1
 fi
 [[ $only == all || $only == pipeline ]] && run node tests/pipeline.test.mjs
