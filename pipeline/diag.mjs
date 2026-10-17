@@ -1,11 +1,8 @@
-// One-off: why can't @vxxrc01 log in? Prints only facts about the account's shape, no personal data.
+// One-off (17 Oct 2026): @vxxrc01 reached the 10-device limit. Empties the account's device list (sign-in ids only;
+// calls, score and settings are untouched), then prints the count.
 import { serviceAccount, firestore } from "./lib/google.mjs";
 const db = firestore(serviceAccount(process.env.FIREBASE_SERVICE_ACCOUNT));
-const name = "vxxrc01", u = await db.get(`usernames/${name}`);
-console.log("::notice::" + ["usernames doc exists:", !!u, "| has acct:", !!u?.acct].join(" "));
-if (u?.acct) {
-  const a = await db.get(`accounts/${u.acct}`);
-  console.log("::notice::account exists: " + !!a);
-  if (a) console.log("::notice::" + ["account.username:", JSON.stringify(a.username), "| matches:", a.username === name, "| devices:", Array.isArray(a.devices) ? a.devices.length : typeof a.devices, "| fields:", Object.keys(a).sort().join(",")].join(" "));
-}
-const n = (await db.list("usernames")).length; console.log("::notice::usernames in total: " + n);
+const u = await db.get("usernames/vxxrc01");
+await db.set(`accounts/${u.acct}`, { devices: [] });
+const a = await db.get(`accounts/${u.acct}`);
+console.log("::notice::" + ["devices now:", a.devices.length, "| username:", a.username, "| watchlists kept:", (a.watchlists || []).length].join(" "));
