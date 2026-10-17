@@ -17,7 +17,7 @@ async function importKey(pem) {
 // Tests only: with FIRESTORE_EMULATOR_HOST set, every call goes to the local emulator as its admin ("owner"), the way
 // the service account bypasses the rules in production. No key is needed then.
 const EMU = globalThis.process?.env?.FIRESTORE_EMULATOR_HOST || "";
-export function serviceAccount(json) {
+export function serviceAccount(json, scope = "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging") {
   const sa = typeof json === "string" ? JSON.parse(json) : json;
   if (EMU) return { projectId: sa.project_id, accessToken: async () => "owner" };
   let token = null, exp = 0;
