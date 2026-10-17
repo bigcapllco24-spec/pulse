@@ -247,7 +247,7 @@ function renderMain(c, it) {
     const lvMode = cs.levels || "off";
     // indicators are one shared choice (the ƒx button); cards show as many panels as the screen fits
     const pk = picks(store.data?.settings?.chart), shown = pk.lower.slice(0, maxPanels()), ov = studyWindow(v.bars, v.ov, v.bars.length - v.win.length, v.bars.length, [...pk.over, ...shown]);
-    c._v = { ...v, ov, picks: { over: pk.over, lower: shown } }; // what hold-to-read and the panel guides read from
+    c._v = Object.assign(Object.create(v), { ov, picks: { over: pk.over, lower: shown } }); // what hold-to-read and the panel guides read from (a copy would work out the readings)
     // 1.2.0: name, price and move, then a small Call it under the price with your open call; one quiet row for the time
     // range, indicators and lines; the chart (full screen from its corner); panels stacked below.
     const calls = callLevels(s, v);

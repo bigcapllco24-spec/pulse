@@ -10,6 +10,8 @@
   <!-- "black", not "black-translucent": on iOS 26 a translucent status bar makes Home Screen apps shorter than the
        screen by its height, leaving a strip at the bottom no page can draw into. iOS reads this only when the app is added. -->
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <!-- the data files start downloading now, while the app's scripts load (js/data.js picks these up) -->
+  <script>window.__pre = {}; for (const f of ["candles", "news", "daily"]) window.__pre[f] = fetch("data/" + f + ".json", { cache: "no-cache", signal: AbortSignal.timeout?.(8000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);</script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">

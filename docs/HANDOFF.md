@@ -5,7 +5,28 @@ things safely, and what's open.
 Last updated 17 Oct 2026 (**version 1.2.0** on branch `mvp`, service worker `pulse-shell-v53`; firestore.rules CHANGED in 1.2.0 and must be published with it, see section 0). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
 
-## 0. 1.2.0: the MVP redesign (17 Oct 2026, branch `mvp`, not yet merged)
+## 0a. 1.2.2: speed pass (17 Oct 2026)
+
+Measured on a throttled phone profile (4× slower CPU, 1.6 Mbps, 150 ms latency): "Updating…" on a normal reopen went
+from ~2.5 s to ~0.7 s; the long main-thread tasks at start went from five or six of 60–160 ms to one or two. What changed:
+- **Data files are revalidated, not re-downloaded** (`cache: "no-cache"`): an unchanged `candles.json` (~300 KB
+  gzipped with 20 coins) now costs a 304. They change every 2 hours.
+- **index.html starts the three data files downloading** before any script loads (`window.__pre`, used once by `data.js`).
+- **Live prices and the data files download at the same time**, and Kraken is asked only for the last 4 days of daily
+  candles (`since=`), laid over the history already on the phone (`lay`); the full 720 only when they can't be joined.
+  If Kraken is unreachable there's no second try (that would wait another 8 s).
+- **Cards draw once** when live prices arrive within 350 ms of the file (before: always twice), and intraday candles a
+  card just fetched aren't fetched again by the first refresh. Feed cards ask Kraken for 5 days of 15-minute / 19 days
+  of hourly candles (enough for a 200 average) instead of 720.
+- **Readings are lazy**: `view()` works out every indicator's latest values (`now`, `prev`, `daily`) only when something
+  reads them (details pane, Your market sorting, rules), once per coin's daily series. `c._v` is `Object.create(v)`, not
+  a copy (a copy would run them). `rollingExtreme` is one pass (was a re-scan per window; same results, fuzz-tested).
+- **`maxPanels()` reads the width once and on resize** (reading `innerWidth` mid-draw forced a re-layout, ~80 ms).
+- The ~1 MB candle cache is written to localStorage when the phone is idle.
+- **The deploy minifies JS and CSS** (esbuild 0.28.2, modules stay separate; ~25% less to download, ~30% less to parse).
+  The repository keeps readable code. `tests/e2e.py` passes on a minified copy too (`python3 tests/e2e.py <url>`).
+
+## 0. 1.2.0: the MVP redesign (17 Oct 2026, merged into main)
 
 The thesis: *Pulse is a place where anyone can test how well they read the crypto market, and get an honest score for it,
 without risking money.* Tagline: **Swipe the market. Call the move.** The feed is the edge; the honest, verified record

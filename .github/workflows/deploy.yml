@@ -45,6 +45,12 @@ jobs:
           COINGECKO_DEMO_KEY: ${{ secrets.COINGECKO_DEMO_KEY }}
           SITE_URL: ${{ vars.SITE_URL }}
         run: node pipeline/run.mjs web/data
+      # The repository keeps readable code; the site gets the same code minified (about a third smaller to download
+      # and parse). The modules stay separate files, so nothing else changes. Checked by tests/e2e.py on a minified copy.
+      - name: Minify the app's code
+        run: |
+          npx -y esbuild@0.28.2 web/js/*.js --minify --outdir=web/js --allow-overwrite --log-level=warning
+          npx -y esbuild@0.28.2 web/styles.css --minify --outfile=web/styles.css --allow-overwrite --log-level=warning
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web

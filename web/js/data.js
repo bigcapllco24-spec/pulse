@@ -8,10 +8,12 @@ export const D = { series: {}, news: { stories: [] }, generatedAt: null, live: {
 
 // Intraday candles from Kraken (15-minute or 1-hour), shared by feed cards, the full-screen chart and the recap.
 const intraCache = new Map(); // `${t}:${interval}` → { at, bars }
-export async function krakenBars(t, iv) {
-  const k = `${t}:${iv}`, hit = intraCache.get(k);
+// days: only that many recent days are asked for (the feed's cards); without it, the most Kraken gives (720 candles).
+export async function krakenBars(t, iv, days = 0) {
+  const k = `${t}:${iv}:${days}`, hit = intraCache.get(k) || (days && intraCache.get(`${t}:${iv}:0`)); // a full set covers a short ask
   if (hit && Date.now() - hit.at < (iv < 1440 ? 120e3 : 3600e3)) return hit.bars;
-  const j = await getJSON(`https://api.kraken.com/0/public/OHLC?pair=${KRAKEN[t] || t + "USD"}&interval=${iv}`, 9000);
+  const since = days ? `&since=${Math.floor(Date.now() / 1000) - days * 86400}` : "";
+  const j = await getJSON(`https://api.kraken.com/0/public/OHLC?pair=${KRAKEN[t] || t + "USD"}&interval=${iv}${since}`, 9000);
   if (j.error?.length) throw new Error(j.error[0]);
   const rows = Object.entries(j.result).find(([x]) => x !== "last")?.[1] || [];
   const bars = rows.map((x) => ({ t: new Date(x[0] * 1000).toISOString().slice(0, iv < 1440 ? 16 : 10), o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[6] }));
@@ -20,13 +22,16 @@ export async function krakenBars(t, iv) {
 }
 // Feed ranges shorter than a month use intraday candles: [Kraken minutes, days shown].
 export const INTRA = { "1D": [15, 1], "1W": [60, 7] };
+// Days of intraday candles a card asks for: the days it shows plus ~250 candles before them, enough for every
+// indicator to settle (a 200 average included). 4 days of 15-minute candles, 18 of hourly: about half of Kraken's 720.
+const intraDays = (iv) => Math.ceil(Object.values(INTRA).find(([m]) => m === iv)[1] + (250 * iv) / 1440) + 1;
 function loadIntra(key, iv) {
   const ik = `${key}|${iv}`;
   const prev = D.intra[ik];
   if (prev && !prev.stale) return;
   D.intra[ik] = { loading: true, bars: prev?.bars }; // keep showing the old candles while new ones load
-  krakenBars(key.split(":")[1], iv)
-    .then((bars) => { D.intra[ik] = { bars }; })
+  krakenBars(key.split(":")[1], iv, intraDays(iv))
+    .then((bars) => { D.intra[ik] = { bars, at: Date.now() }; })
     .catch(() => { D.intra[ik] = { failed: true }; setTimeout(() => { if (D.intra[ik]?.failed) delete D.intra[ik]; }, 60e3); })
     .finally(() => document.dispatchEvent(new CustomEvent("pulse-intra", { detail: key })));
 }
@@ -48,25 +53,45 @@ function saveCache() {
 }
 
 // Every request gives up after 8 seconds, so a slow or blocked source never leaves the app stuck on "Updating".
-async function getJSON(url, ms = 8000) {
+// The site's data files are revalidated rather than re-downloaded ("no-cache": an unchanged file costs a 304, not its
+// full size; they change once every 2 hours). Kraken answers are always fresh.
+async function getJSON(url, ms = 8000, cache = "no-store") {
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
-  try { const r = await fetch(url, { cache: "no-store", signal: ctl.signal }); if (!r.ok) throw new Error(r.status); return await r.json(); }
+  try { const r = await fetch(url, { cache, signal: ctl.signal }); if (!r.ok) throw new Error(r.status); return await r.json(); }
   finally { clearTimeout(t); }
 }
+// index.html starts the three data files downloading before any script has loaded; the first refresh uses those.
+const fileJSON = (f) => {
+  const pre = globalThis.__pre?.[f];
+  if (pre) { delete globalThis.__pre[f]; return pre; }
+  return getJSON(`data/${f}.json`, 8000, "no-cache").catch(() => null);
+};
 
-async function kraken(t) {
-  const j = await getJSON(`https://api.kraken.com/0/public/OHLC?pair=${KRAKEN[t] || t + "USD"}&interval=1440`);
+const dayRows = (rows) => rows.map((x) => ({ t: new Date(x[0] * 1000).toISOString().slice(0, 10), o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[6] }));
+const krakenDaily = async (t, since) => {
+  const j = await getJSON(`https://api.kraken.com/0/public/OHLC?pair=${KRAKEN[t] || t + "USD"}&interval=1440${since ? `&since=${since}` : ""}`);
   if (j.error?.length) throw new Error(j.error[0]);
-  const rows = Object.entries(j.result).find(([k]) => k !== "last")?.[1] || [];
-  return rows.slice(-730).map((x) => ({ t: new Date(x[0] * 1000).toISOString().slice(0, 10), o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[6] }));
+  return dayRows(Object.entries(j.result).find(([k]) => k !== "last")?.[1] || []);
+};
+// Live daily candles: only the last few days are asked for (a handful of rows instead of 720) and laid over the
+// history the phone already has from the data file or its saved copy. The full history is fetched only when there's
+// nothing to lay them over.
+const RECENT_DAYS = 4;
+function lay(base, recent) {
+  if (!base?.length || !recent.length || base.at(-1).t < recent[0].t) return null; // a gap: can't join them
+  return [...base.filter((b) => b.t < recent[0].t), ...recent].slice(-730);
 }
 
 // One refresh for the whole watchlist. A failed symbol never breaks the others.
 export async function refresh(syms, onFile) {
   D.status = "refreshing"; D.error = null;
-  for (const st of Object.values(D.intra)) if (st.bars) st.stale = true; // intraday candles reload on the next draw
+  for (const st of Object.values(D.intra)) if (st.bars && !(Date.now() - st.at < 60e3)) st.stale = true; // intraday candles over a minute old reload on the next draw (not the ones the cards just fetched)
   try {
-    const [candles, news, daily] = await Promise.all([getJSON("data/candles.json").catch(() => null), getJSON("data/news.json").catch(() => null), getJSON("data/daily.json").catch(() => null)]);
+    const coins = [...new Set(syms.filter((s) => s.m === "CRYPTO").map((s) => s.t))].slice(0, 25);
+    const since = Math.floor(Date.now() / 1000) - RECENT_DAYS * 86400;
+    // the data files and the live prices download at the same time
+    const live = new Map(coins.map((t) => [t, krakenDaily(t, since).catch(() => null)]));
+    const [candles, news, daily] = await Promise.all([fileJSON("candles"), fileJSON("news"), fileJSON("daily")]);
     if (daily) D.daily = daily; // the daily coin's crowd results (habit.js)
     if (candles?.series) {
       for (const [k, v] of Object.entries(candles.series)) {
@@ -76,15 +101,21 @@ export async function refresh(syms, onFile) {
       D.generatedAt = candles.generatedAt;
     }
     if (news) D.news = news;
-    onFile?.(); // draw from the site's data file straight away; live Kraken prices patch in after
-    const coins = [...new Set(syms.filter((s) => s.m === "CRYPTO").map((s) => s.t))].slice(0, 25);
+    // draw from the data file straight away only if live prices are slow; usually they're in already and the
+    // cards draw once, with both
+    const allLive = Promise.all(live.values());
+    if (await Promise.race([allLive.then(() => true), new Promise((r) => setTimeout(r, 350, false))]) === false) onFile?.();
     await Promise.all(coins.map(async (t) => {
-      try { const bars = await kraken(t); if (bars.length > 30) D.series["CRYPTO:" + t] = { source: "Kraken", closeOnly: false, bars, live: true }; }
-      catch { /* keep the file or cached copy */ }
+      const key = "CRYPTO:" + t, recent = await live.get(t);
+      if (!recent) return; // Kraken unreachable: keep the file or saved copy (no second try that would wait again)
+      try {
+        const bars = (recent && lay(D.series[key]?.bars, recent)) || (await krakenDaily(t));
+        if (bars.length > 30) D.series[key] = { source: "Kraken", closeOnly: false, bars, live: true };
+      } catch { /* keep the file or cached copy */ }
     }));
     D.refreshedAt = new Date().toISOString();
     D.status = "ok";
-    saveCache();
+    (globalThis.requestIdleCallback || ((f) => setTimeout(f, 300)))(saveCache, { timeout: 4000 }); // ~1 MB of JSON: written when the phone is idle, not mid-draw
   } catch (e) { D.status = "error"; D.error = "Couldn't refresh. Showing saved data."; }
 }
 
@@ -118,6 +149,10 @@ export function view(key, chart) {
   if (!m.has(ck)) m.set(ck, computeView(key, s, chart));
   return m.get(ck);
 }
+// Daily readings for a series (every indicator's latest value), worked out once per series object and only when
+// something reads them (the details pane, Your market's sorting, rules), not for every card that's drawn.
+const dailyCache = new WeakMap();
+const dailyReadings = (s) => { let r = dailyCache.get(s); if (r === undefined) dailyCache.set(s, (r = compute(s.bars))); return r; };
 function computeView(key, s, chart, intraBars) {
   const interval = intraBars ? "intraday" : resolveInterval(chart);
   const bars = intraBars || (interval === "1W" ? toWeekly(s.bars) : s.bars);
@@ -131,10 +166,17 @@ function computeView(key, s, chart, intraBars) {
   const win = bars.slice(from);
   const ov = {};
   for (const k of Object.keys(series)) ov[k] = slice(series[k]);
-  const r = compute(bars, series);
-  const daily = interval === "1D" ? r : compute(s.bars); // the details pane always reads daily candles
-  return { key, range: chart.range, interval, ivLabel: intraBars ? IV_LABEL[resolveInterval(chart)] : IV_LABEL[interval], source: s.source, closeOnly: !!s.closeOnly, live: !!s.live, bars, win, ov, now: r.now, prev: r.prev, daily, lastBar: bars[n - 1], prevBar: bars[n - 2],
+  const out = { key, range: chart.range, interval, ivLabel: intraBars ? IV_LABEL[resolveInterval(chart)] : IV_LABEL[interval], source: s.source, closeOnly: !!s.closeOnly, live: !!s.live, bars, win, ov, lastBar: bars[n - 1], prevBar: bars[n - 2],
     windowChange: ((win[w - 1].c - win[0].o) / win[0].o) * 100 }; // from the first candle's open to now
+  // the readings are worked out on first use (daily candles share one set per coin)
+  let r;
+  const own = () => (r ??= interval === "1D" ? dailyReadings(s) : compute(bars, series));
+  Object.defineProperties(out, {
+    now: { get: () => own()?.now, enumerable: true },
+    prev: { get: () => own()?.prev, enumerable: true },
+    daily: { get: () => dailyReadings(s), enumerable: true }, // the details pane always reads daily candles
+  });
+  return out;
 }
 
 // Was today's move unusually large? (more than twice the typical daily move)

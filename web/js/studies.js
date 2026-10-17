@@ -45,7 +45,11 @@ export const MAX_OVERLAYS = 4;
 // Panels below the chart: up to 4 (as a 2 × 2 grid on cards) on screens at least as wide as an iPhone 12
 // (390 px); narrower phones get 2, which is all that stays readable there.
 export const WIDE_PX = 390;
-export const maxPanels = () => ((typeof innerWidth === "number" ? innerWidth : WIDE_PX) >= WIDE_PX ? 4 : 2);
+// The width is read once and on resize: reading innerWidth while cards are being drawn forces the browser to lay the
+// page out again each time (that was ~80 ms per open on a mid-range phone).
+let vw = typeof innerWidth === "number" ? innerWidth : WIDE_PX;
+if (typeof addEventListener === "function") addEventListener("resize", () => (vw = innerWidth));
+export const maxPanels = () => (vw >= WIDE_PX ? 4 : 2);
 
 export const keysOf = (st) => [...(st.lines || []).map((l) => l[0]), ...(st.fill || []), ...(st.cloud || []), st.dots, st.trend, st.hist].filter(Boolean);
 const needsExt = (st) => !st.base && keysOf(st).some((k) => !(st.baseKeys || []).includes(k));

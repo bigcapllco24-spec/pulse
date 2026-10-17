@@ -78,8 +78,19 @@ export function adx(bars, n = 14) {
   return wilder(dx, n);
 }
 
+// The highest (fn = Math.max) or lowest (Math.min) of each run of n values, in one pass (a queue of candidates
+// instead of re-scanning every window).
 function rollingExtreme(values, n, fn) {
-  return values.map((_, i) => (i < n - 1 ? null : fn(...values.slice(i - n + 1, i + 1))));
+  const hi = fn === Math.max, out = new Array(values.length).fill(null), q = [];
+  let head = 0;
+  for (let i = 0; i < values.length; i++) {
+    const x = values[i];
+    while (q.length > head && (hi ? values[q[q.length - 1]] <= x : values[q[q.length - 1]] >= x)) q.pop();
+    q.push(i);
+    if (q[head] <= i - n) head++;
+    if (i >= n - 1) out[i] = values[q[head]];
+  }
+  return out;
 }
 
 export function stochK(bars, n = 14) {

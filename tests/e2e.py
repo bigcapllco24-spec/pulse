@@ -316,13 +316,14 @@ def ios_homescreen_test(b):
     check("iOS Home Screen: the tab bar and its labels sit fully inside the visible area (nothing pushed below it)", abs(r[0] - r[1]) < 1 and r[2] <= r[1] + 0.5, str(r))
     ctx.close()
 
-with sync_playwright() as pw:
-    b = pw.chromium.launch(executable_path=CHROME)
-    for name, fn in [("start", onboarding_test), ("feed", feed_test), ("calls", calls_test), ("you", you_test), ("people", people_test), ("screens", screens_test), ("iOS Home Screen", ios_homescreen_test)]:
-        try: fn(b)
-        except Exception as e: check(f"{name}: suite ran to the end", False, repr(e)[:300])
-    b.close()
+if __name__ == "__main__":
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=CHROME)
+        for name, fn in [("start", onboarding_test), ("feed", feed_test), ("calls", calls_test), ("you", you_test), ("people", people_test), ("screens", screens_test), ("iOS Home Screen", ios_homescreen_test)]:
+            try: fn(b)
+            except Exception as e: check(f"{name}: suite ran to the end", False, repr(e)[:300])
+        b.close()
 
-fails = [r for r in results if not r[1]]
-print(f"e2e: {len(results) - len(fails)}/{len(results)} checks passed")
-sys.exit(1 if fails else 0)
+    fails = [r for r in results if not r[1]]
+    print(f"e2e: {len(results) - len(fails)}/{len(results)} checks passed")
+    sys.exit(1 if fails else 0)
