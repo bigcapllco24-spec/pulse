@@ -89,6 +89,10 @@ def job(script, *args):
     return r.returncode == 0
 
 # ---------- phones
+PHONES = []
+STATE = """JSON.stringify({body: document.body.className, tab: (document.querySelector('.tabbar [aria-current=page]')||{}).dataset?.tab,
+  gate: document.querySelector('#gate')?.innerText.slice(0, 160), sheet: document.querySelector('#sheet').hidden ? null : document.querySelector('#sheet').innerText.slice(0, 160),
+  signedOut: localStorage.getItem('pl.signedOut'), user: JSON.parse(localStorage.getItem('pl.account') || '{}').username || null})"""
 def phone(pw, kind, base):
     if kind == "iphone":
         b = pw.webkit.launch()
@@ -106,7 +110,7 @@ def phone(pw, kind, base):
     if kind == "android":  # a slow mobile connection: 1.6 Mbps down, 150 ms
         cdp = ctx.new_cdp_session(p); cdp.send("Network.enable")
         cdp.send("Network.emulateNetworkConditions", {"offline": False, "latency": 150, "downloadThroughput": 200e3, "uploadThroughput": 90e3})
-    p.kind = kind; p.browser_ = b
+    p.kind = kind; p.browser_ = b; PHONES.append(p)
     p.goto(base); return p
 
 def typein(p, sel, text):
@@ -306,7 +310,11 @@ if __name__ == "__main__":
     base = serve()
     with sync_playwright() as pw:
         try: run(pw, base)
-        except Exception as e: check("live: suite ran to the end", False, repr(e)[:400])
+        except Exception as e:
+            check("live: suite ran to the end", False, repr(e)[:300])
+            for i, p in enumerate(PHONES):
+                try: check(f"state of phone {i + 1} ({p.kind}) when it stopped", False, p.evaluate(STATE))
+                except Exception as e2: pass
     fails = [r for r in results if not r[1]]
     for n, ok, d in results:
         if not ok and not VERBOSE: pass  # already printed by check()
