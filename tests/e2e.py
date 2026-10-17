@@ -9,7 +9,7 @@ from playwright.sync_api import sync_playwright
 VERBOSE = "-v" in sys.argv
 ARGS = [a for a in sys.argv[1:] if a != "-v"]
 BASE = ARGS[0] if ARGS else "http://localhost:8773/"
-CHROME = "/opt/pw-browsers/chromium"
+CHROME = "/opt/pw-browsers/chromium" if __import__("os").path.exists("/opt/pw-browsers/chromium") else None  # else Playwright's own (CI)
 results = []
 
 def check(name, ok, detail=""):
@@ -325,7 +325,7 @@ def ios_homescreen_test(b):
 
 if __name__ == "__main__":
     with sync_playwright() as pw:
-        b = pw.chromium.launch(executable_path=CHROME)
+        b = pw.chromium.launch(**({"executable_path": CHROME} if CHROME else {}))
         for name, fn in [("start", onboarding_test), ("feed", feed_test), ("calls", calls_test), ("you", you_test), ("people", people_test), ("screens", screens_test), ("iOS Home Screen", ios_homescreen_test)]:
             try: fn(b)
             except Exception as e: check(f"{name}: suite ran to the end", False, repr(e)[:300])
