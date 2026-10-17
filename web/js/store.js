@@ -169,7 +169,14 @@ function attach(id, ref) {
   store.id = id;
   ls.set(LSACC, store.data);
   fb.unsubs.forEach((u) => u()); fb.unsubs = [];
-  fb.unsubs.push(f.onSnapshot(ref, (s) => { if (s.exists()) { store.data = { ...DEFAULT_ACCOUNT(), ...s.data() }; ls.set(LSACC, store.data); store.emit("account"); watchLists(); } }));
+  // A username is never taken away by a late update: the server's copy of the account's first save (made just before
+  // the name is added) can arrive after the name, and used to send a new player back to the welcome screen (live
+  // tests, 17 Oct 2026). Names can't be removed anyway (firestore.rules).
+  fb.unsubs.push(f.onSnapshot(ref, (s) => {
+    if (!s.exists()) return;
+    const d = s.data(), keep = !d.username && store.data?.username && store.id === id ? { username: store.data.username, usernameChanges: store.data.usernameChanges || 0 } : {};
+    store.data = { ...DEFAULT_ACCOUNT(), ...d, ...keep }; ls.set(LSACC, store.data); store.emit("account"); watchLists();
+  }));
   fb.unsubs.push(f.onSnapshot(f.query(f.collection(db, "accounts", id, "alerts"), f.orderBy("at", "desc"), f.limit(200)), (q) => {
     store.alerts = q.docs.map((d) => ({ id: d.id, ...d.data() })); ls.set(LSALERTS, store.alerts.slice(0, 50)); store.emit("alerts");
   }));
