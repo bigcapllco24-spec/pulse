@@ -1,0 +1,37 @@
+name: Tests
+# Every push: the quick checks and the demo-mode browser tests (scripts/check.sh), then the real-database tests
+# (tests/live.py): the app against the Firebase emulators with firestore.rules, on WebKit (iPhone) and Chromium
+# (Android, slow connection), and the data jobs scoring calls against the same database.
+on:
+  push:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install playwright==1.56.0 && python -m playwright install --with-deps chromium
+      - run: bash scripts/check.sh
+        env: { PW_CHROMIUM: "" }
+
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install playwright==1.56.0 && python -m playwright install --with-deps chromium webkit
+      - name: Real-database tests (Firebase emulators)
+        run: npx -y firebase-tools@13.29.1 emulators:exec --project demo-pulse --only auth,firestore "python3 tests/live.py -v"

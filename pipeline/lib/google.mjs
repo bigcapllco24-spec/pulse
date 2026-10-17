@@ -14,8 +14,12 @@ async function importKey(pem) {
   return crypto.subtle.importKey("pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
 }
 
-export function serviceAccount(json, scope = "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging") {
+// Tests only: with FIRESTORE_EMULATOR_HOST set, every call goes to the local emulator as its admin ("owner"), the way
+// the service account bypasses the rules in production. No key is needed then.
+const EMU = globalThis.process?.env?.FIRESTORE_EMULATOR_HOST || "";
+export function serviceAccount(json) {
   const sa = typeof json === "string" ? JSON.parse(json) : json;
+  if (EMU) return { projectId: sa.project_id, accessToken: async () => "owner" };
   let token = null, exp = 0;
   async function accessToken() {
     if (token && Date.now() < exp - 60000) return token;
@@ -65,7 +69,7 @@ function docOut(d) {
 }
 
 export function firestore(sa) {
-  const base = () => `https://firestore.googleapis.com/v1/projects/${sa.projectId}/databases/(default)/documents`;
+  const base = () => `${EMU ? `http://${EMU}` : "https://firestore.googleapis.com"}/v1/projects/${sa.projectId}/databases/(default)/documents`;
   async function call(method, url, body) {
     const r = await fetch(url, { method, headers: { authorization: "Bearer " + (await sa.accessToken()), "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
     if (r.status === 404) return null;
