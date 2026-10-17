@@ -1,7 +1,7 @@
 // Pulse: the chart feed. Scroll up or down for the next symbol; swipe for its news (finger moves right)
 // or its details (finger moves left). The feed loops through the watchlist with a "caught up" card between rounds.
 import { CONFIG } from "../config.js";
-import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists, settleDemoPredictions } from "./store.js";
+import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists, settleDemoPredictions, connected } from "./store.js";
 import { initSocial, settleDemoChallenges } from "./social.js";
 import { initPlay, renderPlay, openPredictSheet, openLink, badge, openAvatarSheet, closeGroup } from "./play.js";
 import { krakenRows } from "./predict.js";
@@ -20,6 +20,7 @@ import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, INTRA, intra
 import { $, esc, money, pct, arrow, fmtDay, hhmm, toast, haptic, openSheet, DISCLAIMER } from "./ui.js";
 import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, checkPanelFit } from "./pages.js";
 import { startOnboarding, onboarding, needsOnboarding } from "./onboard.js";
+import { openGuide, guideSeen } from "./guide.js";
 import { initYou, renderYou } from "./you.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
@@ -696,6 +697,9 @@ export function applyTheme() {
   addEventListener("hashchange", () => { if (/^#\/(g\/|predict)/.test(location.hash)) named.then(() => openLink()); });
   await doRefresh(false);
   await named;
+  // the guide, once per account: accounts made before it existed see it on their next open (new ones see it after
+  // their first call, from onboard.js). Waits briefly for the account so one that has seen it elsewhere isn't shown it.
+  if (store.data?.username && !guideSeen() && !location.hash) { await Promise.race([connected(), new Promise((r) => setTimeout(r, 4000))]); if (store.data?.username && !guideSeen() && !onboarding()) openGuide(); }
   setTimeout(() => ls.set("pl.lastOpen", new Date().toISOString()), 4000);
   loadSymbols().catch(() => {});
 })();

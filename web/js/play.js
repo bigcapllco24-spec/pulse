@@ -3,6 +3,7 @@
 // Data lives in store.js (your account and predictions) and social.js (people and groups).
 import { CONFIG } from "../config.js";
 import { store, ls, save, allSyms, makePrediction, addCallDetails, myScore, enablePush, isAdmin, pendingHere, settleHere, nextDue } from "./store.js";
+import { openGuide } from "./guide.js";
 import { HORIZONS, PROVISIONAL_UNDER, CHANCE, checkPrediction, canPredict, allowedRange, dailyVol, dueAt, closenessText, typicalMove } from "./score.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { krakenBars } from "./data.js";
@@ -787,6 +788,7 @@ export function openAvatarSheet() {
     <div class="label pg">Sharing</div><div class="hl">${row("lists", "Shared lists", "Follow a list of coins with friends")}</div>
     <div class="label pg">App</div><div class="hl">
       ${row("account", "Account", `Username (${esc(u ? "@" + u : "not set")}), sign out`)}
+      ${row("guide", `How ${esc(CONFIG.appName)} works`, "A one-minute guide to the app")}
       ${row("appearance", "Appearance", "Dark, light or match phone")}
       ${row("feedback", "Give feedback", "Hold anything for 3 seconds, or switch on tap-to-comment")}
       ${row("legal", "Legal and disclaimer", "Terms, privacy, grievance contact")}
@@ -795,6 +797,7 @@ export function openAvatarSheet() {
     <p class="hint pl-ver">${esc(CONFIG.appName)} ${esc(CONFIG.version)}</p>`, (body) => {
     const go = (k) => {
       if (k === "card") { closeSheet(); return openPlayerCard(me()); }
+      if (k === "guide") { closeSheet(); return openGuide(); }
       if (k === "following") return openFollowing();
       if (k === "push") return enablePush().then(() => toast("Notifications are on for this phone."), (e) => toast(e.message, { ms: 5000 }));
       if (k === "feedback") { closeSheet(); setFeedbackMode(true); showTab("feed"); return; }

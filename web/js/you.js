@@ -8,7 +8,7 @@ import { myName, myCard } from "./social.js";
 import { verdictOf, VERDICT_AT, myLevel, ranksView, openAvatarSheet, myFullCard, levelAvatar, SURE, BASIS } from "./play.js";
 import { APP, showTab } from "./app.js";
 import { openShareSheet } from "./share.js";
-import { HOW_SCORE, svgIcon, cardHtml } from "./card.js";
+import { svgIcon, cardHtml } from "./card.js";
 import { UNLOCKS, callsFor } from "./progress.js";
 
 export function initYou() {}
@@ -71,12 +71,10 @@ export function renderYou() {
     </div>
     <h2 class="you-h2">Where you rank</h2>
     <div class="pl-view" data-view="ranks"></div>
-    <div class="hl" style="margin-top:12px"><button class="row" id="youHow"><span class="main"><span class="t">How the score works</span></span><span class="hint">2 min</span></button></div>
     <p class="hint" style="margin-top:14px">Levels show how much you've played, not how good you are. Scores describe your own past calls in a learning game. Not advice.</p>`;
   ranksView(el.querySelector(".pl-view"));
   el.querySelector("#youCard").onclick = () => openSheet("How others see you", cardHtml(myFullCard(), { mine: true }) + `<p class="hint">Other players see your username, level, score, followers and record. Your price calls are never shown unless you make them public once scored.</p>`);
   el.querySelector("#youShare").onclick = () => openShareSheet(myFullCard());
   el.querySelector("#youSet").onclick = () => openAvatarSheet();
-  el.querySelector("#youHow").onclick = () => openSheet("How the score works", HOW_SCORE);
   el.querySelector("#youLearn").onclick = () => { APP.backTo = "you"; showTab("profile", "learn"); };
 }

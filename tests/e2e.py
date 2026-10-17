@@ -58,6 +58,7 @@ def onboard(p, name="chart_fan", first_call=False):
     if first_call and p.locator("#obGo").count(): p.click("#obGo"); p.wait_for_timeout(900); p.click("#obGo"); p.wait_for_timeout(700)
     elif p.locator("#obSkip").count(): p.click("#obSkip"); p.wait_for_timeout(600)
     p.wait_for_timeout(800)
+    if p.locator("#gdSkip").count(): p.click("#gdSkip"); p.wait_for_timeout(300)  # the guide a new account sees once
 
 def typein(p, sel, text):
     """Type the way a person does: one key at a time, so key handlers run (a plain fill skips them, and once hid a
@@ -109,6 +110,16 @@ def onboarding_test(b):
     pr = demo_preds(p).get("open", [])
     check("first call: Lock in saves a 1-hour Bitcoin call on the account and shows Locked in with the time it's scored", len(pr) == 1 and pr[0]["horizon"] == "1h" and pr[0]["t"] == "BTC" and pr[0]["target"] < now_px and "Locked in" in p.inner_text("#gate") and p.is_visible("#obPush"), json.dumps(pr)[:160])
     p.click("#obGo"); p.wait_for_timeout(1200)
+    # the guide: five cards, one idea each, once per account; no explanation of how scoring works
+    g = p.inner_text("#guide") if p.locator("#guide").count() else ""
+    check("guide: after the first call, a new account sees the guide (card 1 of 5, Skip and Next)", "Swipe up for the next coin" in g and p.locator("#guide .gd-dots i").count() == 5 and p.is_visible("#gdSkip") and p.is_visible("#gdNext"), g[:160].replace("\n", " "))
+    seen, words = [], []
+    for k in range(5): seen.append(p.inner_text("#guide .gd-h")); words.append(p.inner_text("#guide .gd-p")); p.click("#gdNext"); p.wait_for_timeout(250)
+    check("guide: Next walks through the five cards and Start calling closes it", seen == ["Swipe up for the next coin", "Swipe sideways for more", "Call where it goes next", "See how you did", "Play with others"] and not p.locator("#guide").count(), str(seen))
+    check("guide: it doesn't explain how scoring works", not any("score" in w.lower() for w in words), " | ".join(words))
+    check("guide: it's remembered on the account and the phone", p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount')).guideSeen") == 1 and p.evaluate("localStorage.getItem('pl.guideSeen')") == "1")
+    p.reload(); p.wait_for_timeout(2500)
+    check("guide: it isn't shown again on the next open", not p.locator("#guide").count())
     check("first call: Explore closes the gate on the feed, on the first coin (no recap card)", not p.locator("#gate").count() and active(p)[0] == "BTC" and active(p)[2] == 0, str(active(p)))
     card = p.inner_text(".card.active")
     check("feed: the card says a call is waiting under Call it, and draws the call on the chart", "1 call waiting" in card and p.locator(".card.active .lvtag.c").count() == 1, card[:120].replace("\n", " "))
@@ -222,7 +233,7 @@ def you_test(b):
     p.click(".tabbar [data-tab=you]"); p.wait_for_timeout(700)
     y = p.inner_text("#you")
     check("you: with 40 calls the verdict is plain words, the score has a likely range, and the breakdowns open (being sure, what works, by period)", ("Still learning" in y or "reading it well" in y) and "likely range" in y and "Does being sure help" in y and "What works for you" in y and "By time period" in y and "Level 3" in y, y[:200].replace("\n", " "))
-    check("you: Where you rank lists Everyone, People you follow and Find players; the How the score works row is there", "Where you rank" in y and "Everyone" in y and "People you follow" in y and p.is_visible("#plFind") and p.is_visible("#youHow"))
+    check("you: Where you rank lists Everyone, People you follow and Find players; no How the score works explainer", "Where you rank" in y and "Everyone" in y and "People you follow" in y and p.is_visible("#plFind") and "How the score works" not in y)
     p.click("#youLearn"); p.wait_for_timeout(600)
     l = p.inner_text("#profile")
     check("learn: six short reads on what a score doesn't show", "Before you put money in" in l and p.locator("#profile .dsec.read").count() == 6 and "Leverage" in l, l[:120].replace("\n", " "))
@@ -232,6 +243,10 @@ def you_test(b):
     p.click("#youSet"); p.wait_for_timeout(600)
     s = sheet_text(p)
     check("settings: has the public-calls default, Account (sign out), and no password or tour", "My scored calls are public" in s and "sign out" in s and "password" not in s.lower() and "tour" not in s.lower(), s[:200].replace("\n", " "))
+    check("settings: How Pulse works is in Settings", "How Pulse works" in s)
+    p.click("#sheet [data-av=guide]"); p.wait_for_timeout(500)
+    check("settings: How Pulse works opens the guide again", p.locator("#guide").count() == 1 and "Swipe up" in p.inner_text("#guide"))
+    p.click("#gdSkip"); p.wait_for_timeout(300); p.click("#youSet"); p.wait_for_timeout(600)
     p.click("#avCalls"); p.wait_for_timeout(400)
     check("settings: switching public calls off is saved as the default for new calls", p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount')).callsPublic") is False)
     check("you: no JavaScript errors", not errs, " | ".join(errs[:3]))
@@ -296,6 +311,7 @@ def screens_test(b):
         typein(p, "#obU", "sizer"); p.wait_for_timeout(500); p.click("#obGo"); p.wait_for_timeout(2500)
         if p.locator("#obSizes").count(): bad["first call"] = p.evaluate(over, "#gate"); p.evaluate("document.querySelector('#obSkip').click()")
         p.wait_for_timeout(1000)
+        if p.locator("#guide").count(): bad["guide"] = p.evaluate(over, "#guide"); p.click("#gdSkip"); p.wait_for_timeout(300)
         if theme == "light":
             p.evaluate("(()=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.settings.theme='light'; localStorage.setItem('pl.demoAccount', JSON.stringify(a))})()")
         set_results(p, fake_results(12)); p.reload(); p.wait_for_timeout(3000)

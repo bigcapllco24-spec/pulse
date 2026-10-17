@@ -1003,3 +1003,29 @@ body.grpopen .tabbar { display: none; } /* the group page is its own screen: no 
 .cdone p { color: var(--muted); margin: 6px 0 0; }
 .opt-l { font-weight: 400; color: var(--muted); text-transform: none; letter-spacing: 0; }
 .cdone .done-ring circle { animation: ring .7s ease-out forwards; } .cdone .done-ring path { animation: ring .4s .55s ease-out forwards; }
+
+/* ---- How Pulse works (1.2.9): five cards, one idea each */
+body.guided .tabbar, body.guided .topbar { visibility: hidden; }
+.guide { position: fixed; inset: 0; z-index: 90; background: var(--bg); display: flex; justify-content: center; overflow-y: auto; }
+.gd-in { width: 100%; max-width: 440px; min-height: 100%; padding: calc(20px + var(--safe-t, 0px)) 24px calc(24px + var(--safe-b, 0px)); display: flex; flex-direction: column; }
+.gd-top { display: flex; justify-content: space-between; align-items: center; min-height: 36px; }
+.gd-top .label { margin: 0; }
+.gd-skip { color: var(--muted); padding: 8px 0; }
+.gd-art { flex: 1; display: grid; place-items: center; min-height: 200px; padding: 12px 0; }
+.gd-art svg { width: min(78%, 300px); height: auto; overflow: visible; }
+.gd-h { font-size: 28px; font-weight: 800; letter-spacing: -.01em; line-height: 1.15; margin: 0; }
+.gd-p { color: var(--muted); font-size: 17px; line-height: 1.5; margin: 10px 0 0; }
+.gd-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 28px; gap: 12px; }
+.gd-dots { display: flex; gap: 6px; } .gd-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); } .gd-dots i.on { background: var(--accent); width: 20px; border-radius: 4px; }
+.gd-btns { display: flex; gap: 8px; } .gd-btns .btn { min-width: 96px; }
+.guide .g-ph { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+.guide .g-card { fill: var(--surface2); } .guide .g-card.dim { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+.guide .g-line { fill: none; stroke: var(--up); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.guide .g-arrow { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.guide .g-target { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 6; }
+.guide .g-hit { fill: none; stroke: var(--up); stroke-width: 2.5; }
+.guide .g-up { fill: none; stroke: var(--up); stroke-width: 1.5; } .guide .g-dn { fill: none; stroke: var(--down); stroke-width: 1.5; }
+.guide .g-go { fill: var(--accent); }
+.guide .g-av.a { fill: var(--surface2); } .guide .g-av.b { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; } .guide .g-av.c { fill: var(--surface2); }
+.guide .g-t { fill: var(--muted); font: 600 9px Inter, system-ui, sans-serif; text-anchor: middle; } .guide .g-t.l { text-anchor: start; fill: var(--accent); }
+.guide .g-t.up { fill: var(--up); font-size: 11px; font-weight: 800; } .guide .g-t.dn { fill: var(--down); font-size: 11px; font-weight: 800; } .guide .g-t.ink { fill: var(--accent-ink); font-size: 11px; font-weight: 800; }

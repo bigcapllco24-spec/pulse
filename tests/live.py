@@ -135,6 +135,8 @@ def create_account(p, name, first_call=True):
     else:
         p.wait_for_selector("#obSkip", timeout=20000); p.click("#obSkip")
     p.wait_for_function("!document.querySelector('#gate')", timeout=10000)
+    p.wait_for_selector("#gdSkip", timeout=5000); p.click("#gdSkip")  # the guide a new account sees once
+    p.wait_for_function("!document.querySelector('#guide')", timeout=5000)
     return took
 
 def open_settings(p, page):

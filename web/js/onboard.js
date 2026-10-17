@@ -6,10 +6,11 @@ import { store, ls, checkUsername, usernameFree, setUsername, loginUsername, mak
 import { HORIZONS, typicalMove } from "./score.js";
 import { D } from "./data.js";
 import { $, esc, money, toast, haptic } from "./ui.js";
+import { openGuide, guideSeen } from "./guide.js";
 
 const FIRST_COIN = "CRYPTO:BTC", FIRST_H = "1h";
 const SEEN = "pl.firstCall"; // the first-call step has been shown (made or skipped) on this phone
-let gate = null, onDone = null;
+let gate = null, onDone = null, isNew = false; // isNew: an account made just now gets the guide after its first call
 
 // Is anything needed before the app can be used? (The feed draws behind the gate meanwhile.)
 export const needsOnboarding = () => (!store.data?.username || signedOut() ? "welcome" : null);
@@ -35,6 +36,7 @@ function frame(html, { back = null } = {}) {
 function finish() {
   if (gate) { gate.remove(); gate = null; }
   document.body.classList.remove("gated");
+  if (isNew && !guideSeen()) { isNew = false; openGuide({ first: true }); }
   const d = onDone; onDone = null; d?.();
 }
 const LOGO = `<span class="ob-logo"><svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 15h5l2.5-7 4 13 3-9 1.5 3H25" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><b>${esc(CONFIG.appName)}</b></span>`;
@@ -80,7 +82,7 @@ function create() {
   const submit = async () => {
     if (go.disabled) return;
     go.disabled = true; go.textContent = "Creating…";
-    try { const n = await setUsername(u.value); haptic(); toast(`Welcome, @${n}.`); ls.get(SEEN) ? finish() : firstcall(); }
+    try { const n = await setUsername(u.value); isNew = true; haptic(); toast(`Welcome, @${n}.`); ls.get(SEEN) ? finish() : firstcall(); }
     catch (e) { set(e.message || "Couldn't create the account. Try again.", "bad"); go.disabled = false; go.textContent = "Create account"; }
   };
   go.onclick = submit; u.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); }); // never return false from a key handler: that drops the keystroke
