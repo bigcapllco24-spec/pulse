@@ -27,7 +27,7 @@ function frame(html, { back = null } = {}) {
     gate.setAttribute("role", "dialog"); gate.setAttribute("aria-modal", "true");
     document.body.appendChild(gate); document.body.classList.add("gated");
   }
-  gate.innerHTML = `<div class="gatein ob">${back ? `<button class="btn ghost sm ob-back" id="obBack" aria-label="Back">‹ Back</button>` : ""}${html}</div>`;
+  gate.innerHTML = `<div class="gatein ob">${back ? `<button class="btn ghost sm ob-back" id="obBack" aria-label="Back">‹ Back</button>` : ""}${html}<p class="hint" style="text-align:center;margin-top:28px;opacity:.6">${esc(CONFIG.appName)} ${esc(CONFIG.version)}</p></div>`;
   gate.scrollTop = 0;
   if (back) gate.querySelector("#obBack").onclick = () => show(back);
   return gate;

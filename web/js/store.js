@@ -54,12 +54,14 @@ async function startFirebase() {
     import(FB + "firebase-app.js"), import(FB + "firebase-auth.js"), import(FB + "firebase-firestore.js"),
   ]);
   const app = initializeApp(CONFIG.firebase);
-  const auth = authMod.getAuth(app);
+  const auth = authMod.getAuth(app), db = f.getFirestore(app);
+  // Tests only (tests/live.py): the local Firebase emulators, with the same firestore.rules. Never set in config.js.
+  if (EMU) { authMod.connectAuthEmulator(auth, `http://${EMU.host}:${EMU.auth}`, { disableWarnings: true }); f.connectFirestoreEmulator(db, EMU.host, EMU.firestore); }
   // Wait for this browser's saved sign-in to load before deciding anything: signing in straight away made a brand-new
   // anonymous account on every visit, so people lost their predictions and their username after a refresh.
   await auth.authStateReady();
   if (!auth.currentUser) await authMod.signInAnonymously(auth);
-  fb = { app, auth, authMod, db: f.getFirestore(app), f, unsubs: [] };
+  fb = { app, auth, authMod, db, f, unsubs: [] };
   return fb;
 }
 
@@ -67,11 +69,12 @@ async function startFirebase() {
 // database's live connection can take many seconds to open on a phone (since 1.0.1 the username check avoided it for
 // that reason); one HTTPS request answers in well under a second. The live connection still runs in the background
 // and keeps everything in sync once it's up. Same rules apply: each request carries this phone's sign-in.
-const docsUrl = () => `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/(default)/documents`;
+const EMU = CONFIG.emulator || null;
+const docsUrl = () => `${EMU ? `http://${EMU.host}:${EMU.firestore}` : "https://firestore.googleapis.com"}/v1/projects/${CONFIG.firebase.projectId}/databases/(default)/documents`;
 const docName = (path) => `projects/${CONFIG.firebase.projectId}/databases/(default)/documents/${path}`;
 async function rest(method, url, body, ms = 7000) {
-  const token = await within(fb.auth.currentUser.getIdToken(), 5000);
-  const r = await within(fetch(url, { method, headers: { authorization: "Bearer " + token, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined }), ms);
+  const token = await within(fb.auth.currentUser.getIdToken(), 5000).catch((e) => { throw e.message === "timeout" ? new Error("timeout: the sign-in server didn't answer") : e; });
+  const r = await within(fetch(url, { method, headers: { authorization: "Bearer " + token, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined }), ms).catch((e) => { throw e.message === "timeout" ? new Error("timeout: the database didn't answer") : e; });
   if (r.status === 404 && method === "GET") return null;
   if (!r.ok) {
     const j = await r.json().catch(() => ({})), e = new Error(j.error?.message || `http ${r.status}`);
@@ -336,7 +339,7 @@ export async function usernameFree(name) {
   let acct;
   try {
     const token = await within(fb.auth.currentUser.getIdToken(), 5000);
-    const r = await within(fetch(`https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/(default)/documents/usernames/${encodeURIComponent(name)}?mask.fieldPaths=acct`, { headers: { authorization: "Bearer " + token } }), 5000);
+    const r = await within(fetch(`${docsUrl()}/usernames/${encodeURIComponent(name)}?mask.fieldPaths=acct`, { headers: { authorization: "Bearer " + token } }), 5000);
     if (r.status === 404) acct = null;
     else if (r.ok) acct = (await r.json()).fields?.acct?.stringValue ?? null;
     else throw new Error("http " + r.status);
@@ -355,7 +358,7 @@ export async function loginUsername(raw, step = () => {}) {
   if (error) throw new Error(error);
   if (store.mode === "demo") { if (!store.data?.username || store.data.username !== name) throw new Error("No account with that username."); ls.del(LS.demoOut); store.emit("account"); return name; }
   // only the sign-in is needed, not the account load that may still be running; every step gives up in time
-  const go = async (label, p, ms = 10000) => { step(label); try { return await within(p, ms); } catch (e) { if (e.message === "timeout") throw new Error(`${label} took too long. Check your connection and tap again.`); throw e; } };
+  const go = async (label, p, ms = 12000) => { step(label); const t0 = Date.now(); try { return await within(p, ms); } catch (e) { if (/^timeout/.test(e.message)) throw new Error(`${label} took too long (${e.message.slice(9) || "no answer"} after ${Math.round((Date.now() - t0) / 1000)} s). Check your connection and tap again.`); throw e; } };
   await go("Signing in", loadFirebase());
   const { db, f, auth } = fb, me = auth.currentUser.uid;
   // plain HTTPS requests: each answers in under a second, where the live connection can take many seconds to open
