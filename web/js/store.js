@@ -63,6 +63,37 @@ async function startFirebase() {
   return fb;
 }
 
+// Plain HTTPS reads and writes for the steps a person waits on (opening the account, creating it, logging in). The
+// database's live connection can take many seconds to open on a phone (since 1.0.1 the username check avoided it for
+// that reason); one HTTPS request answers in well under a second. The live connection still runs in the background
+// and keeps everything in sync once it's up. Same rules apply: each request carries this phone's sign-in.
+const docsUrl = () => `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/(default)/documents`;
+const docName = (path) => `projects/${CONFIG.firebase.projectId}/databases/(default)/documents/${path}`;
+async function rest(method, url, body, ms = 7000) {
+  const token = await within(fb.auth.currentUser.getIdToken(), 5000);
+  const r = await within(fetch(url, { method, headers: { authorization: "Bearer " + token, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined }), ms);
+  if (r.status === 404 && method === "GET") return null;
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({})), e = new Error(j.error?.message || `http ${r.status}`);
+    e.code = j.error?.status === "PERMISSION_DENIED" ? "permission-denied" : j.error?.status || String(r.status);
+    throw e;
+  }
+  return r.json();
+}
+const toFS = (v) => v == null ? { nullValue: null } : typeof v === "boolean" ? { booleanValue: v } : typeof v === "number" ? (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v })
+  : typeof v === "string" ? { stringValue: v } : Array.isArray(v) ? { arrayValue: { values: v.filter((x) => x !== undefined).map(toFS) } }
+  : { mapValue: { fields: fieldsOf(v) } };
+const fieldsOf = (o) => Object.fromEntries(Object.entries(o).filter(([, x]) => x !== undefined).map(([k, x]) => [k, toFS(x)]));
+const fromFS = (v) => "stringValue" in v ? v.stringValue : "integerValue" in v ? Number(v.integerValue) : "doubleValue" in v ? v.doubleValue : "booleanValue" in v ? v.booleanValue
+  : "timestampValue" in v ? v.timestampValue : "mapValue" in v ? Object.fromEntries(Object.entries(v.mapValue.fields || {}).map(([k, x]) => [k, fromFS(x)]))
+  : "arrayValue" in v ? (v.arrayValue.values || []).map(fromFS) : null;
+// a document's fields as a plain object, or null when there's no such document
+const restGet = async (path) => { const d = await rest("GET", `${docsUrl()}/${path}`); return d ? fromFS({ mapValue: { fields: d.fields || {} } }) : null; };
+// several writes that all happen or none do (what the app's transactions did)
+const restCommit = (writes) => rest("POST", `${docsUrl()}:commit`, { writes });
+const setW = (path, data, { mask, exists } = {}) => ({ update: { name: docName(path), fields: fieldsOf(data) }, ...(mask ? { updateMask: { fieldPaths: Object.keys(data) } } : {}), ...(exists != null ? { currentDocument: { exists } } : {}) });
+const denied = (e) => /permission|insufficient/i.test(e.code || e.message || "");
+
 // Start instantly: the feed draws from the copy saved on this phone (or the starter account on a first visit)
 // while Firebase signs in and loads the account in the background. No recovery code: an account belongs to this
 // device's anonymous sign-in, which Firebase keeps between visits.
@@ -92,20 +123,22 @@ async function connect() {
   try { await loadFirebase(); } catch (e) { store.error = "Couldn't reach the server. Your changes are saved on this phone."; store.emit("error"); return; }
   const { db, f, auth } = fb;
   // an account this phone logged into by username comes first; if it's gone, the phone's own sign-in is used
-  let id = auth.currentUser.uid, ref = f.doc(db, "accounts", id), snap = null;
+  let id = auth.currentUser.uid, data;
+  const OFF = Symbol("offline"), read = (path) => restGet(path).catch((e) => (denied(e) ? "gone" : OFF));
   const linked = ls.get(LSLINK);
   if (linked && linked !== id) {
-    const ls2 = await f.getDoc(f.doc(db, "accounts", linked)).catch((e) => (/permission|insufficient/i.test(e.code || e.message || "") ? "gone" : null));
-    if (ls2 === null) return; // offline: keep the saved copy
-    if (ls2 !== "gone" && ls2.exists()) { id = linked; ref = ls2.ref; snap = ls2; } else ls.del(LSLINK);
+    const d = await read(`accounts/${linked}`);
+    if (d === OFF) return; // offline: keep the saved copy
+    if (d && d !== "gone") { id = linked; data = d; } else ls.del(LSLINK);
   }
-  snap ||= await f.getDoc(ref).catch(() => null);
-  if (!snap || (store.id && store.id !== id)) return; // offline, or a username login on this phone finished first
-  if (snap.exists()) {
+  if (data === undefined) { data = await read(`accounts/${id}`); if (data === OFF || data === "gone") return; }
+  if (store.id && store.id !== id) return; // a username login on this phone finished first
+  const ref = f.doc(db, "accounts", id);
+  if (data) {
     // fields from older versions of the app (indicator picks now live in settings.chart) are dropped once
-    const OLD = ["indicators", "customIndicators", "recovery"], { indicators, customIndicators, recovery, ...cur } = snap.data();
+    const OLD = ["indicators", "customIndicators", "recovery"], { indicators, customIndicators, recovery, ...cur } = data;
     store.data = { ...DEFAULT_ACCOUNT(), ...cur, ...pending };
-    const tidy = Object.fromEntries(OLD.filter((k) => k in snap.data()).map((k) => [k, f.deleteField()]));
+    const tidy = Object.fromEntries(OLD.filter((k) => k in data).map((k) => [k, f.deleteField()]));
     if (Object.keys(pending).length || Object.keys(tidy).length) await f.setDoc(ref, { ...pending, ...tidy }, { merge: true }).catch(() => {});
   } else {
     // No account yet: nothing is written until the username is chosen (see createAccount), so opening the app,
@@ -122,7 +155,7 @@ let newId = null;
 async function createAccount() {
   const { db, f } = fb, ref = f.doc(db, "accounts", newId);
   const { username, usernameChanges, pscore, ...first } = { ...store.data, ...pending };
-  await f.setDoc(ref, first);
+  await restCommit([setW(`accounts/${newId}`, first)]);
   STARTER.forEach((s) => noteFollow(s));
   attach(newId, ref); newId = null;
 }
@@ -325,17 +358,19 @@ export async function loginUsername(raw, step = () => {}) {
   const go = async (label, p, ms = 10000) => { step(label); try { return await within(p, ms); } catch (e) { if (e.message === "timeout") throw new Error(`${label} took too long. Check your connection and tap again.`); throw e; } };
   await go("Signing in", loadFirebase());
   const { db, f, auth } = fb, me = auth.currentUser.uid;
-  const u = await go(`Finding @${name}`, f.getDoc(f.doc(db, "usernames", name)));
-  if (!u.exists()) return setUsername(name);
-  const acct = u.data().acct, ref = f.doc(db, "accounts", acct);
+  // plain HTTPS requests: each answers in under a second, where the live connection can take many seconds to open
+  const u = await go(`Finding @${name}`, restGet(`usernames/${name}`));
+  if (!u?.acct) return setUsername(name);
+  const acct = u.acct, ref = f.doc(db, "accounts", acct);
   if (acct !== me) {
-    try { await go("Adding this phone to the account", f.updateDoc(ref, { devices: f.arrayUnion(me) })); }
-    catch (e) { if (/too long/.test(e.message)) throw e; return setUsername(name); } // the account is gone (the rules refuse): claim the name here
+    try {
+      await go("Adding this phone to the account", restCommit([{ transform: { document: docName(`accounts/${acct}`), fieldTransforms: [{ fieldPath: "devices", appendMissingElements: { values: [{ stringValue: me }] } }] }, currentDocument: { exists: true } }]));
+    } catch (e) { if (/too long/.test(e.message) || (!denied(e) && !/NOT_FOUND|FAILED_PRECONDITION|404/.test(e.code || ""))) throw e; return setUsername(name); } // the account is gone (the rules refuse): claim the name here
   }
-  const snap = await go("Opening your account", f.getDoc(ref));
-  if (!snap.exists()) return setUsername(name);
+  const data = await go("Opening your account", restGet(`accounts/${acct}`));
+  if (!data) return setUsername(name);
   ls.set(LSLINK, acct); newId = null;
-  store.data = { ...DEFAULT_ACCOUNT(), ...snap.data() };
+  store.data = { ...DEFAULT_ACCOUNT(), ...data };
   attach(acct, ref);
   return name;
 }
@@ -348,20 +383,20 @@ export async function setUsername(raw) {
   if (usernameChangesLeft() <= 0) throw new Error("You've used all your username changes.");
   const changes = (store.data.usernameChanges || 0) + (old ? 1 : 0);
   if (store.mode === "demo") { await save({ username: name, usernameChanges: changes }); return name; }
-  await connected();
+  try { await within(connected(), 12000); } catch { throw new Error("Couldn't reach the server. Check your connection and tap again."); }
   if (!store.id && newId) await createAccount();
   if (!store.id) throw new Error("Couldn't reach the server. Try again in a moment.");
-  const { db, f } = fb;
+  // the name, the old name's release and the account all change together, or none do; the rules decide whether a
+  // name held by someone else can be taken
   try {
-    await f.runTransaction(db, async (tx) => {
-      const ref = f.doc(db, "usernames", name);
-      await tx.get(ref); // read first, as transactions need; the rules decide whether a name held by someone else can be taken
-      tx.set(ref, { acct: store.id, at: new Date().toISOString() });
-      if (old) tx.delete(f.doc(db, "usernames", old));
-      tx.update(f.doc(db, "accounts", store.id), { username: name, usernameChanges: changes });
-    });
+    await restCommit([
+      setW(`usernames/${name}`, { acct: store.id, at: new Date().toISOString() }),
+      ...(old ? [{ delete: docName(`usernames/${old}`) }] : []),
+      setW(`accounts/${store.id}`, { username: name, usernameChanges: changes }, { mask: true, exists: true }),
+    ]);
   } catch (e) {
-    if (/permission|insufficient/i.test(e.code || e.message || "")) throw new Error("That username is taken. Try another.");
+    if (denied(e)) throw new Error("That username is taken. Try another.");
+    if (e.message === "timeout") throw new Error("The server took too long to answer. Check your connection and tap again.");
     throw e;
   }
   store.data = { ...store.data, username: name, usernameChanges: changes };
