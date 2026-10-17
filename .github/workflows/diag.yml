@@ -1,0 +1,11 @@
+name: Diagnose
+on: { push: { branches: [diag] } }
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node pipeline/diag.mjs
+        env: { FIREBASE_SERVICE_ACCOUNT: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" }
