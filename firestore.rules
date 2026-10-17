@@ -7,7 +7,8 @@ service cloud.firestore {
     function isOwner(acct) { return request.auth != null && request.auth.uid == acct; }
     function acctDoc(acct) { return get(/databases/$(db)/documents/accounts/$(acct)); }
     // An account can be used by the sign-in that made it and by any device that logged in with its username
-    // (listed in accounts/{acct}.devices). MVP: the username alone logs in; a password or Google sign-in comes later.
+    // (listed in accounts/{acct}.devices, from before 1.2.0). Since 1.2.0 an account is opened with its password, which
+    // makes its own sign-in the current user, so no new devices are ever added.
     function canUse(acct) { return isOwner(acct) || (request.auth != null && request.auth.uid in acctDoc(acct).data.get('devices', [])); }
     function nameOf(acct) { return acctDoc(acct).data.get('username', null); }
     // Admins: a document /admins/{uid}, added by hand in the Firebase console. They can read and triage feedback.
@@ -47,12 +48,8 @@ service cloud.firestore {
       allow delete: if isOwner(acct);
       // pscore (the prediction game's profile score) is written by the data job only
       allow create: if isOwner(acct) && !request.resource.data.keys().hasAny(['username', 'usernameChanges', 'pscore']);
-      allow update: if (canUse(acct) && usernameOk(acct) && listsOk() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pscore']))
-        // logging in by username: a device adds only itself to the account's devices (at most 10)
-        || (request.auth != null && resource.data.get('username', null) != null
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['devices'])
-            && request.resource.data.devices.removeAll(resource.data.get('devices', [])) == [request.auth.uid]
-            && request.resource.data.devices.size() <= 10);
+      // pscore, level and recoveryUsedAt are written by the data job only
+      allow update: if canUse(acct) && usernameOk(acct) && listsOk() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pscore', 'level', 'recoveryUsedAt']);
       match /alerts/{alert} {
         allow read, update, delete: if canUse(acct);   // written by the data job only
       }
@@ -215,6 +212,14 @@ service cloud.firestore {
         && request.resource.data.status in ['open', 'done', 'declined'];
     }
     match /admins/{uid} {
+      allow get: if isOwner(uid);
+    }
+    // Forgotten passwords (1.2.0): a request under the asking sign-in's id, acted on by the 15-minute job, which
+    // clears the password and leaves a status this sign-in can read. Nobody else can read a request.
+    match /resets/{uid} {
+      allow create: if isOwner(uid) && request.resource.data.keys().hasOnly(['name', 'codeHash', 'pw', 'status', 'at'])
+        && request.resource.data.status == 'waiting' && request.resource.data.at == request.time
+        && request.resource.data.pw is string && request.resource.data.pw.size() <= 100;
       allow get: if isOwner(uid);
     }
     // Shared lists: anyone with the long random link can read and edit.

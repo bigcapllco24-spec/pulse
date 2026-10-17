@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Pulse</title>
-  <meta name="description" content="Your watchlist as a feed of charts, with the news and meaning behind every move. Information only, not investment advice.">
+  <meta name="description" content="Swipe the market. Call the move. Scroll crypto charts like a feed, call where a coin goes next, and get an honest score. A learning game, not advice.">
   <meta name="theme-color" content="#0B0F14">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <!-- "black", not "black-translucent": on iOS 26 a translucent status bar makes Home Screen apps shorter than the
@@ -30,7 +30,7 @@
   <link rel="modulepreload" href="js/chart.js"><link rel="modulepreload" href="js/studies.js"><link rel="modulepreload" href="js/feedback.js">
   <link rel="modulepreload" href="js/levels.js">
   <link rel="modulepreload" href="js/interact.js">
-  <link rel="modulepreload" href="js/coach.js">
+  <link rel="modulepreload" href="js/onboard.js">
   <link rel="modulepreload" href="js/full.js">
   <link rel="modulepreload" href="js/panels.js">
   <link rel="modulepreload" href="js/pages.js">
@@ -41,6 +41,7 @@
   <link rel="modulepreload" href="js/habit.js"><link rel="modulepreload" href="js/card.js"><link rel="modulepreload" href="js/share.js">
   <link rel="modulepreload" href="js/social.js">
   <link rel="modulepreload" href="js/play.js">
+  <link rel="modulepreload" href="js/you.js">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -56,13 +57,14 @@
     <div class="feed" id="feed" tabindex="-1"></div>
   </section>
   <section class="screen" id="sDash" hidden aria-label="Coins"><div class="page"><div class="page-inner" id="dash"></div></div></section>
-  <section class="screen" id="sPlay" hidden aria-label="Predict"><div class="page"><div class="page-inner" id="play"></div></div></section>
+  <section class="screen" id="sPlay" hidden aria-label="Calls"><div class="page"><div class="page-inner" id="play"></div></div></section>
+  <section class="screen" id="sYou" hidden aria-label="You"><div class="page"><div class="page-inner" id="you"></div></div></section>
   <section class="screen" id="sProfile" hidden aria-label="Settings"><div class="page"><div class="page-inner" id="profile"></div></div></section>
 
   <nav class="tabbar" aria-label="Main">
-    <button data-tab="dash"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>Coins<b class="dot" id="alertDot" hidden></b></button>
-    <button data-tab="feed" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-6 4 4 4-7 5 9"/><path d="M3 21h18"/></svg>Feed</button>
-    <button data-tab="play"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>Predict<b class="badge" hidden></b></button>
+    <button data-tab="feed" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-6 4 3 5-7 4 4"/></svg>Feed<b class="dot" id="alertDot" hidden></b></button>
+    <button data-tab="play"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>Calls<b class="badge" hidden></b></button>
+    <button data-tab="you"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c1-3.5 3.8-5.5 7-5.5s6 2 7 5.5"/></svg>You</button>
   </nav>
 
   <div class="backdrop" id="backdrop" hidden></div>

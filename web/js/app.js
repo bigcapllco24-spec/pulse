@@ -12,13 +12,14 @@ import { mainChart, lowerChart } from "./chart.js";
 import { levelsFor, swingLevels } from "./levels.js";
 import { picks, studyWindow, maxPanels, OVERLAYS, PANELS } from "./studies.js";
 import { openPanels, withExpand } from "./panels.js";
-import { startTour, coachEvent } from "./coach.js";
 import { openFull } from "./full.js";
 import { initFeedback } from "./feedback.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz, cancelPendingHold } from "./interact.js";
-import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, krakenBars, INTRA, intraState, dailyOf, RANGE_LABEL } from "./data.js";
+import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, INTRA, intraState, dailyOf, RANGE_LABEL } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, toast, haptic, openSheet, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, nameGate, checkPanelFit } from "./pages.js";
+import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, checkPanelFit } from "./pages.js";
+import { startOnboarding, onboarding, needsOnboarding } from "./onboard.js";
+import { initYou, renderYou } from "./you.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
 
@@ -150,7 +151,7 @@ function flushIdle() { if (!idle()) return; const jobs = [...idleJobs.values()];
 feed.addEventListener("scroll", () => { scrolling = true; clearTimeout(idleT); idleT = setTimeout(() => { scrolling = false; flushIdle(); }, 140); }, { passive: true });
 export function buildFeed({ keepKey } = {}) {
   APP.syms = currentSyms();
-  APP.seq = [{ type: "catchup" }];
+  APP.seq = []; // 1.2.0: the feed opens on the first coin; the daily recap card is gone (the list view covers it)
   pushRound(1);
   feed.innerHTML = APP.seq.map((it, i) => shell(it, i)).join("");
   APP.active = -1;
@@ -196,7 +197,6 @@ function setActive(i) {
   cards.forEach((c, k) => c.classList.toggle("active", k === i));
   const it = APP.seq[i];
   if (it.type === "sym") markSeen(it.sym.key);
-  if (prevActive >= 0) coachEvent("card", { sym: it.type === "sym" });
   progress();
   whenIdle("sync", syncCards);
 }
@@ -221,8 +221,7 @@ function markSeen(key) { const s = ls.get("pl.seen", {}); s[key] = new Date().to
 
 function fillCard(c, it) {
   c.dataset.filled = "1";
-  if (it.type === "catchup") c.innerHTML = catchupHtml();
-  else if (it.type === "done") c.innerHTML = doneHtml(it.round);
+  if (it.type === "done") c.innerHTML = doneHtml(it.round);
   else if (it.type === "empty") c.innerHTML = emptyHtml();
   else {
     c.innerHTML = `<div class="panes"><div class="pane side news" data-pane="news"></div><div class="pane main" data-pane="main"></div><div class="pane side details" data-pane="details"></div></div>`;
@@ -439,63 +438,6 @@ function moveHtml(s, v) {
 }
 
 // ---------- special cards
-function catchupHtml() {
-  const first = !ls.get("pl.lastOpen");
-  const since = ls.get("pl.prevOpen");
-  const facts = [];
-  if (first) {
-    return `<div class="special"><div class="label">Welcome to ${esc(CONFIG.appName)}</div><h1>Your coins,<br>one chart at a time.</h1>
-      <p>Swipe through your watchlist like a feed. Every chart is drawn the same way, so moves are easy to compare.</p>
-      <p class="hint">Information only, never advice.</p></div>`;
-  }
-  // Daily recap: every coin's change since the day started (12:00 AM your time), a fixed point that doesn't depend on
-  // when you last opened the app. Worked out from 15-minute candles; until they arrive, nothing misleading is shown.
-  const ref = since9Ref(), m9 = APP.s9?.ref === ref.key ? APP.s9.chg : null;
-  const vs = APP.syms.map((s) => ({ s, c: m9?.[s.key] })).filter((x) => x.c != null);
-  const chg = (x) => x.c;
-  const ups = vs.filter((x) => chg(x) > 0).length;
-  const best = vs.reduce((a, x) => (!a || chg(x) > chg(a) ? x : a), null), worst = vs.reduce((a, x) => (!a || chg(x) < chg(a) ? x : a), null);
-  const keys = new Set(APP.syms.map((s) => s.key)), stories = D.news.stories || [];
-  const newsBy = vs.map((x) => ({ x, n: stories.filter((st) => st.syms.includes(x.s.key)).length })).sort((a, b) => b.n - a.n)[0];
-  const tile = (label, val, sub, cls = "") => `<div><span>${label}</span><b class="${cls}">${val}</b>${sub ? `<em>${sub}</em>` : ""}</div>`;
-  const tiles = vs.length ? `<div class="recap">${tile("Up today", `${ups}/${vs.length}`, "coins")}${best ? tile("Biggest rise", esc(best.s.t), pct(chg(best)), chg(best) >= 0 ? "up" : "down") : ""}${worst && worst !== best ? tile("Biggest fall", esc(worst.s.t), pct(chg(worst)), chg(worst) >= 0 ? "up" : "down") : ""}${newsBy?.n ? tile("Most news", esc(newsBy.x.s.t), `${newsBy.n} ${newsBy.n === 1 ? "story" : "stories"}`) : ""}</div>` : "";
-  const fresh = stories.filter((st) => st.syms.some((k) => keys.has(k)) && (!since || (st.ts || st.date) > since));
-  if (fresh.length) {
-    const top = fresh.find((st) => st.status === "confirmed") || fresh[0];
-    facts.push(`<div class="fact"><span class="ic acc">${fresh.length}</span><div><b>${fresh.length} new ${fresh.length === 1 ? "story" : "stories"}</b> since you last looked. Latest: “${esc(top.title.slice(0, 80))}${top.title.length > 80 ? "…" : ""}”</div></div>`);
-  }
-  const unread = store.alerts.filter((a) => !a.read).length;
-  if (unread) facts.push(`<div class="fact"><span class="ic acc">!</span><div><b>${unread} alert${unread === 1 ? "" : "s"}</b> waiting. See Coins → Alerts.</div></div>`);
-  const today = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
-  if (!m9 && APP.syms.length) loadSince9(ref);
-  return `<div class="special" data-recap><div class="label">Daily recap · ${esc(today)}</div>
-    <h1>${vs.length ? `${ups} of ${vs.length} up today.` : APP.s9?.failed ? "Couldn't load the latest prices." : "Checking today's prices…"}</h1>
-    <p class="hint" style="margin:-4px 0 10px">Change from ${esc(ref.label)} to now.</p>${tiles}${facts.join("")}
-    <p class="hint">${APP.syms.length} in ${esc(listName())} · swipe up to start</p></div>`;
-}
-// The start of today (12:00 AM) in the person's own time zone.
-function since9Ref() {
-  const d = new Date(); d.setHours(0, 0, 0, 0);
-  return { ms: d.getTime(), key: d.toISOString().slice(0, 16), label: "midnight (12:00 AM) your time" };
-}
-let s9busy = null;
-function loadSince9(ref) {
-  if (s9busy === ref.key) return;
-  s9busy = ref.key;
-  Promise.all(APP.syms.map(async (s) => {
-    try {
-      const bars = await krakenBars(s.t, 15), i = bars.findIndex((b) => Date.parse(b.t + ":00Z") >= ref.ms);
-      if (i < 0) return [s.key, 0]; // the first candle of the day hasn't closed yet
-      return [s.key, ((bars[bars.length - 1].c - bars[i].o) / bars[i].o) * 100];
-    } catch { return [s.key, null]; }
-  })).then((rows) => {
-    const chg = Object.fromEntries(rows.filter(([, x]) => x != null));
-    APP.s9 = { ref: ref.key, chg, failed: !Object.keys(chg).length };
-    s9busy = APP.s9.failed ? null : s9busy;
-    const c = document.querySelector(".card [data-recap]")?.closest(".card");
-    if (c) c.innerHTML = catchupHtml();
-  });
-}
 function doneHtml(round) {
   return `<div class="special done" style="align-items:flex-start"><svg class="done-ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="34"/><path d="M26 41l9 9 19-20"/></svg>
     <h1>You're all caught up.</h1><p>You've seen all ${APP.syms.length} in ${esc(listName())}${round > 1 ? ` (round ${round})` : ""}. Prices refresh each time you open the app.</p>
@@ -519,7 +461,6 @@ function setupSwipe(c, it) {
     if (idx !== 1) ensureSides();
     c.dataset.view = ["news", "main", "details"][idx];
     c.querySelectorAll(".dots i").forEach((d, k) => d.classList.toggle("on", k === idx));
-    coachEvent("pane", { view: c.dataset.view });
   };
   track.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -587,8 +528,8 @@ function wire(c, it) {
   c.querySelector(".chartbox:not(.nodata)")?.addEventListener("click", () => { if (!justScrubbed()) chartTapHint(); });
   // two fingers on a card's chart: open it full screen, where pinching zooms the chart
   c.querySelector(".chartbox")?.addEventListener("touchstart", (e) => { if (e.touches.length === 2) { cancelPendingHold(); openFull(it.sym); } }, { passive: true });
-  c.querySelector("[data-full]")?.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) { coachEvent("full"); openFull(it.sym); } });
-  c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); coachEvent("tf"); openChartSheet(it.sym, () => redrawCards()); });
+  c.querySelector("[data-full]")?.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) openFull(it.sym); });
+  c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); openChartSheet(it.sym, () => redrawCards()); });
   c.querySelector("[data-pred]")?.addEventListener("click", (e) => { e.stopPropagation(); openPredictSheet(it.sym, () => redrawCards(it.sym.key)); });
 }
 // Prediction game: the Predict chip on a card, with how many predictions are open on that coin.
@@ -611,23 +552,24 @@ export function redrawCards(key) {
 let dashT = 0;
 // new intraday prices: the open cards redraw, and Coins or Predict (prices, "now x% away") once things settle
 document.addEventListener("pulse-intra", (e) => { redrawCards(e.detail); if (APP.tab === "dash" || APP.tab === "play") { clearTimeout(dashT); dashT = setTimeout(() => keepScroll(APP.tab), 300); } });
-const keepScroll = (tab) => { const el = $(tab === "dash" ? "dash" : "play"), pg = el.parentElement, y = pg.scrollTop; (tab === "dash" ? renderDash : renderPlay)(); pg.scrollTop = y; };
+const keepScroll = (tab) => { const el = $(tab === "dash" ? "dash" : tab === "you" ? "you" : "play"), pg = el.parentElement, y = pg.scrollTop; (tab === "dash" ? renderDash : tab === "you" ? renderYou : renderPlay)(); pg.scrollTop = y; };
 // turning the phone changes how many panels fit, so cards redraw once the rotation settles
 let rzT = 0, lastFit = maxPanels();
 addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { if (maxPanels() !== lastFit) { lastFit = maxPanels(); redrawCards(); checkPanelFit(() => redrawCards()); } }, 250); });
 
 // ---------- tabs and refresh
-// Tabs: Coins ("dash"), Feed and Predict ("play"). "profile" is the settings pages, opened from the avatar sheet
-// on Predict (or from Coins for alerts); the tab bar keeps showing where they were opened from.
+// Tabs: Feed, Calls ("play") and You. "dash" is Your market (the feed as a list), opened from the feed's top bar, and
+// "profile" is the settings pages, opened from You; the tab bar keeps showing where they were opened from.
 export function showTab(tab, sub, arg) {
   closeGroup(); closeProfile(); // the group and profile pages sit over the tabs; going anywhere else closes them
-  if (tab === "profile" && !sub) { tab = "play"; setTimeout(openAvatarSheet, 0); }
+  if (tab === "profile" && !sub) { tab = "you"; }
   APP.tab = tab;
-  $("sFeed").hidden = tab !== "feed"; $("sDash").hidden = tab !== "dash"; $("sPlay").hidden = tab !== "play"; $("sProfile").hidden = tab !== "profile";
-  const lit = tab === "profile" ? APP.backTo || "play" : tab;
+  $("sFeed").hidden = tab !== "feed"; $("sDash").hidden = tab !== "dash"; $("sPlay").hidden = tab !== "play"; $("sYou").hidden = tab !== "you"; $("sProfile").hidden = tab !== "profile";
+  const lit = tab === "profile" ? APP.backTo || "you" : tab === "dash" ? "feed" : tab;
   document.querySelectorAll(".tabbar button").forEach((b) => b.setAttribute("aria-current", b.dataset.tab === lit ? "page" : "false"));
-  if (tab === "dash") { renderDash(); setTimeout(() => APP.tab === "dash" && startTour("dash"), 350); }
-  if (tab === "play") { renderPlay(); setTimeout(() => APP.tab === "play" && startTour("play"), 350); }
+  if (tab === "dash") renderDash();
+  if (tab === "play") renderPlay();
+  if (tab === "you") renderYou();
   if (tab === "profile") renderProfile(sub, arg);
   if (tab === "feed" && APP.needsRebuild) { APP.needsRebuild = false; buildFeed({ keepKey: APP.seq[APP.active]?.sym?.key }); }
 }
@@ -704,23 +646,24 @@ export function applyTheme() {
   initPages();
   initSocial();
   initPlay();
+  initYou();
   store.on((what) => {
     $("alertDot").hidden = !store.alerts.some((a) => !a.read);
-    if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") keepScroll("dash"); if (store.ready && !store.data?.username) nameGate(); }
+    if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") keepScroll("dash"); if (store.ready && needsOnboarding() && !onboarding()) startOnboarding(); }
     if (what === "alerts" && APP.tab === "dash") keepScroll("dash");
     if (what === "preds") APP.needsRebuild = true; // the Predict chips on cards show open counts
     // the Predict tab follows new and scored predictions, and your name or score changing
     if ((what === "preds" || what === "account") && APP.tab === "play" && $("sheet").hidden) keepScroll("play");
+    if ((what === "preds" || what === "account") && APP.tab === "you" && $("sheet").hidden) keepScroll("you");
     badge();
   });
   $("alertDot").hidden = !store.alerts.some((a) => !a.read);
   buildFeed();
-  const named = new Promise((r) => nameGate(r)); // a new account picks its username first
+  const named = new Promise((r) => startOnboarding(r)); // a new account is made first (welcome, username + password, first call)
   if (/^#\/(g\/|predict)/.test(location.hash)) named.then(() => openLink()); // a group's invite link, or a push about a challenge
   addEventListener("hashchange", () => { if (/^#\/(g\/|predict)/.test(location.hash)) named.then(() => openLink()); });
   await doRefresh(false);
   await named;
-  setTimeout(() => APP.tab === "feed" && startTour("feed"), 500);
   setTimeout(() => ls.set("pl.lastOpen", new Date().toISOString()), 4000);
   loadSymbols().catch(() => {});
 })();

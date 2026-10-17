@@ -8,11 +8,12 @@ import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { D } from "./data.js";
 import { $, esc, money, pct, toast, haptic, openSheet, setSheetBody, closeSheet } from "./ui.js";
 import { APP, showTab } from "./app.js";
-import { resetTours, startTour } from "./coach.js";
+import { renderYou } from "./you.js";
 import { setFeedbackMode } from "./feedback.js";
 import { cardHtml, HOW_SCORE, svgIcon, BAND_CLASS, SHORT } from "./card.js";
-import { mixOf, streakOf, streakBadges, istDay, dailyCoin, msUntilNextDay, LABELS, weekRecap, tendency, whatHappened } from "./habit.js";
+import { mixOf, streakOf, streakBadges, istDay, dailyCoin, msUntilNextDay, whatHappened } from "./habit.js";
 import { openShareSheet } from "./share.js";
+import { levelOf, ringClass } from "./progress.js";
 import { S, onSocial, me, myName, bandOf, RANK_MIN, CH_PERIODS, PICK_MINS, GROUP_MAX, getCards, getCard, findPlayers, getBoard, myCard, following, isFollowing, follow, setPublic, setPickDefault,
   myGroups, groupLink, createGroup, peekGroup, joinGroup, settleChallengesHere, nextChallengeEnd, leaveGroup, removeMember, renameGroup, invite, declineInvite, challengesOf, myPick, picksOpen, waitingForMe, isSeen, markSeen,
   unseenResults, canCount, startChallenge, makePick, REACTIONS, react, groupTable } from "./social.js";
@@ -27,6 +28,10 @@ export function ava(u, card, size = "", attrs = "") {
   const cls = card?.score != null && !card.prov ? BAND_CLASS[card.band || bandOf(card.score)] || "" : "prov";
   return `<span class="ava ${size} ${cls}" ${attrs}>${esc((u || "?")[0].toUpperCase())}</span>`;
 }
+// the level avatar (1.2.0): the letter ringed in the level's colour (progress.js), with the level in a small badge
+export function levelAvatar(u, level, size = "", attrs = "") {
+  return `<span class="ava lv ${size} ${ringClass(level)}" ${attrs}>${esc((u || "?")[0].toUpperCase())}<b class="lvb">${level}</b></span>`;
+}
 const until = (iso) => { const m = Math.round((Date.parse(iso) - Date.now()) / 60000); return m <= 0 ? "now" : m < 60 ? `${m}m` : m < 2880 ? `${Math.floor(m / 60)}h ${m % 60 ? `${m % 60}m` : ""}`.trim() : `${Math.round(m / 1440)} days`; };
 const leftText = (iso, h) => (h === "1y" ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : Date.parse(iso) <= Date.now() ? "scoring" : `${until(iso)} left`);
 const when = (iso, h) => new Date(iso).toLocaleString("en-IN", h === "1y" ? { day: "numeric", month: "short", year: "numeric" } : { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
@@ -36,27 +41,15 @@ const symOf = (key) => allSyms().find((s) => s.key === key) || { key, t: key.spl
 const sigmaOf = (key) => { const b = D.series[key]?.bars || []; return dailyVol(b.slice(0, -1).map((x) => x.c)); };
 const groupName = (g) => S.groups.get(g)?.name || "a group";
 
-// ---------- the tab
+// ---------- the Calls tab
 export function initPlay() {
   onSocial(() => { badge(); if (APP.tab === "play") rerender(); });
-  // a sideways swipe moves between Calls, Groups and Ranks (rows that scroll sideways keep their own swipe)
-  const root = $("play"); let st = null;
-  root.addEventListener("touchstart", (e) => { const t = e.touches[0]; st = e.touches.length > 1 || e.target.closest(".pchips, .utabs") ? null : { x: t.clientX, y: t.clientY, at: e.timeStamp }; }, { passive: true });
-  root.addEventListener("touchend", (e) => {
-    if (!st) return; const t = e.changedTouches[0], dx = t.clientX - st.x, dy = t.clientY - st.y, ms = e.timeStamp - st.at; st = null;
-    if (ms > 600 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    const order = ["calls", "groups", "ranks"], i = order.indexOf(APP.playView || "calls"), j = Math.max(0, Math.min(2, i + (dx < 0 ? 1 : -1)));
-    if (j !== i) { APP.playView = order[j]; haptic(); renderPlay(); root.parentElement.scrollTop = 0; }
-  }, { passive: true });
-  root.addEventListener("touchcancel", () => (st = null), { passive: true });
   setInterval(() => { if (APP.tab === "play" && $("sheet").hidden && !document.hidden) { rerender(); if (APP.openGroup) drawGroup(); } }, 30000); // countdowns
   // score calls and challenges on this phone the moment they're due (the data job confirms them a few minutes later)
   store.on((w) => w === "preds" && scheduleScoring()); onSocial(scheduleScoring);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { tried = false; scheduleScoring(); } });
   scheduleScoring();
   badge();
-  setTimeout(maybeDaily, 2500); // the daily popup, once a day
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(maybeDaily, 1500); });
 }
 let scoreT = 0, scoring = false, tried = false;
 function scheduleScoring() {
@@ -73,82 +66,75 @@ async function scoreDue() {
   scoring = false; scheduleScoring();
 }
 const rerender = () => { const pg = $("play").parentElement, y = pg.scrollTop; renderPlay(); pg.scrollTop = y; };
-// The Predict tab's badge: picks waiting for you. The Groups tab's dot: that, new results or invites.
+// The Calls tab's badge: picks waiting for you and invites.
 export function badge() {
   const n = waitingForMe().length + S.invites.length, b = document.querySelector('.tabbar [data-tab="play"] .badge'); // picks and invites waiting for you
   if (b) { b.hidden = !n; b.textContent = n; }
 }
 const groupsNeedYou = () => waitingForMe().length + unseenResults().length + S.invites.length > 0;
 
+// Calls: a search bar in the header, your progress, today's coin, friends, calls waiting and calls scored.
+// "friends" is the With friends page (every group and shared list), opened from the Calls tab.
 export function renderPlay() {
-  const el = $("play"), view = APP.playView || "calls", u = myName(), sc = myScore(), card = myCard();
-  const followers = card?.followers || 0, rank = card?.rank;
-  const sub = [`@${esc(u || "you")}`, followers ? `${num(followers)} follower${followers === 1 ? "" : "s"}` : "", rank ? `#${num(rank)}` : ""].filter(Boolean).join(" · ");
-  const n = sc?.n || 0, prov = !sc || sc.provisional;
-  const wait = view === "groups" ? null : waitingForMe()[0];
-  // the three parts of the page, as tiles that say what's in each
-  const openN = store.preds.length + S.picks.filter((p) => !p.counts && p.status !== "scored" && p.status !== "void").length, gN = myGroups().length;
-  const rk = rank ? `#${num(rank)}` : store.data?.public !== true ? "Join" : n < RANK_MIN ? `${RANK_MIN - n} to go` : "Soon";
-  const tiles = [
-    ["calls", "Calls", openN ? `${openN} open` : "Make a call", `<path d="M3 17l5-6 4 4 4-7 5 9"/>`],
-    ["groups", "Groups", gN ? `${gN} group${gN === 1 ? "" : "s"}` : "Play friends", `<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.3 3.4-5 6.5-5s5.5 1.7 6.5 5"/><circle cx="17" cy="9" r="2.6"/><path d="M16 14.6c2.7.2 4.6 1.9 5.4 4.9"/>`],
-    ["ranks", "Ranks", rk, `<path d="M6 20V10M12 20V4M18 20v-7"/>`],
-  ];
-  const st = myStreak();
-  el.innerHTML = `<div class="pl-top"><span class="label">Predict</span><span class="pl-topb"><button class="iconbtn ghost" id="plShare" aria-label="Share your card">${svgIcon("share")}</button><button class="iconbtn ghost" id="plMe" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></span></div>
-    <button class="pl-head" id="plCard" aria-label="Your profile">
-      <span class="ava lg ${sc?.score != null && !prov ? BAND_CLASS[sc.band] || "" : "prov"}" aria-hidden="true">${esc((u || "?")[0].toUpperCase())}</span>
-      <span class="pl-who">
-        <span class="pl-score">${sc?.score != null ? `<b class="num">${sc.score}</b><span class="${BAND_CLASS[sc.band] || ""}t">${esc(sc.band)}</span>` : `<b class="num">0</b><span class="muted">No calls scored yet</span>`}</span>
-        <span class="pl-sub">${sub}</span>
-        ${st.n ? `<span class="pl-streak${st.today ? "" : " due"}">${svgIcon("flame")}<span>${num(st.n)}-day streak${st.today ? "" : " · call today to keep it"}</span></span>` : ""}
-      </span>
-      <span class="pl-go">Profile<span class="chev">›</span></span>
-      ${prov ? `<span class="pl-progress"><span class="pl-prog" aria-hidden="true"><i style="width:${Math.min(100, (n / PROVISIONAL_UNDER) * 100)}%"></i></span><span class="hint">${sc?.score != null ? `${n} of ${PROVISIONAL_UNDER} calls scored. Your score settles at ${PROVISIONAL_UNDER}, then you can join the public leaderboard.` : `Make a call to start your score. The first scored call starts it at about ${CHANCE}, what guessing scores.`}</span></span>` : ""}
-    </button>
-    ${wait ? `<button class="strip" data-pick="${esc(wait.g)}|${esc(wait.id)}"><i></i><span class="m"><b>${esc(groupName(wait.g))} needs your pick</b><span class="s">${esc(wait.t)} · ${SHORT[wait.horizon]} · closes in ${num(until(wait.joinUntil))}</span></span><span class="chev">›</span></button>`
-      : view !== "groups" && S.invites.length ? `<button class="strip" id="plInv"><i></i><span class="m"><b>@${esc(S.invites[0].from)} invited you to ${esc(S.invites[0].name)}</b><span class="s">${S.invites.length > 1 ? `${S.invites.length} invites · ` : ""}Join or decline in Groups</span></span><span class="chev">›</span></button>` : ""}
-    <div class="pl-tiles" role="tablist" aria-label="Predict">${tiles.map(([k, l, s, icon]) => `<button role="tab" class="pl-tile" data-pv="${k}" aria-selected="${view === k}"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${l}${k === "groups" && groupsNeedYou() ? `<span class="dot" aria-label="needs you"></span>` : ""}</b><span class="${/^#?\d[\d,]*$/.test(s) ? "num" : ""}">${esc(s)}</span></button>`).join("")}</div>
-    <div class="pl-view" data-view="${view}"></div>`;
-  const body = el.querySelector(".pl-view");
-  ({ calls: callsView, groups: groupsView, ranks: ranksView })[view](body);
-  el.querySelector("#plMe").onclick = () => openAvatarSheet();
-  el.querySelector("#plShare").onclick = () => openShareSheet(myFullCard());
-  el.querySelector("#plCard").onclick = () => openPlayerCard(me());
-  el.querySelectorAll("[data-pv]").forEach((b) => (b.onclick = () => { if (APP.playView !== b.dataset.pv) { APP.playView = b.dataset.pv; haptic(); renderPlay(); el.parentElement.scrollTop = 0; } }));
-  el.querySelector("#plInv")?.addEventListener("click", () => { APP.playView = "groups"; haptic(); renderPlay(); el.parentElement.scrollTop = 0; });
+  const el = $("play"), view = APP.playView === "friends" ? "friends" : "calls";
+  if (view === "friends") {
+    el.innerHTML = `<button class="btn ghost sm" id="plBack" style="padding-left:0">‹ Calls</button><h1 style="margin:10px 0 4px">With friends</h1><p class="hint" style="margin:0 0 18px">Call the same coins as people you know.</p><div class="pl-view" data-view="friends"></div>`;
+    el.querySelector("#plBack").onclick = () => { APP.playView = "calls"; renderPlay(); el.parentElement.scrollTop = 0; };
+    groupsView(el.querySelector(".pl-view"));
+    return;
+  }
+  el.innerHTML = `<div class="pl-top2"><h1>Calls</h1><button class="searchbar" id="plFind" aria-label="Find players"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><span>Know how others are doing</span></button></div>
+    <div class="pl-view" data-view="calls"></div>`;
+  callsView(el.querySelector(".pl-view"));
+  el.querySelector("#plFind").onclick = () => openSearch();
   wirePicks(el);
 }
 function wirePicks(root) {
   root.querySelectorAll("[data-pick]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const [g, c] = b.dataset.pick.split("|"), ch = challengesOf(g).find((x) => x.id === c); if (ch) openPickSheet(g, ch); }));
 }
+// The plain-language read on how well someone reads the market. Needs about 30 scored calls to mean anything.
+export const VERDICT_AT = 30;
+export function verdictOf(sc) {
+  const n = sc?.n || 0;
+  if (!n) return { text: "Make your first call", key: "none", n };
+  if (n < VERDICT_AT) return { text: "Too early to tell", key: "early", n };
+  return sc.score >= 600 ? { text: "Reading it well", key: "well", n } : { text: "Still learning", key: "learning", n };
+}
 
-// ---------- Calls: make one, your open calls, your scored ones
+// ---------- Calls: progress, today, with friends, waiting, scored
 function callsView(el) {
-  const coins = allSyms().filter((x) => D.series[x.key]?.bars?.length);
-  // open: your predictions, plus group picks that don't count to your score (those that do are predictions too)
+  // waiting: your predictions, plus group picks that don't count to your score (those that do are predictions too)
   // a call scored on this phone the moment it was due moves straight to Scored (marked "confirming" until the server's copy lands)
   const here = pendingHere(), isHere = (p) => here.some((r) => r.t === p.t && r.horizon === p.horizon && r.createdAt === p.createdAt);
   const open = [...store.preds.filter((p) => !isHere(p)).map((p) => ({ ...p, kind: "pred" })), ...S.picks.filter((p) => !p.counts && p.status !== "scored" && p.status !== "void").map((p) => ({ ...p, kind: "pick" }))]
     .sort((a, b) => Date.parse(dueAt(a)) - Date.parse(dueAt(b)));
   const done = [...here, ...store.results].sort((a, b) => Date.parse(b.resolvedAt || 0) - Date.parse(a.resolvedAt || 0));
+  const sc = myScore(), v = verdictOf(sc), st = myStreak(), n = sc?.n || 0;
   const callRow = (p) => {
-    const due = dueAt(p), made = Date.parse(p.createdAt), share = Math.max(0, Math.min(1, (Date.now() - made) / Math.max(1, Date.parse(due) - made)));
-    const now = lastPrice(p.coin), away = now ? Math.abs(p.target / now - 1) * 100 : null, grp = p.g ? ` · ${esc(groupName(p.g))}` : "";
-    return `<div class="callrow"><div class="top"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="hint num">${esc(Date.now() >= Date.parse(due) ? "scoring…" : leftText(due, p.horizon))}</span></div>
-      <span class="hint">${num(esc(m$(p.target)))} called${away != null && p.horizon !== "1y" ? ` · now ${num(away.toFixed(1) + "%")} away` : ""}${grp}${p.kind === "pick" ? " · group only" : ""}</span><div class="tbar" aria-hidden="true"><i style="width:${(share * 100).toFixed(1)}%"></i></div></div>`;
+    const due = dueAt(p), grp = p.g ? ` · ${esc(groupName(p.g))}` : "";
+    return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">Called ${num(esc(m$(p.target)))}${grp}${p.kind === "pick" ? " · group only" : ""}</span></span><b class="num">${esc(Date.now() >= Date.parse(due) ? "scoring…" : leftText(due, p.horizon))}</b></div>`;
   };
-  el.innerHTML = `${dailyBox(here)}
-    <div class="label pl-sec">Make a call</div>
-    ${coins.length ? `<div class="pchips">${coins.map((x) => `<button class="pchip" data-pp="${esc(x.key)}"><b>${esc(x.t)}</b><span class="num">${esc(money(D.series[x.key].bars.at(-1).c, x.m))}</span>${open.some((p) => p.coin === x.key) ? `<em aria-label="open call"></em>` : ""}</button>`).join("")}</div>`
-      : `<p class="hint">Prices are loading. Add coins from the feed's + to call them here.</p>`}
-    <div class="secrow"><span class="label">Open${open.length ? ` · ${open.length}` : ""}</span></div>
-    ${open.length ? `<div class="hl">${open.map(callRow).join("")}</div>` : `<p class="hint pl-empty">Nothing open. Tap a coin above, or Predict on any chart, to make a call.</p>`}
-    <div class="secrow"><span class="label">Scored</span>${done.length > 3 ? `<button class="linkbtn" id="plAll">All ${done.length}</button>` : ""}</div>
-    ${done.length ? `<div class="hl pl-scored">${done.slice(0, 3).map(resultRow).join("")}</div><p class="hint" style="margin-top:6px">Tap a scored call to see what happened over its period.</p>` : `<p class="hint pl-empty">Scored calls show here, with how close each one was.</p>`}
-    ${weekBox(done)}`;
-  el.querySelectorAll("[data-pp]").forEach((b) => (b.onclick = () => openPredictSheet(symOf(b.dataset.pp), () => renderPlay())));
-  el.querySelector("[data-dailyinfo]")?.addEventListener("click", () => openDaily());
+  const bits = [`${n} of about ${VERDICT_AT} calls`, st.n ? `${st.n}-day streak` : "", levelText()].filter(Boolean).join(" · ");
+  const waits = waitingForMe(), groups = myGroups(), lists = [...store.lists.values()];
+  const friendRows = [
+    ...waits.slice(0, 2).map((ch) => `<button class="row" data-pick="${esc(ch.g)}|${esc(ch.id)}"><span class="main"><span class="t">${esc(groupName(ch.g))}</span><span class="s">Group, needs your pick, ${esc(until(ch.joinUntil))} left</span></span><span class="linkbtn">Pick</span></button>`),
+    ...groups.filter((g) => !waits.some((w) => w.g === g.id)).slice(0, 2).map((g) => `<button class="row" data-g="${esc(g.id)}"><span class="main"><span class="t">${esc(g.name)}</span><span class="s">Group · ${Object.keys(g.members || {}).length} players</span></span><span class="chev">›</span></button>`),
+    ...lists.slice(0, 2).map((l) => `<button class="row" data-list="${esc(l.id)}"><span class="main"><span class="t">${esc(l.name)}</span><span class="s">Shared list · ${(l.syms || []).length} coins · ${Object.keys(l.members || {}).length} members</span></span><span class="chev">›</span></button>`),
+  ];
+  el.innerHTML = `<button class="progcard" id="plProg"><span class="pc-top"><b>${esc(v.text)}</b><span class="chev">›</span></span><span class="pl-prog" aria-hidden="true"><i style="width:${Math.min(100, (n / VERDICT_AT) * 100)}%"></i></span><span class="hint">${esc(bits)}</span></button>
+    <div class="secrow"><span class="label">Today</span></div>
+    ${dailyBox(here)}
+    <div class="secrow"><span class="label">With friends</span><button class="linkbtn" id="plFriends">All groups and lists${groupsNeedYou() ? ' <span class="dot" aria-label="needs you"></span>' : ""}</button></div>
+    ${friendRows.length ? `<div class="hl">${friendRows.join("")}</div>` : `<p class="hint pl-empty">Start a group, or join one from a friend's link, to call the same coins together.</p>`}
+    <div class="secrow"><span class="label">Waiting${open.length ? ` · ${open.length}` : ""}</span></div>
+    ${open.length ? `<div class="hl">${open.map(callRow).join("")}</div>` : `<p class="hint pl-empty">Nothing waiting. Tap Call it on any chart in the feed.</p>`}
+    <div class="secrow"><span class="label">Scored</span>${done.length > 3 ? `<button class="linkbtn" id="plAll">See all ${done.length}</button>` : ""}</div>
+    ${done.length ? `<div class="hl pl-scored">${done.slice(0, 3).map(resultRow).join("")}</div>` : `<p class="hint pl-empty">Scored calls show here, with how close each one was.</p>`}`;
+  el.querySelector("#plProg").onclick = () => showTab("you");
+  el.querySelector("#plFriends").onclick = () => { APP.playView = "friends"; renderPlay(); el.parentElement.scrollTop = 0; };
+  el.querySelector("[data-daily]")?.addEventListener("click", () => { const { dc, mine, blocked } = dailyState(here); if (!mine && !blocked) openPredictSheet(dc, () => APP.tab === "play" && renderPlay(), "1d"); });
+  el.querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openGroup(b.dataset.g)));
+  el.querySelectorAll("[data-list]").forEach((b) => (b.onclick = () => openListPage(b.dataset.list)));
   const wireRes = (root) => root.querySelectorAll("[data-res]").forEach((b) => (b.onclick = () => openResult(done[+b.dataset.res])));
   wireRes(el);
   el.querySelector("#plAll")?.addEventListener("click", () => openSheet("Scored calls", `<div class="hl">${done.map(resultRow).join("")}</div>`, wireRes));
@@ -160,46 +146,17 @@ function dailyState(here = pendingHere()) {
   const left = msUntilNextDay(now);
   return { day, dc, mine, blocked: !mine && !canPredict(store.preds, dc.key, "1d"), price: lastPrice(dc.key), left: `${Math.floor(left / 36e5)}h ${Math.floor((left % 36e5) / 6e4)}m` };
 }
-// a one-line banner on Calls; the explanation and yesterday's crowd live in the daily popup (tap the banner)
+// today's coin as a row: everyone calls the same coin today; it's a 1-day call like any other
 function dailyBox(here) {
-  const { dc, mine, blocked, price, left } = dailyState(here);
-  const right = mine ? `<span class="lab good">You're in</span>` : blocked ? `<span class="hint">1-day call open</span>` : `<span class="btn primary sm">Call</span>`;
-  return `<button class="daily" data-dailyinfo><span class="daily-m"><span class="daily-k">Today's coin<span class="num"> · ${left} left</span></span><span class="daily-c"><b>${esc(dc.t)}</b>${price ? `<span class="num">${esc(m$(price))}</span>` : ""}</span></span>${right}</button>`;
+  const { dc, mine, blocked, left } = dailyState(here);
+  const right = mine ? `<span class="lab good">You're in</span>` : blocked ? `<span class="hint">1-day call open</span>` : `<span class="linkbtn">Call</span>`;
+  return `<div class="hl"><button class="row" data-daily><span class="main"><span class="t">Today's coin: ${esc(dc.n)}</span><span class="s">${mine ? `Called ${esc(m$(mine.target))}, scored ${esc(when(dueAt(mine), "1d"))}` : `Everyone calls it, ${esc(left)} left`}</span></span>${right}</button></div>`;
 }
-// ---------- the daily popup: once a day, on the first open of the app that day (Indian time), until you've called it
-const DAILY_SEEN = "pl.dailySeen";
-const MIXC = ["var(--accent)", "color-mix(in srgb, var(--accent) 60%, transparent)", "color-mix(in srgb, var(--text) 62%, transparent)", "color-mix(in srgb, var(--muted) 55%, transparent)", "var(--warn)"];
-export function openDaily() {
-  const { day, dc, mine, blocked, price, left } = dailyState(), st = myStreak();
-  const yday = istDay(Date.now() - 864e5), crowd = D.daily?.crowd?.[yday], yc = dailyCoin(yday);
-  const counts = crowd ? LABELS.map((l) => crowd.labels?.[l] || 0) : null, close = counts ? counts[0] + counts[1] + counts[2] : 0;
-  ls.set(DAILY_SEEN, day);
-  openSheet("Today's coin", `<div class="dpop">
-      <div class="dpop-main"><b>${esc(dc.n)}</b>${dc.n !== dc.t ? `<span class="muted">${esc(dc.t)}</span>` : ""}${price ? `<span class="num">${esc(m$(price))}</span>` : ""}</div>
-      <p class="hint">${mine ? `You're in: ${num(esc(m$(mine.target)))}, scored ${esc(when(dueAt(mine), "1d"))}. Tomorrow you'll see how everyone did.`
-        : blocked ? `You already have an open 1-day call on ${esc(dc.t)}, so today's can't be added. It still counts once it's scored.`
-        : `Everyone calls the same coin today: a 1-day call that counts to your score${st.n && !st.today ? ` and keeps your ${st.n}-day streak` : ""}. Calls stay hidden until they're scored. ${left} left.`}</p>
-      ${!mine && !blocked ? `<button class="btn primary block" id="dGo">Make my call on ${esc(dc.t)}</button><button class="btn block" data-close style="margin-top:8px">Not now</button>` : ""}
-      ${crowd?.n ? `<div class="daily-crowd"><div class="pc2-row"><span class="label">Yesterday · ${esc(yc.n)}</span><span class="hint">${num(crowd.n)} player${crowd.n === 1 ? "" : "s"} · ${num(close)} Close or better</span></div>
-        <div class="pc2-mixbar" aria-hidden="true">${counts.map((k, i) => (k ? `<i style="flex:${k};background:${MIXC[i]}"></i>` : "")).join("")}</div>
-        <span class="hint">${LABELS.map((l, i) => (counts[i] ? `${counts[i]} ${esc(l)}` : "")).filter(Boolean).join(" · ")}</span></div>` : ""}
-      <p class="hint" style="margin-top:12px">A learning game, not advice.</p></div>`, (body) => {
-    body.querySelector("#dGo")?.addEventListener("click", () => { closeSheet(); setTimeout(() => openPredictSheet(dc, () => APP.tab === "play" && renderPlay(), "1d"), 280); });
-  });
-}
-// shown by itself once a day: only when nothing else is on screen (no username step, tour or sheet) and not yet called
-function maybeDaily() {
-  if (!store.data?.username || document.hidden || $("gate") || $("coach") || !$("sheet").hidden || APP.openGroup) return;
-  const s = dailyState();
-  if (s.mine || s.blocked || !s.price || ls.get(DAILY_SEEN) === s.day) return;
-  openDaily();
-}
-// ---------- your week and how your calls tend to land (habit.js): plain descriptions of your own past calls
-function weekBox(done) {
-  const scored = done.filter((r) => r.status === "scored"), wk = weekRecap(scored), td = tendency(scored);
-  if (!wk && !td) return "";
-  return `<div class="pc2-box weekbox"><span class="label">Your week</span>${wk ? `<b>${esc(wk.text)}</b>` : `<span class="hint">No calls scored in the last 7 days.</span>`}${td ? `<p class="hint">${esc(td.text)}</p>` : ""}</div>`;
-}
+// the level line on the progress card (progress.js): effort, not skill
+export const myLevel = () => levelOf([...store.results, ...pendingHere()]);
+const levelText = () => `Level ${myLevel().level}`;
+// a shared list's page lives with the settings pages for now (Sharing › Shared lists)
+function openListPage(id) { APP.backTo = "play"; showTab("profile", "lists", id); }
 // ---------- one scored call: how close it was, and what happened over its period (facts only)
 function openResult(r) {
   if (!r || r.status !== "scored") return;
@@ -248,23 +205,21 @@ function groupsView(el) {
 
 // ---------- Ranks
 let followRank = null; // { key, place, of } for the People you follow board, worked out from their cards
-function ranksView(el) {
+export function ranksView(el) {
   const card = myCard(), sc = myScore(), pub = store.data?.public === true, n = sc?.n || 0;
   const everyone = card?.rank ? [`#${card.rank}`, `top ${Math.max(1, Math.ceil((card.rank / Math.max(1, card.of)) * 100))}%`]
     : !pub ? ["Join", "You're not on it"] : n < RANK_MIN ? [`${RANK_MIN - n} to go`, `scored calls till you're ranked`] : ["Soon", "ranked at the next update"];
   const fl = following(), fkey = fl.join();
   if (fl.length && followRank?.key !== fkey + "|" + (sc?.score ?? "")) {
     followRank = { key: fkey + "|" + (sc?.score ?? ""), place: null, of: fl.length + 1 };
-    getCards(fl).then((cs) => { const mine = sc?.score ?? -1, place = cs.filter((c) => (c?.score ?? -1) > mine).length + 1; followRank = { ...followRank, place }; if (APP.tab === "play" && APP.playView === "ranks") rerender(); }).catch(() => {});
+    getCards(fl).then((cs) => { const mine = sc?.score ?? -1, place = cs.filter((c) => (c?.score ?? -1) > mine).length + 1; followRank = { ...followRank, place }; if (APP.tab === "you") renderYou(); }).catch(() => {});
   }
   const rows = [["everyone", "Everyone", "Public players", ...everyone],
     ["following", "People you follow", fl.length ? "Only you see this board" : "Follow players to compare", fl.length && followRank?.place ? ord(followRank.place) : "–", fl.length ? `of ${fl.length + 1}` : ""],
     ...myGroups().map((g) => { const t = groupTable(g.id), i = t.findIndex((r) => r.a === me()), played = t.some((r) => r.pts > 0);
       return [g.id, g.name, `${new Date().toLocaleString("en-IN", { month: "long" })} · ${t.length} player${t.length === 1 ? "" : "s"}`, played && i >= 0 ? ord(i + 1) : "–", played ? `${t[i]?.pts ?? 0} pts` : "no results yet"]; })];
-  el.innerHTML = `<button class="fieldbtn" id="plFind"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>Find players by @username</button>
-    <div class="label pl-sec">Where you rank</div>
-    <div class="pl-cards">${rows.map(([k, t, s, big, small]) => `<button class="rcard" data-board="${esc(k)}"><span class="main"><b>${esc(t)}</b><span class="s">${esc(s)}</span></span><span class="r"><b class="${/^[#\d]/.test(big) ? "num" : ""}">${esc(big)}</b><span class="hint">${esc(small)}</span></span></button>`).join("")}</div>
-    <p class="hint" style="margin-top:14px">Skill scores in a learning game. Not advice.</p>`;
+  el.innerHTML = `<div class="pl-cards">${rows.map(([k, t, s, big, small]) => `<button class="rcard" data-board="${esc(k)}"><span class="main"><b>${esc(t)}</b><span class="s">${esc(s)}</span></span><span class="r"><b class="${/^[#\d]/.test(big) ? "num" : ""}">${esc(big)}</b><span class="hint">${esc(small)}</span></span></button>`).join("")}</div>
+    <button class="row" id="plFind" style="margin-top:10px"><span class="main"><span class="t">Find players</span><span class="s">Follow people to compare</span></span><span class="chev">›</span></button>`;
   el.querySelector("#plFind").onclick = () => openSearch();
   el.querySelectorAll("[data-board]").forEach((b) => (b.onclick = () => (b.dataset.board === "everyone" && !pub ? openJoinBoard() : openBoard(b.dataset.board))));
 }
@@ -733,7 +688,6 @@ export function openAvatarSheet() {
       ${row("account", "Account", `Username (${esc(u ? "@" + u : "not set")}), sign-in id, delete your data`)}
       ${row("appearance", "Appearance", "Dark, light or match phone")}
       ${row("feedback", "Give feedback", "Hold anything for 3 seconds, or switch on tap-to-comment")}
-      ${row("tour", "Show the app tour again", "Swipes, charts and the Predict tab in a minute")}
       ${row("legal", "Legal and disclaimer", "Terms, privacy, grievance contact")}
       <span data-admin></span>
     </div>
@@ -742,7 +696,6 @@ export function openAvatarSheet() {
       if (k === "card") { closeSheet(); return openPlayerCard(me()); }
       if (k === "following") return openFollowing();
       if (k === "push") return enablePush().then(() => toast("Notifications are on for this phone."), (e) => toast(e.message, { ms: 5000 }));
-      if (k === "tour") { closeSheet(); resetTours(); showTab("feed"); setTimeout(() => startTour("feed"), 300); return; }
       if (k === "feedback") { closeSheet(); setFeedbackMode(true); showTab("feed"); return; }
       closeSheet(); APP.backTo = APP.tab === "profile" ? APP.backTo : APP.tab; showTab("profile", k);
     };

@@ -1,7 +1,7 @@
 // Coins (watchlists and alerts), the settings pages opened from the avatar sheet, sheets (add coins, watchlists,
 // switcher, chart, indicators, lines) and the username step. The Predict tab and people live in play.js.
 import { CONFIG } from "../config.js";
-import { store, save, chartSettings, setUsername, loginUsername, checkUsername, usernameFree, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, listFeedback, setFeedbackStatus, myUid } from "./store.js";
+import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, listFeedback, setFeedbackStatus, myUid } from "./store.js";
 import { leaveAllGroups, deleteMySocial } from "./social.js";
 import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
@@ -10,7 +10,6 @@ import { OVERLAYS, PANELS, MAX_OVERLAYS, maxPanels, SETS, picks } from "./studie
 import { D, view, storiesFor, RANGE_LABEL, resolveInterval, dailyOf } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, haptic, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
 import { openLearn } from "./interact.js";
-import { startTour } from "./coach.js";
 import { APP, buildFeed, showTab, currentSyms, applyTheme, doRefresh } from "./app.js";
 import { openAvatarSheet, backFromProfile } from "./play.js";
 
@@ -28,7 +27,7 @@ export function initPages() {
 // ---------- add-stock sheet: search, then choose watchlists
 export function openAddSheet(prefill = "") {
   const curList = store.data?.settings?.list;
-  openSheet("Add a coin", "", (body) => { mountSearch(body, prefill); setTimeout(() => startTour("add"), 350); },
+  openSheet("Add a coin", "", (body) => { mountSearch(body, prefill); },
     () => { const added = APP.lastAdded; buildFeed({ keepKey: added || APP.seq[APP.active]?.sym?.key }); APP.lastAdded = null;
       if (added && !D.series[added]) doRefresh(false).then(() => { if (APP.tab === "dash") renderDash(); }); }); // fetch prices for a newly added coin
 
@@ -411,44 +410,6 @@ async function joinFlow(id) {
 // Every account starts by choosing its username: a full-screen first step that can't be skipped. It's the name
 // on the prediction game and in shared lists; it can be changed twice later. Closes by itself if the account
 // turns out to have one already (for example once the server copy loads).
-export function nameGate(onDone) {
-  if (store.data?.username) return onDone?.();
-  let el = document.getElementById("gate");
-  if (el) return;
-  el = document.createElement("div"); el.id = "gate"; el.className = "gate"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true");
-  el.innerHTML = `<div class="gatein"><div class="label">Welcome to ${esc(CONFIG.appName)}</div>
-    <h1>Pick your username</h1>
-    <p>It's your name in the prediction game: on your player card, in groups and on the leaderboard. Already have one? Type it to log in.</p>
-    <label class="field"><span>Username</span><div class="uname"><span>@</span><input id="gIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="e.g. chartwatcher"></div></label>
-    <p class="hint" id="gMsg">3–20 letters, numbers, dots or underscores.</p>
-    <div class="notice">You can change it only <b>${USERNAME_CHANGES} times</b> after this, so choose one you'll keep. Don't use your real name, email or phone number.</div>
-    <button class="btn primary block" id="gGo" disabled>Continue</button></div>`;
-  document.body.appendChild(el); document.body.classList.add("gated");
-  const inp = el.querySelector("#gIn"), msg = el.querySelector("#gMsg"), btn = el.querySelector("#gGo");
-  let seq = 0, held = false;
-  const set = (t, cls, ok) => { msg.textContent = t; msg.className = "hint " + (cls || ""); btn.disabled = !ok; };
-  const check = async () => {
-    const { name, error } = checkUsername(inp.value), my = ++seq;
-    if (error) return set(inp.value ? error : "3–20 letters, numbers, dots or underscores.", inp.value ? "bad" : "", false);
-    set(`Checking @${name}…`, "", false);
-    try {
-      const st = await usernameFree(name); if (my !== seq) return;
-      held = st !== "free"; btn.textContent = held ? `Log in as @${name}` : "Continue";
-      held ? set(`@${name} already has an account. If it's yours, log in to open it on this phone.`, "", true) : set(`@${name} is free.`, "good", true);
-    } catch { // slow or offline: let them go ahead; logging in finds the account if the name has one
-      if (my === seq) { held = true; btn.textContent = `Continue as @${name}`; set(`Couldn't check @${name} just now. Tap Continue: if it's already yours, you'll be logged in.`, "", true); }
-    }
-  };
-  let t = 0; inp.oninput = () => { clearTimeout(t); t = setTimeout(check, 250); };
-  const close = () => { el.remove(); document.body.classList.remove("gated"); off(); onDone?.(); };
-  const off = store.on((what) => { if (what === "account" && store.data?.username && document.getElementById("gate")) close(); });
-  btn.onclick = async () => {
-    const was = btn.textContent, login = held; btn.disabled = true; btn.textContent = login ? "Logging in…" : "Saving…";
-    try { const n = await (login ? loginUsername(inp.value, (t) => (btn.textContent = `${t}…`)) : setUsername(inp.value)); toast(login ? `Welcome back, @${n}.` : `Welcome, @${n}.`); close(); }
-    catch (e) { set(e.message || "Couldn't save. Check your connection and try again.", "bad", true); btn.textContent = was; }
-  };
-  setTimeout(() => inp.focus(), 200);
-}
 function withUsername(fn) {
   if (store.data?.username) return fn();
   openUsernameSheet(fn, "Shared lists show members by username, so pick one first.");
