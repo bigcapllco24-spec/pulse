@@ -6,7 +6,7 @@ import { HORIZONS, checkPrediction, canPredict, profileScore, dueAt, relabel } f
 import { settle, rowCache, SETTLE_DELAY } from "./predict.js";
 
 const FB = "https://www.gstatic.com/firebasejs/10.14.1/";
-const LS = { code: "pl.code", demoOut: "pl.demoOut", demo: "pl.demoAccount", demoAlerts: "pl.demoAlerts", demoLists: "pl.demoLists", hidden: "pl.hidden", demoPreds: "pl.demoPreds", preds: "pl.preds" };
+const LS = { code: "pl.code", out: "pl.signedOut", demo: "pl.demoAccount", demoAlerts: "pl.demoAlerts", demoLists: "pl.demoLists", hidden: "pl.hidden", demoPreds: "pl.demoPreds", preds: "pl.preds" };
 const ls = {
   get(k, d = null) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
@@ -125,6 +125,7 @@ export const connected = () => connecting || Promise.resolve();
 async function connect() {
   try { await loadFirebase(); } catch (e) { store.error = "Couldn't reach the server. Your changes are saved on this phone."; store.emit("error"); return; }
   const { db, f, auth } = fb;
+  if (signedOut()) { store.data = DEFAULT_ACCOUNT(); store.emit("account"); return; } // the welcome screen is up
   // an account this phone logged into by username comes first; if it's gone, the phone's own sign-in is used
   let id = auth.currentUser.uid, data;
   const OFF = Symbol("offline"), read = (path) => restGet(path).catch((e) => (denied(e) ? "gone" : OFF));
@@ -307,14 +308,15 @@ export async function enablePush() {
   return true;
 }
 
+// Signing out keeps this phone's own sign-in (as 1.1.4 did) and shows the welcome screen until someone logs in.
+// 1.2.0 threw the sign-in away instead, so every sign-out and log-in added a new entry to the account's devices,
+// and the account hit the old 10-device limit (17 Oct 2026). A new sign-in is made only to create a new account.
 export function signOutDevice() {
-  const done = () => { location.hash = ""; location.reload(); };
-  if (store.mode === "demo") { ls.set(LS.demoOut, 1); return done(); } // demo: the account stays on the phone, behind the log-in screen
-  ls.del(LS.code); ls.del(LSACC); ls.del(LSALERTS); ls.del(LS.preds); ls.del(LSLINK);
-  if (!fb) return done();
-  fb.auth.signOut().catch(() => {}).then(done); // the next visit starts as a fresh anonymous sign-in
+  ls.set(LS.out, 1);
+  if (store.mode !== "demo") { ls.del(LS.code); ls.del(LSACC); ls.del(LSALERTS); ls.del(LS.preds); ls.del(LSLINK); }
+  location.hash = ""; location.reload();
 }
-export const signedOut = () => store.mode === "demo" && !!ls.get(LS.demoOut);
+export const signedOut = () => !!ls.get(LS.out);
 
 export const USERNAME_CHANGES = 2;
 export const usernameChangesLeft = () => (store.data?.username ? USERNAME_CHANGES - (store.data.usernameChanges || 0) : USERNAME_CHANGES + 1);
@@ -356,7 +358,7 @@ export async function usernameFree(name) {
 export async function loginUsername(raw, step = () => {}) {
   const { name, error } = checkUsername(raw);
   if (error) throw new Error(error);
-  if (store.mode === "demo") { if (!store.data?.username || store.data.username !== name) throw new Error("No account with that username."); ls.del(LS.demoOut); store.emit("account"); return name; }
+  if (store.mode === "demo") { if (!store.data?.username || store.data.username !== name) throw new Error(`There's no account called @${name}. Check the spelling, or go back and create it.`); ls.del(LS.out); store.emit("account"); return name; }
   // only the sign-in is needed, not the account load that may still be running; every step gives up in time
   const go = async (label, p, ms = 12000) => { step(label); const t0 = Date.now(); try { return await within(p, ms); } catch (e) { if (/^timeout/.test(e.message)) throw new Error(`${label} took too long (${e.message.slice(9) || "no answer"} after ${Math.round((Date.now() - t0) / 1000)} s). Check your connection and tap again.`); throw e; } };
   await go("Signing in", loadFirebase());
@@ -364,23 +366,34 @@ export async function loginUsername(raw, step = () => {}) {
   // plain HTTPS requests: each answers in under a second, where the live connection can take many seconds to open
   const u = await go(`Finding @${name}`, restGet(`usernames/${name}`));
   if (!u?.acct) throw new Error(`There's no account called @${name}. Check the spelling, or go back and create it.`);
-  const acct = u.acct, ref = f.doc(db, "accounts", acct);
-  if (acct !== me) {
-    try {
-      await go("Adding this phone to the account", restCommit([{ transform: { document: docName(`accounts/${acct}`), fieldTransforms: [{ fieldPath: "devices", appendMissingElements: { values: [{ stringValue: me }] } }] }, currentDocument: { exists: true } }]));
-    } catch (e) { if (/too long/.test(e.message) || (!denied(e) && !/NOT_FOUND|FAILED_PRECONDITION|404/.test(e.code || ""))) throw e; return setUsername(name); } // the account is gone (the rules refuse): claim the name here
+  const acct = u.acct, ref = f.doc(db, "accounts", acct), path = `accounts/${acct}`;
+  // this phone may already be on the account (it made it, or logged in before): then it simply opens
+  let data = await go("Opening your account", restGet(path).catch((e) => (denied(e) ? "locked" : Promise.reject(e))));
+  if (data === "locked") {
+    try { await go("Adding this phone to the account", restCommit([{ transform: { document: docName(path), fieldTransforms: [{ fieldPath: "devices", appendMissingElements: { values: [{ stringValue: me }] } }] }, currentDocument: { exists: true } }])); }
+    catch (e) { if (denied(e)) throw new Error(`The server wouldn't add this phone to @${name}'s account (${e.message.slice(0, 80)}). Nothing was changed.`); throw e; }
+    data = await go("Opening your account", restGet(path));
   }
-  const data = await go("Opening your account", restGet(`accounts/${acct}`));
-  if (!data) return setUsername(name);
+  if (!data) throw new Error(`@${name}'s account no longer exists. Go back and create a new account.`);
+  ls.del(LS.out);
   ls.set(LSLINK, acct); newId = null;
   store.data = { ...DEFAULT_ACCOUNT(), ...data };
   attach(acct, ref);
   return name;
 }
+// A brand-new sign-in on this phone, for a new account after signing out of another one.
+async function freshSignIn() {
+  try { await within(loadFirebase(), 12000); } catch { throw new Error("Couldn't reach the server. Check your connection and tap again."); }
+  fb.unsubs.forEach((u) => u()); fb.unsubs = [];
+  await within(fb.auth.signOut().then(() => fb.authMod.signInAnonymously(fb.auth)), 12000).catch(() => { throw new Error("Couldn't reach the server. Check your connection and tap again."); });
+  store.id = null; newId = fb.auth.currentUser.uid; pending = {}; store.data = DEFAULT_ACCOUNT(); store.preds = []; store.results = [];
+  ls.del(LSLINK); ls.del(LS.out); connecting = Promise.resolve();
+}
 export async function setUsername(raw) {
   const { name, error } = checkUsername(raw);
   if (error) throw new Error(error);
-  if (store.mode === "demo" && ls.get(LS.demoOut)) { ls.del(LS.demoOut); ls.del(LS.demoPreds); store.data = DEFAULT_ACCOUNT(); store.preds = []; store.results = []; }
+  if (store.mode === "demo" && ls.get(LS.out)) { ls.del(LS.out); ls.del(LS.demoPreds); store.data = DEFAULT_ACCOUNT(); store.preds = []; store.results = []; }
+  if (store.mode !== "demo" && ls.get(LS.out)) await freshSignIn(); // this phone's sign-in may already own an account
   const old = store.data?.username || null;
   if (old === name) return name;
   if (usernameChangesLeft() <= 0) throw new Error("You've used all your username changes.");
