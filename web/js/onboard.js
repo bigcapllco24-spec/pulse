@@ -1,24 +1,18 @@
-// The first run (1.2.0): welcome, an account (username and password), the recovery code, then a first call on Bitcoin
-// in an hour, so the first result arrives within the first session. Everything sits in one full-screen gate (#gate)
-// over the app; the feed keeps loading behind it. An account from before passwords is asked to set one.
+// The first run (1.2.0): welcome, a username (no password: a username creates or opens the account, as in 1.1.4), then a
+// first call on Bitcoin in an hour, so the first result arrives within the first session. Everything sits in one
+// full-screen gate (#gate) over the app; the feed keeps loading behind it.
 import { CONFIG } from "../config.js";
-import { store, ls, checkUsername, usernameFree, createAccountPassword, loginPassword, setPassword, hasPassword, ownsSignIn,
-  newRecoveryCode, saveRecoveryCode, requestReset, resetStatus, makePrediction, enablePush, checkPassword, PASSWORD_MIN, USERNAME_CHANGES, signedOut } from "./store.js";
+import { store, ls, checkUsername, usernameFree, setUsername, loginUsername, makePrediction, enablePush, USERNAME_CHANGES, signedOut } from "./store.js";
 import { HORIZONS, typicalMove } from "./score.js";
 import { D } from "./data.js";
 import { $, esc, money, toast, haptic } from "./ui.js";
 
 const FIRST_COIN = "CRYPTO:BTC", FIRST_H = "1h";
 const SEEN = "pl.firstCall"; // the first-call step has been shown (made or skipped) on this phone
-const SETPW_LATER = "pl.setPwLater"; // an account from before passwords chose "Later"; asked again after a day
 let gate = null, onDone = null;
 
 // Is anything needed before the app can be used? (The feed draws behind the gate meanwhile.)
-export function needsOnboarding() {
-  if (!store.data?.username || signedOut()) return "welcome";
-  if (store.mode !== "demo" && store.ready && store.id && !hasPassword() && ownsSignIn() && Date.now() - (ls.get(SETPW_LATER) || 0) > 864e5) return "setpw";
-  return null;
-}
+export const needsOnboarding = () => (!store.data?.username || signedOut() ? "welcome" : null);
 export function startOnboarding(done) {
   onDone = done;
   const step = needsOnboarding();
@@ -44,12 +38,11 @@ function finish() {
   const d = onDone; onDone = null; d?.();
 }
 const LOGO = `<span class="ob-logo"><svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 15h5l2.5-7 4 13 3-9 1.5 3H25" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><b>${esc(CONFIG.appName)}</b></span>`;
-const field = (id, label, type, extra = "") => `<label class="field"><span>${label}</span><div class="uname">${type === "user" ? "<span>@</span>" : ""}<input id="${id}" ${type === "user" ? 'autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="21"' : type === "code" ? 'autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="14"' : `type="password" autocomplete="${extra || "current-password"}"`}></div></label>`;
+const field = (id, label) => `<label class="field"><span>${label}</span><div class="uname"><span>@</span><input id="${id}" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="21" enterkeyhint="go"></div></label>`;
 
 function show(step) {
-  ({ welcome, create, login, reset, setpw, firstcall }[step] || welcome)();
+  ({ welcome, create, login, firstcall }[step] || welcome)();
 }
-
 // 1 · Welcome
 function welcome() {
   frame(`${LOGO}
@@ -65,123 +58,49 @@ function welcome() {
   gate.querySelector("#obHave").onclick = () => show("login");
 }
 
-// 2 · Create account
+// 2 · Create account: just a username
 function create() {
   frame(`<div class="label">Create your account</div>
-    <h1>Pick a username and a password</h1>
-    ${field("obU", "Username", "user")}<p class="hint" id="obUMsg">3–20 letters, numbers, dots or underscores. Not your real name.</p>
-    ${field("obP", "Password", "pw", "new-password")}<p class="hint" id="obPMsg">At least ${PASSWORD_MIN} characters.</p>
-    <div class="notice">There's no email and no reset by mail. You'll get a recovery code next: keep it somewhere safe.</div>
+    <h1>Pick a username</h1>
+    ${field("obU", "Username")}<p class="hint" id="obUMsg">3–20 letters, numbers, dots or underscores. Not your real name.</p>
     <button class="btn primary block" id="obGo" disabled>Create account</button>
     <p class="hint" style="text-align:center">Your username is public with your score. You can change it ${USERNAME_CHANGES} times.</p>`, { back: "welcome" });
-  const u = $("obU"), pw = $("obP"), um = $("obUMsg"), pm = $("obPMsg"), go = $("obGo");
+  const u = $("obU"), um = $("obUMsg"), go = $("obGo");
   let seq = 0, uok = false;
-  const set = (el, t, cls) => { el.textContent = t; el.className = "hint " + (cls || ""); };
-  const ready = () => (go.disabled = !(uok && !checkPassword(pw.value)));
+  const set = (t, cls) => { um.textContent = t; um.className = "hint " + (cls || ""); };
   const checkU = async () => {
-    const { name, error } = checkUsername(u.value), my = ++seq; uok = false; ready();
-    if (error) return set(um, u.value ? error : "3–20 letters, numbers, dots or underscores. Not your real name.", u.value ? "bad" : "");
-    set(um, `Checking @${name}…`);
-    try { const st = await usernameFree(name); if (my !== seq) return; uok = st === "free"; set(um, uok ? `@${name} is free.` : `@${name} is taken. If it's yours, log in instead.`, uok ? "good" : "bad"); }
-    catch { if (my === seq) { uok = true; set(um, `Couldn't check @${name} just now; you'll find out when you continue.`); } }
-    ready();
+    const { name, error } = checkUsername(u.value), my = ++seq; uok = false; go.disabled = true;
+    if (error) return set(u.value ? error : "3–20 letters, numbers, dots or underscores. Not your real name.", u.value ? "bad" : "");
+    set(`Checking @${name}…`);
+    try { const st = await usernameFree(name); if (my !== seq) return; uok = st === "free"; set(uok ? `@${name} is free.` : `@${name} is taken. If it's yours, log in instead.`, uok ? "good" : "bad"); }
+    catch { if (my === seq) { uok = true; set(`Couldn't check @${name} just now; you'll find out when you continue.`); } }
+    go.disabled = !uok;
   };
   let t = 0; u.oninput = () => { clearTimeout(t); t = setTimeout(checkU, 250); };
-  pw.oninput = () => { const e = checkPassword(pw.value); set(pm, pw.value ? e || "Good." : `At least ${PASSWORD_MIN} characters.`, pw.value ? (e ? "bad" : "good") : ""); ready(); };
-  go.onclick = async () => {
+  const submit = async () => {
+    if (go.disabled) return;
     go.disabled = true; go.textContent = "Creating…";
-    try { const n = await createAccountPassword(u.value, pw.value); haptic(); code(n); }
-    catch (e) { set(um, e.message || "Couldn't create the account. Try again.", "bad"); go.disabled = false; go.textContent = "Create account"; }
+    try { const n = await setUsername(u.value); haptic(); toast(`Welcome, @${n}.`); ls.get(SEEN) ? finish() : firstcall(); }
+    catch (e) { set(e.message || "Couldn't create the account. Try again.", "bad"); go.disabled = false; go.textContent = "Create account"; }
   };
+  go.onclick = submit; u.onkeydown = (e) => e.key === "Enter" && submit();
   setTimeout(() => u.focus(), 200);
 }
 
-// 2b · The recovery code, shown once
-async function code(name) {
-  const c = newRecoveryCode();
-  frame(`<div class="label">Welcome, @${esc(name)}</div>
-    <h1>Your recovery code</h1>
-    <p>The only way back in if you forget your password. Write it down or save it somewhere safe. It's shown once.</p>
-    <div class="ob-code num" id="obCode">${esc(c)}</div>
-    <button class="btn block" id="obCopy">Copy code</button>
-    <button class="btn primary block" id="obSaved" style="margin-top:8px">I've saved it</button>`);
-  try { await saveRecoveryCode(c); } catch { toast("Couldn't save the code yet. It will be saved with your account."); }
-  gate.querySelector("#obCopy").onclick = async () => { try { await navigator.clipboard.writeText(c); toast("Copied."); } catch { toast("Select the code and copy it."); } };
-  gate.querySelector("#obSaved").onclick = () => (ls.get(SEEN) ? finish() : firstcall());
-}
-
-// 2c · Log in
+// 2b · Log in: type the username, this phone joins that account
 function login() {
   frame(`<div class="label">Welcome back</div>
     <h1>Log in</h1>
-    ${field("obU", "Username", "user")}
-    ${field("obP", "Password", "pw")}<p class="hint bad" id="obMsg" hidden></p>
-    <button class="btn primary block" id="obGo">Log in</button>
-    <button class="btn ghost block" id="obForgot">Forgot your password?</button>`, { back: "welcome" });
-  const u = $("obU"), pw = $("obP"), msg = $("obMsg"), go = $("obGo");
-  const fail = (t) => { msg.hidden = false; msg.textContent = t; };
+    ${field("obU", "Username")}<p class="hint bad" id="obMsg" hidden></p>
+    <button class="btn primary block" id="obGo">Log in</button>`, { back: "welcome" });
+  const u = $("obU"), msg = $("obMsg"), go = $("obGo");
   const submit = async () => {
     go.disabled = true; msg.hidden = true; const was = go.textContent;
-    try { const n = await loginPassword(u.value, pw.value, (t) => (go.textContent = `${t}…`)); toast(`Welcome back, @${n}.`); haptic(); finish(); }
-    catch (e) { fail(e.message || "Couldn't log in."); go.disabled = false; go.textContent = was; }
+    try { const n = await loginUsername(u.value, (t) => (go.textContent = `${t}…`)); toast(`Welcome back, @${n}.`); haptic(); finish(); }
+    catch (e) { msg.hidden = false; msg.textContent = e.message || "Couldn't log in."; go.disabled = false; go.textContent = was; }
   };
-  go.onclick = submit; pw.onkeydown = (e) => e.key === "Enter" && submit();
-  gate.querySelector("#obForgot").onclick = () => show("reset");
+  go.onclick = submit; u.onkeydown = (e) => e.key === "Enter" && submit();
   setTimeout(() => u.focus(), 200);
-}
-
-// 2d · Forgot the password: username + recovery code + a new password
-function reset() {
-  frame(`<div class="label">Forgot your password</div>
-    <h1>Use your recovery code</h1>
-    <p>The 12-character code you saved when you made the account. Your new password is set within 15 minutes.</p>
-    ${field("obU", "Username", "user")}
-    ${field("obC", "Recovery code", "code")}
-    ${field("obP", "New password", "pw", "new-password")}<p class="hint bad" id="obMsg" hidden></p>
-    <button class="btn primary block" id="obGo">Set new password</button>`, { back: "login" });
-  const go = $("obGo"), msg = $("obMsg");
-  go.onclick = async () => {
-    go.disabled = true; msg.hidden = true; go.textContent = "Sending…";
-    try {
-      const st = await requestReset($("obU").value, $("obC").value, $("obP").value);
-      if (st === "done") { toast("Password changed. Log in with it."); show("login"); return; }
-      waiting($("obU").value);
-    } catch (e) { msg.hidden = false; msg.textContent = e.message; go.disabled = false; go.textContent = "Set new password"; }
-  };
-  setTimeout(() => $("obU").focus(), 200);
-}
-function waiting(name) {
-  frame(`<div class="label">Almost there</div><h1>Setting your new password</h1>
-    <p>This takes up to 15 minutes. Keep this page open, or come back and log in with the new password after that.</p>
-    <p class="hint" id="obSt">Waiting…</p><button class="btn block" id="obLogin">Go to log in</button>`);
-  gate.querySelector("#obLogin").onclick = () => show("login");
-  const poll = async () => {
-    if (!gate || !gate.querySelector("#obSt")) return;
-    const st = await resetStatus();
-    if (st === "done") { toast("Password changed. Log in with it."); show("login"); $("obU").value = name; return; }
-    if (st === "bad") { $("obSt").className = "hint bad"; $("obSt").textContent = "That username and code don't match. Check the code and try again."; return; }
-    setTimeout(poll, 20000);
-  };
-  setTimeout(poll, 20000);
-}
-
-// 2e · An account from before passwords: set one now
-function setpw() {
-  frame(`<div class="label">Hi @${esc(store.data.username)}</div>
-    <h1>Add a password</h1>
-    <p>${esc(CONFIG.appName)} accounts now have a password, so only you can open yours. You'll also get a recovery code.</p>
-    ${field("obP", "Password", "pw", "new-password")}<p class="hint" id="obPMsg">At least ${PASSWORD_MIN} characters.</p>
-    <button class="btn primary block" id="obGo" disabled>Save password</button>
-    <button class="btn ghost block" id="obLater">Later</button>`);
-  const pw = $("obP"), pm = $("obPMsg"), go = $("obGo");
-  gate.querySelector("#obLater").onclick = () => { ls.set(SETPW_LATER, Date.now()); finish(); }; // asked again next day
-  pw.oninput = () => { const e = checkPassword(pw.value); pm.textContent = pw.value ? e || "Good." : `At least ${PASSWORD_MIN} characters.`; pm.className = "hint " + (pw.value ? (e ? "bad" : "good") : ""); go.disabled = !!e; };
-  go.onclick = async () => {
-    go.disabled = true; go.textContent = "Saving…";
-    try { await setPassword(pw.value); haptic(); code(store.data.username); }
-    catch (e) { pm.textContent = e.message; pm.className = "hint bad"; go.disabled = false; go.textContent = "Save password"; }
-  };
-  setTimeout(() => pw.focus(), 200);
 }
 
 // 3 · The first call: Bitcoin in an hour, higher or lower, then a size. Scored in an hour, by notification.

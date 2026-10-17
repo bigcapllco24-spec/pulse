@@ -692,7 +692,7 @@ export function applyTheme() {
   });
   $("alertDot").hidden = !store.alerts.some((a) => !a.read);
   buildFeed();
-  const named = new Promise((r) => startOnboarding(r)); // a new account is made first (welcome, username + password, first call)
+  const named = new Promise((r) => startOnboarding(r)); // a new account is made first (welcome, username, first call)
   if (/^#\/(g\/|predict)/.test(location.hash)) named.then(() => openLink()); // a group's invite link, or a push about a challenge
   addEventListener("hashchange", () => { if (/^#\/(g\/|predict)/.test(location.hash)) named.then(() => openLink()); });
   await doRefresh(false);

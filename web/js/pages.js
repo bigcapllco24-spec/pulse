@@ -1,7 +1,7 @@
 // Coins (watchlists and alerts), the settings pages opened from the avatar sheet, sheets (add coins, watchlists,
 // switcher, chart, indicators, lines), Your market, the settings pages and Learn. The Calls tab and people live in play.js.
 import { CONFIG } from "../config.js";
-import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, listFeedback, setFeedbackStatus, myUid, hasPassword, ownsSignIn, setPassword, newRecoveryCode, saveRecoveryCode, signOutDevice, PASSWORD_MIN } from "./store.js";
+import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, listFeedback, setFeedbackStatus, myUid, signOutDevice } from "./store.js";
 import { leaveAllGroups, deleteMySocial } from "./social.js";
 import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
@@ -395,49 +395,19 @@ function withUsername(fn) {
 }
 
 function pAccount(el, back) {
-  const n = store.data?.username, pw = hasPassword();
+  const n = store.data?.username;
   el.innerHTML = `${back}<h1>Account</h1>
-    <p>Your account is a username and a password, nothing else: no name, email or phone number${store.mode === "demo" ? " (demo mode)" : ""}.</p>
+    <p>Your account is just a username: no name, email, phone number or password${store.mode === "demo" ? " (demo mode)" : ""}.</p>
     <h2>Username</h2><p class="dline">${n ? `@${esc(n)} · ${usernameChangesLeft()} change${usernameChangesLeft() === 1 ? "" : "s"} left` : "Not set yet."} <button class="btn ghost sm" id="aName">${n ? "Change" : "Add"}</button></p>
-    <h2>Password</h2><p class="dline">${pw ? "Set." : "Not set yet."} <button class="btn ghost sm" id="aPw">${pw ? "Change" : "Set a password"}</button></p>
-    <h2>Recovery code</h2><p class="dline">${store.data?.recoveryHash ? `Saved ${esc(fmtDay(String(store.data.recoveryAt || "").slice(0, 10)))}.` : "None yet."} <button class="btn ghost sm" id="aCode">New code</button></p><p class="hint">The only way back in if you forget your password. A new code replaces the old one.</p>
-    <h2>Sign out</h2><p class="dline"><button class="btn sm" id="aOut">Sign out on this phone</button></p><p class="hint">Your account stays. Log in with your username and password to open it again, here or on another phone.</p>
+    <h2>Sign out</h2><p class="dline"><button class="btn sm" id="aOut">Sign out on this phone</button></p><p class="hint">Your account stays. Log in with your username to open it again, here or on another phone.</p>
     <h2>Delete</h2><button class="btn danger" id="del">Delete my account and all its data</button>
     <h2>Sign-in id</h2><p class="dline"><code class="uid">${esc(myUid() || "connecting…")}</code> <button class="btn ghost sm" id="aUid">Copy</button></p><p class="hint">Only needed if you help run the app: an admin adds it to the admins list.</p>
     <h2>App version</h2><p class="dline">${esc(CONFIG.appName)} ${esc(CONFIG.version)}</p>`;
   const re = () => { pAccount(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
   el.querySelector("#aUid").onclick = () => navigator.clipboard?.writeText(myUid() || "").then(() => toast("Copied."), () => toast("Couldn't copy."));
   el.querySelector("#aName").onclick = () => openUsernameSheet(re);
-  el.querySelector("#aPw").onclick = () => openPasswordSheet(re);
-  el.querySelector("#aCode").onclick = () => openRecoverySheet(re);
-  el.querySelector("#aOut").onclick = () => { if (confirm("Sign out on this phone? You'll need your username and password to open the account again.")) signOutDevice(); };
+  el.querySelector("#aOut").onclick = () => { if (confirm("Sign out on this phone? Log in with your username to open the account again.")) signOutDevice(); };
   el.querySelector("#del").onclick = async () => { if (confirm("Delete your account, watchlists, rules, alerts, predictions and groups? This can't be undone.")) await deleteAccount(leaveAllGroups, deleteMySocial); };
-}
-// Set or change the password (1.2.0). Changing asks for the current one.
-export function openPasswordSheet(onDone) {
-  const has = hasPassword();
-  if (!ownsSignIn()) { toast("Passwords can only be set on the phone this account was made on.", { ms: 5000 }); return; }
-  openSheet(has ? "Change password" : "Set a password", `${has ? `<label class="field"><span>Current password</span><div class="uname"><input id="pwCur" type="password" autocomplete="current-password"></div></label>` : ""}
-    <label class="field"><span>${has ? "New password" : "Password"}</span><div class="uname"><input id="pwNew" type="password" autocomplete="new-password"></div></label>
-    <p class="hint" id="pwMsg">At least ${PASSWORD_MIN} characters.</p>
-    <button class="btn primary block" id="pwGo">${has ? "Change password" : "Save password"}</button>`, (body) => {
-    const go = body.querySelector("#pwGo"), msg = body.querySelector("#pwMsg");
-    go.onclick = async () => {
-      go.disabled = true;
-      try { await setPassword(body.querySelector("#pwNew").value, body.querySelector("#pwCur")?.value || null); closeSheet(); toast(has ? "Password changed." : "Password set."); onDone?.(); }
-      catch (e) { msg.textContent = e.message; msg.className = "hint bad"; go.disabled = false; }
-    };
-    setTimeout(() => body.querySelector(has ? "#pwCur" : "#pwNew").focus(), 250);
-  });
-}
-// A new recovery code (1.2.0), shown once; it replaces the old one.
-export function openRecoverySheet(onDone) {
-  const c = newRecoveryCode();
-  openSheet("Your new recovery code", `<p>Write it down or save it somewhere safe. It's shown once and replaces any older code.</p>
-    <div class="ob-code num">${esc(c)}</div><button class="btn block" id="rcCopy" style="margin-top:12px">Copy code</button><button class="btn primary block" id="rcSave" style="margin-top:8px">I've saved it</button>`, (body) => {
-    body.querySelector("#rcCopy").onclick = async () => { try { await navigator.clipboard.writeText(c); toast("Copied."); } catch { toast("Select the code and copy it."); } };
-    body.querySelector("#rcSave").onclick = async () => { try { await saveRecoveryCode(c); closeSheet(); toast("Recovery code saved."); onDone?.(); } catch (e) { toast(e.message); } };
-  });
 }
 // Learn (1.2.0): six short reads on what a score can and can't tell you before money goes in. Facts only.
 const READS = [

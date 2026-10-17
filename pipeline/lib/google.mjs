@@ -21,7 +21,7 @@ export function serviceAccount(json) {
     if (token && Date.now() < exp - 60000) return token;
     const now = Math.floor(Date.now() / 1000);
     const head = enc({ alg: "RS256", typ: "JWT" });
-    const claim = enc({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging https://www.googleapis.com/auth/identitytoolkit",
+    const claim = enc({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging",
       aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 });
     const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", await importKey(sa.private_key), new TextEncoder().encode(`${head}.${claim}`));
     const r = await fetch("https://oauth2.googleapis.com/token", {

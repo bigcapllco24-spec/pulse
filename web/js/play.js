@@ -747,7 +747,7 @@ export function openAvatarSheet() {
     </div>
     <div class="label pg">Sharing</div><div class="hl">${row("lists", "Shared lists", "Follow a list of coins with friends")}</div>
     <div class="label pg">App</div><div class="hl">
-      ${row("account", "Account", `Username (${esc(u ? "@" + u : "not set")}), password, recovery code, sign out`)}
+      ${row("account", "Account", `Username (${esc(u ? "@" + u : "not set")}), sign out`)}
       ${row("appearance", "Appearance", "Dark, light or match phone")}
       ${row("feedback", "Give feedback", "Hold anything for 3 seconds, or switch on tap-to-comment")}
       ${row("legal", "Legal and disclaimer", "Terms, privacy, grievance contact")}

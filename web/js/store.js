@@ -6,7 +6,7 @@ import { HORIZONS, checkPrediction, canPredict, profileScore, dueAt, relabel } f
 import { settle, rowCache, SETTLE_DELAY } from "./predict.js";
 
 const FB = "https://www.gstatic.com/firebasejs/10.14.1/";
-const LS = { code: "pl.code", demoPw: "pl.demoPw", demoOut: "pl.demoOut", demo: "pl.demoAccount", demoAlerts: "pl.demoAlerts", demoLists: "pl.demoLists", hidden: "pl.hidden", demoPreds: "pl.demoPreds", preds: "pl.preds" };
+const LS = { code: "pl.code", demoOut: "pl.demoOut", demo: "pl.demoAccount", demoAlerts: "pl.demoAlerts", demoLists: "pl.demoLists", hidden: "pl.hidden", demoPreds: "pl.demoPreds", preds: "pl.preds" };
 const ls = {
   get(k, d = null) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
@@ -278,130 +278,8 @@ export function signOutDevice() {
   if (!fb) return done();
   fb.auth.signOut().catch(() => {}).then(done); // the next visit starts as a fresh anonymous sign-in
 }
-
-// ---- password sign-in (1.2.0). An account is a username and a password, nothing else: the password lives in
-// Firebase's own sign-in (email + password, the "email" being <username>@pulse.app, never shown or mailed), so it is
-// never stored where the app could read it. There is no email, so there is no reset: a one-time recovery code, kept as
-// a hash on the account, lets the data job set a new password (see requestReset).
-const EMAIL = (name) => `${name}@pulse.app`;
-export const PASSWORD_MIN = 8;
-export function checkPassword(pw) {
-  if (typeof pw !== "string" || pw.length < PASSWORD_MIN) return `At least ${PASSWORD_MIN} characters.`;
-  if (pw.length > 100) return "At most 100 characters.";
-  return null;
-}
-const authError = (e) => {
-  const c = e?.code || "";
-  if (/wrong-password|invalid-credential|invalid-login-credentials/.test(c)) return "Wrong password.";
-  if (/user-not-found/.test(c)) return "No account with that username.";
-  if (/too-many-requests/.test(c)) return "Too many tries. Wait a few minutes and try again.";
-  if (/network-request-failed/.test(c)) return "Couldn't reach the server. Check your connection.";
-  if (/email-already-in-use|credential-already-in-use/.test(c)) return "That username is taken. Try another.";
-  if (/weak-password/.test(c)) return `At least ${PASSWORD_MIN} characters.`;
-  if (/requires-recent-login/.test(c)) return "Please sign in again, then change your password.";
-  if (/operation-not-allowed/.test(c)) return "Password sign-in isn't switched on yet.";
-  return e?.message || "Something went wrong. Try again.";
-};
-// Does this sign-in have a password? (Accounts from before 1.2.0 were username only.)
 export const signedOut = () => store.mode === "demo" && !!ls.get(LS.demoOut);
-export const hasPassword = () => (store.mode === "demo" ? !!ls.get(LS.demoPw) : !!fb?.auth?.currentUser?.providerData?.some((p) => p.providerId === "password"));
-// Can a password be set here? Only on the sign-in that owns the account, not on a phone that opened it by username.
-export const ownsSignIn = () => store.mode === "demo" || (!!store.id && fb?.auth?.currentUser?.uid === store.id);
-// Create an account: the password is attached to this phone's anonymous sign-in (keeping its id, which is the account
-// id), then the username is claimed and the account written. If the name turns out to be taken, the password is detached again.
-export async function createAccountPassword(rawName, pw) {
-  const { name, error } = checkUsername(rawName);
-  if (error) throw new Error(error);
-  const pe = checkPassword(pw); if (pe) throw new Error(pe);
-  if (store.mode === "demo") { if (ls.get(LS.demoOut)) { ls.del(LS.demoOut); ls.del(LS.demoPreds); store.data = DEFAULT_ACCOUNT(); store.preds = []; store.results = []; } await setUsername(name); ls.set(LS.demoPw, await sha256hex(pw)); return name; }
-  await within(loadFirebase());
-  const { auth, authMod } = fb;
-  if (hasPassword()) throw new Error("This phone already has an account. Sign out first to make another.");
-  try { await within(authMod.linkWithCredential(auth.currentUser, authMod.EmailAuthProvider.credential(EMAIL(name), pw)), 15000); }
-  catch (e) { throw new Error(authError(e)); }
-  try { await setUsername(name); }
-  catch (e) { await authMod.unlink(auth.currentUser, "password").catch(() => {}); throw e; }
-  return name;
-}
-// Log in with a username and password. Firebase swaps this phone's sign-in for the account's own, so the account id
-// is the sign-in id again and the old "devices" list is never needed.
-export async function loginPassword(rawName, pw, step = () => {}) {
-  const { name, error } = checkUsername(rawName);
-  if (error) throw new Error(error);
-  if (!pw) throw new Error("Enter your password.");
-  if (store.mode === "demo") {
-    const h = ls.get(LS.demoPw);
-    if (!store.data?.username || store.data.username !== name) throw new Error("No account with that username.");
-    if (h && h !== (await sha256hex(pw))) throw new Error("Wrong password.");
-    ls.del(LS.demoOut); store.emit("account");
-    return name;
-  }
-  step("Signing in");
-  await within(loadFirebase());
-  const { auth, authMod } = fb;
-  try { await within(authMod.signInWithEmailAndPassword(auth, EMAIL(name), pw), 15000); }
-  catch (e) {
-    if (/user-not-found|invalid-credential|invalid-login-credentials/.test(e?.code || "")) {
-      // a username from before passwords: its account exists but has no password yet
-      const u = await fb.f.getDoc(fb.f.doc(fb.db, "usernames", name)).catch(() => null);
-      if (u?.exists() && !/invalid-credential|invalid-login/.test(e?.code || "")) throw new Error(`@${name} has no password yet. Open Pulse on the phone it was made on and set one in Settings.`);
-    }
-    throw new Error(authError(e));
-  }
-  step("Opening your account");
-  ls.del(LSLINK); ls.del(LSACC); ls.del(LSALERTS); ls.del(LS.preds);
-  store.id = null; newId = null; store.preds = []; store.results = []; store.alerts = [];
-  fb.unsubs.forEach((u) => u()); fb.unsubs = [];
-  connecting = connect(); await within(connecting, 15000);
-  if (!store.id) throw new Error("Couldn't open the account. Check your connection and try again.");
-  return name;
-}
-// Set a password on an account that has none (from before 1.2.0), or change it (the current one is asked for).
-export async function setPassword(pw, current = null) {
-  const pe = checkPassword(pw); if (pe) throw new Error(pe);
-  if (store.mode === "demo") { ls.set(LS.demoPw, await sha256hex(pw)); return; }
-  if (!ownsSignIn()) throw new Error("Passwords can only be set on the phone this account was made on.");
-  const { auth, authMod } = fb, user = auth.currentUser, name = store.data?.username;
-  if (!name) throw new Error("Pick a username first.");
-  try {
-    if (!hasPassword()) await authMod.linkWithCredential(user, authMod.EmailAuthProvider.credential(EMAIL(name), pw));
-    else {
-      if (current) await authMod.reauthenticateWithCredential(user, authMod.EmailAuthProvider.credential(EMAIL(name), current));
-      await authMod.updatePassword(user, pw);
-    }
-  } catch (e) { throw new Error(authError(e)); }
-}
-// Recovery code: 12 letters and digits, shown once. Only its hash is kept, on the account.
-const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-export const newRecoveryCode = () => [...crypto.getRandomValues(new Uint8Array(12))].map((x) => CODE_CHARS[x % CODE_CHARS.length]).join("").replace(/(.{4})(?=.)/g, "$1-");
-const normCode = (c) => String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-export async function saveRecoveryCode(code) { await save({ recoveryHash: await sha256hex(normCode(code)), recoveryAt: new Date().toISOString() }); }
-// Forgot the password: with the username and recovery code, the data job (which runs every 15 minutes) checks the
-// code and sets the new password. The request is written under this phone's sign-in; the job deletes the password
-// from it as soon as it has acted, and the request can be read only by this phone.
-export async function requestReset(rawName, code, pw) {
-  const { name, error } = checkUsername(rawName);
-  if (error) throw new Error(error);
-  if (normCode(code).length !== 12) throw new Error("The recovery code is 12 letters and digits.");
-  const pe = checkPassword(pw); if (pe) throw new Error(pe);
-  if (store.mode === "demo") {
-    if (store.data?.username !== name) throw new Error("No account with that username.");
-    if (store.data.recoveryHash !== (await sha256hex(normCode(code)))) throw new Error("That code doesn't match.");
-    ls.set(LS.demoPw, await sha256hex(pw)); ls.del(LS.demoOut); return "done";
-  }
-  await within(loadFirebase());
-  const { db, f, auth } = fb, id = auth.currentUser.uid;
-  await f.setDoc(f.doc(db, "resets", id), { name, codeHash: await sha256hex(normCode(code)), pw, status: "waiting", at: f.serverTimestamp() });
-  return "waiting";
-}
-export async function resetStatus() {
-  if (store.mode === "demo" || !fb) return null;
-  const d = await fb.f.getDoc(fb.f.doc(fb.db, "resets", fb.auth.currentUser.uid)).catch(() => null);
-  return d?.exists() ? d.data().status : null;
-}
 
-// ---- username: a public display name, set once and changed at most twice more (three names in total).
-// Names are unique: usernames/{name} points at the account that holds it. firestore.rules enforces the limit.
 export const USERNAME_CHANGES = 2;
 export const usernameChangesLeft = () => (store.data?.username ? USERNAME_CHANGES - (store.data.usernameChanges || 0) : USERNAME_CHANGES + 1);
 const RESERVED = /^(admin|administrator|pulse|support|help|official|moderator|mod|team|staff|root|system|null|undefined)$/;
@@ -436,9 +314,35 @@ export async function usernameFree(name) {
   // a name can also be free again if the account that held it no longer exists; the save finds out
   return !acct || acct === store.id ? "free" : "held";
 }
+// Log in by username (MVP: the username alone opens the account; a password or Google sign-in comes later).
+// This phone's sign-in is added to the account's devices, and the rules let any listed device use the account.
+// A name whose account no longer exists is claimed for this phone instead, as a new username.
+export async function loginUsername(raw, step = () => {}) {
+  const { name, error } = checkUsername(raw);
+  if (error) throw new Error(error);
+  if (store.mode === "demo") { if (!store.data?.username || store.data.username !== name) throw new Error("No account with that username."); ls.del(LS.demoOut); store.emit("account"); return name; }
+  // only the sign-in is needed, not the account load that may still be running; every step gives up in time
+  const go = async (label, p, ms = 10000) => { step(label); try { return await within(p, ms); } catch (e) { if (e.message === "timeout") throw new Error(`${label} took too long. Check your connection and tap again.`); throw e; } };
+  await go("Signing in", loadFirebase());
+  const { db, f, auth } = fb, me = auth.currentUser.uid;
+  const u = await go(`Finding @${name}`, f.getDoc(f.doc(db, "usernames", name)));
+  if (!u.exists()) return setUsername(name);
+  const acct = u.data().acct, ref = f.doc(db, "accounts", acct);
+  if (acct !== me) {
+    try { await go("Adding this phone to the account", f.updateDoc(ref, { devices: f.arrayUnion(me) })); }
+    catch (e) { if (/too long/.test(e.message)) throw e; return setUsername(name); } // the account is gone (the rules refuse): claim the name here
+  }
+  const snap = await go("Opening your account", f.getDoc(ref));
+  if (!snap.exists()) return setUsername(name);
+  ls.set(LSLINK, acct); newId = null;
+  store.data = { ...DEFAULT_ACCOUNT(), ...snap.data() };
+  attach(acct, ref);
+  return name;
+}
 export async function setUsername(raw) {
   const { name, error } = checkUsername(raw);
   if (error) throw new Error(error);
+  if (store.mode === "demo" && ls.get(LS.demoOut)) { ls.del(LS.demoOut); ls.del(LS.demoPreds); store.data = DEFAULT_ACCOUNT(); store.preds = []; store.results = []; }
   const old = store.data?.username || null;
   if (old === name) return name;
   if (usernameChangesLeft() <= 0) throw new Error("You've used all your username changes.");

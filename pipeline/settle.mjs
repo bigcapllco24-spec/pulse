@@ -5,7 +5,6 @@
 import { serviceAccount, firestore, sendPush } from "./lib/google.mjs";
 import { settleOpen, runRows } from "./lib/predictions.mjs";
 import { settleChallenges, pusher } from "./lib/challenges.mjs";
-import { processResets } from "./lib/resets.mjs";
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 if (!process.env.FIREBASE_SERVICE_ACCOUNT) { log("No FIREBASE_SERVICE_ACCOUNT: nothing to settle"); process.exit(0); }
@@ -15,5 +14,4 @@ const site = (process.env.SITE_URL || "https://bigcapllco24-spec.github.io/pulse
 try {
   await settleOpen(db, { log, rows });
   await settleChallenges(db, { log, rows, notify: pusher(db, sa, sendPush, site) });
-  await processResets(db, sa, { log }); // forgotten passwords, with the recovery code
 } catch (e) { console.error(e); process.exit(1); }

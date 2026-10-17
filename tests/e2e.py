@@ -48,11 +48,11 @@ def new_ctx(b, w=390, h=844, **kw):
     p.on("pageerror", lambda e: errs.append(str(e))); p.on("dialog", lambda d: d.accept())
     return ctx, p, errs
 
-def onboard(p, name="chart_fan", pw="hunter2hunter", first_call=False):
-    """A new phone: welcome → create account → recovery code → first call (made or skipped)."""
+def onboard(p, name="chart_fan", first_call=False):
+    """A new phone: welcome → create account (username) → first call (made or skipped)."""
     p.goto(BASE); p.wait_for_timeout(2500)
     if not p.locator("#obNew").count(): return
-    p.click("#obNew"); p.fill("#obU", name); p.fill("#obP", pw); p.wait_for_timeout(500); p.click("#obGo"); p.wait_for_timeout(800); p.click("#obSaved"); p.wait_for_timeout(2500)
+    p.click("#obNew"); p.fill("#obU", name); p.wait_for_timeout(500); p.click("#obGo"); p.wait_for_timeout(2500)
     if first_call and p.locator("#obGo").count(): p.click("#obGo"); p.wait_for_timeout(900); p.click("#obGo"); p.wait_for_timeout(700)
     elif p.locator("#obSkip").count(): p.click("#obSkip"); p.wait_for_timeout(600)
     p.wait_for_timeout(800)
@@ -73,7 +73,7 @@ def fake_results(n, pub=True):
 def sheet_text(p): return p.inner_text("#sheet")
 def close_sheet(p): p.click("#sheet [data-close]"); p.wait_for_timeout(400)
 
-# ---------- 1. the first run: welcome, account, recovery code, first call, locked in; then sign out and log in
+# ---------- 1. the first run: welcome, username, first call, locked in; then sign out and log in
 def onboarding_test(b):
     ctx, p, errs = new_ctx(b)
     p.goto(BASE); p.wait_for_timeout(2500)
@@ -82,15 +82,14 @@ def onboarding_test(b):
     tabs = p.evaluate("[...document.querySelectorAll('.tabbar button')].map(b=>b.dataset.tab+':'+b.textContent.trim()).join()")
     check("start: the app's tabs are Feed, Calls and You, with the feed on the left", tabs == "feed:Feed,play:Calls,you:You", tabs)
     p.click("#obNew"); p.wait_for_timeout(300)
-    p.fill("#obU", "ab"); p.fill("#obP", "short"); p.wait_for_timeout(450)
-    check("account: a short username or password is refused before anything is sent", p.is_disabled("#obGo") and "3 to 20" in p.inner_text("#obUMsg") and "8" in p.inner_text("#obPMsg"), p.inner_text("#obUMsg") + " / " + p.inner_text("#obPMsg"))
-    p.fill("#obU", "chart_fan"); p.fill("#obP", "hunter2hunter"); p.wait_for_timeout(500)
-    check("account: a free username and a long enough password enable Create account", not p.is_disabled("#obGo") and "free" in p.inner_text("#obUMsg"))
-    p.click("#obGo"); p.wait_for_timeout(900)
-    code = p.inner_text("#obCode").strip()
+    check("account: only a username is asked for (no password field)", p.locator("#gate input").count() == 1 and not p.locator("#gate input[type=password]").count())
+    p.fill("#obU", "ab"); p.wait_for_timeout(450)
+    check("account: a short username is refused before anything is sent", p.is_disabled("#obGo") and "3 to 20" in p.inner_text("#obUMsg"), p.inner_text("#obUMsg"))
+    p.fill("#obU", "chart_fan"); p.wait_for_timeout(500)
+    check("account: a free username enables Create account", not p.is_disabled("#obGo") and "free" in p.inner_text("#obUMsg"))
+    p.click("#obGo"); p.wait_for_timeout(2500)
     acct = p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount'))")
-    check("account: the recovery code is shown once (12 letters and digits) and only its hash is saved", re.fullmatch(r"[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}", code) is not None and acct.get("username") == "chart_fan" and len(acct.get("recoveryHash", "")) == 64 and code not in json.dumps(acct), code)
-    p.click("#obSaved"); p.wait_for_timeout(2500)
+    check("account: the username is saved on the account", acct.get("username") == "chart_fan", json.dumps(acct)[:120])
     g = p.inner_text("#gate")
     check("first call: Bitcoin in an hour, higher or lower, three sizes with prices", "Bitcoin be in an hour" in g and p.is_visible("[data-dir='1']") and p.locator("#obSizes [data-k]").count() == 3 and "$" in p.inner_text("#obSizes"), g[:160].replace("\n", " "))
     p.click("[data-dir='-1']"); p.wait_for_timeout(200); p.click("#obSizes [data-k='2']"); p.wait_for_timeout(200)
@@ -104,22 +103,17 @@ def onboarding_test(b):
     check("first call: Explore closes the gate on the feed, on the first coin (no recap card)", not p.locator("#gate").count() and active(p)[0] == "BTC" and active(p)[2] == 0, str(active(p)))
     card = p.inner_text(".card.active")
     check("feed: the card says a call is waiting under Call it, and draws the call on the chart", "1 call waiting" in card and p.locator(".card.active .lvtag.c").count() == 1, card[:120].replace("\n", " "))
-    # sign out, then log in with the password
+    # sign out, then log in with the username
     p.click(".tabbar [data-tab=you]"); p.wait_for_timeout(600); p.click("#youSet"); p.wait_for_timeout(600); p.click("#sheet [data-av=account]"); p.wait_for_timeout(800)
     t = p.inner_text("#profile")
-    check("settings: Account shows the username, a set password, a saved recovery code and Sign out", "@chart_fan" in t and "Set." in t and "Saved" in t and p.is_visible("#aOut"), t[:160].replace("\n", " "))
+    check("settings: Account shows the username and Sign out, and no password", "@chart_fan" in t and p.is_visible("#aOut") and not p.locator("#aPw").count(), t[:160].replace("\n", " "))
     p.click("#aOut"); p.wait_for_timeout(3000)
     check("sign out: the phone forgets the account and shows the welcome screen again", p.is_visible("#gate") and p.is_visible("#obHave"))
-    p.click("#obHave"); p.wait_for_timeout(300); p.fill("#obU", "chart_fan"); p.fill("#obP", "wrongwrong1"); p.click("#obGo"); p.wait_for_timeout(800)
-    check("log in: a wrong password is refused", "Wrong password" in p.inner_text("#obMsg"), p.inner_text("#obMsg"))
-    p.fill("#obP", "hunter2hunter"); p.click("#obGo"); p.wait_for_timeout(1500)
-    check("log in: the right password opens the account", not p.locator("#gate").count(), "")
-    # forgot the password: username + recovery code + a new password (demo: at once; live: the 15-minute job)
-    p.click(".tabbar [data-tab=you]"); p.wait_for_timeout(500); p.click("#youSet"); p.wait_for_timeout(500); p.click("#sheet [data-av=account]"); p.wait_for_timeout(600); p.click("#aOut"); p.wait_for_timeout(3000)
-    p.click("#obHave"); p.wait_for_timeout(300); p.click("#obForgot"); p.wait_for_timeout(300)
-    p.fill("#obU", "chart_fan"); p.fill("#obC", code.lower()); p.fill("#obP", "newpassword9"); p.click("#obGo"); p.wait_for_timeout(1000)
-    p.fill("#obU", "chart_fan"); p.fill("#obP", "newpassword9"); p.click("#obGo"); p.wait_for_timeout(1500)
-    check("forgot password: the recovery code sets a new password, which then logs in", not p.locator("#gate").count(), p.inner_text("#gate")[:120] if p.locator("#gate").count() else "")
+    p.click("#obHave"); p.wait_for_timeout(300)
+    check("log in: only a username is asked for", p.locator("#gate input").count() == 1 and not p.locator("#gate input[type=password]").count())
+    p.fill("#obU", "chart_fan"); p.press("#obU", "Enter"); p.wait_for_timeout(1500)
+    pr = demo_preds(p).get("open", [])
+    check("log in: the username opens the account again, with its open call", not p.locator("#gate").count() and len(pr) == 1, json.dumps(pr)[:100])
     check("start: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
@@ -217,18 +211,12 @@ def you_test(b):
     check("learn: six short reads on what a score doesn't show", "Before you put money in" in l and p.locator("#profile .dsec.read").count() == 6 and "Leverage" in l, l[:120].replace("\n", " "))
     p.click("#pBack"); p.wait_for_timeout(500)
     check("learn: Back returns to You", p.is_visible("#sYou"))
-    # settings: public calls default, password change, recovery code
+    # settings: public calls default
     p.click("#youSet"); p.wait_for_timeout(600)
     s = sheet_text(p)
-    check("settings: has the public-calls default, Account (password, recovery code, sign out), and no tour", "My scored calls are public" in s and "password" in s and "tour" not in s.lower(), s[:200].replace("\n", " "))
+    check("settings: has the public-calls default, Account (sign out), and no password or tour", "My scored calls are public" in s and "sign out" in s and "password" not in s.lower() and "tour" not in s.lower(), s[:200].replace("\n", " "))
     p.click("#avCalls"); p.wait_for_timeout(400)
     check("settings: switching public calls off is saved as the default for new calls", p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount')).callsPublic") is False)
-    p.click("#sheet [data-av=account]"); p.wait_for_timeout(700); p.click("#aPw"); p.wait_for_timeout(500)
-    p.fill("#pwCur", "hunter2hunter"); p.fill("#pwNew", "evenlonger12"); p.click("#pwGo"); p.wait_for_timeout(600)
-    check("settings: the password can be changed with the current one", not p.is_visible("#sheet"))
-    p.click("#aCode"); p.wait_for_timeout(500); code = p.inner_text("#sheet .ob-code").strip(); p.click("#rcSave"); p.wait_for_timeout(500)
-    acct = p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount'))")
-    check("settings: a new recovery code replaces the old one and is saved as a hash", re.fullmatch(r"[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}", code) is not None and len(acct.get("recoveryHash", "")) == 64 and code not in json.dumps(acct))
     check("you: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
@@ -288,7 +276,7 @@ def screens_test(b):
         p.goto(BASE); p.wait_for_timeout(2000)
         bad = {"welcome": p.evaluate(over, "#gate")}
         p.click("#obNew"); p.wait_for_timeout(300); bad["create"] = p.evaluate(over, "#gate")
-        p.fill("#obU", "sizer"); p.fill("#obP", "hunter2hunter"); p.wait_for_timeout(500); p.click("#obGo"); p.wait_for_timeout(800); bad["code"] = p.evaluate(over, "#gate"); p.click("#obSaved"); p.wait_for_timeout(2500)
+        p.fill("#obU", "sizer"); p.wait_for_timeout(500); p.click("#obGo"); p.wait_for_timeout(2500)
         if p.locator("#obSizes").count(): bad["first call"] = p.evaluate(over, "#gate"); p.evaluate("document.querySelector('#obSkip').click()")
         p.wait_for_timeout(1000)
         if theme == "light":
