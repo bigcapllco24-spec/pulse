@@ -1,7 +1,7 @@
 // Coins (watchlists and alerts), the settings pages opened from the avatar sheet, sheets (add coins, watchlists,
-// switcher, chart, indicators, lines) and the username step. The Predict tab and people live in play.js.
+// switcher, chart, indicators, lines), Your market, the settings pages and Learn. The Calls tab and people live in play.js.
 import { CONFIG } from "../config.js";
-import { store, save, chartSettings, setUsername, loginUsername, checkUsername, usernameFree, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, listFeedback, setFeedbackStatus, myUid } from "./store.js";
+import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, listFeedback, setFeedbackStatus, myUid, hasPassword, ownsSignIn, setPassword, newRecoveryCode, saveRecoveryCode, signOutDevice, PASSWORD_MIN } from "./store.js";
 import { leaveAllGroups, deleteMySocial } from "./social.js";
 import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
@@ -10,7 +10,6 @@ import { OVERLAYS, PANELS, MAX_OVERLAYS, maxPanels, SETS, picks } from "./studie
 import { D, view, storiesFor, RANGE_LABEL, resolveInterval, dailyOf } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, haptic, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
 import { openLearn } from "./interact.js";
-import { startTour } from "./coach.js";
 import { APP, buildFeed, showTab, currentSyms, applyTheme, doRefresh } from "./app.js";
 import { openAvatarSheet, backFromProfile } from "./play.js";
 
@@ -28,7 +27,7 @@ export function initPages() {
 // ---------- add-stock sheet: search, then choose watchlists
 export function openAddSheet(prefill = "") {
   const curList = store.data?.settings?.list;
-  openSheet("Add a coin", "", (body) => { mountSearch(body, prefill); setTimeout(() => startTour("add"), 350); },
+  openSheet("Add a coin", "", (body) => { mountSearch(body, prefill); },
     () => { const added = APP.lastAdded; buildFeed({ keepKey: added || APP.seq[APP.active]?.sym?.key }); APP.lastAdded = null;
       if (added && !D.series[added]) doRefresh(false).then(() => { if (APP.tab === "dash") renderDash(); }); }); // fetch prices for a newly added coin
 
@@ -136,57 +135,57 @@ export function openListsFor(sym) {
 }
 
 // Switch between "All my coins" and one watchlist
-export function openSwitcher() {
+export function openSwitcher(onDone = () => buildFeed()) {
   const cur = store.data?.settings?.list || "all";
   const all = allSyms().length;
-  openSheet("Show in feed", `${[["all", "All my coins", all], ...watchlists().map((w) => [w.id, w.name, (w.syms || []).length])].map(([id, name, n]) =>
-    `<button class="row" data-l="${esc(id)}"><span class="main"><span class="t">${esc(name)}</span><span class="s">${n} symbol${n === 1 ? "" : "s"}</span></span>${id === cur ? `<span style="color:var(--accent);font-weight:800">✓</span>` : ""}</button>`).join("")}
-    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn sm" id="nwl">New watchlist</button><button class="btn sm" id="mwl">Manage</button></div>
+  openSheet("Show in your feed", `<p class="hint" style="margin:0 0 8px">Pick a watchlist. The feed and Your market follow it.</p>${[["all", "All my coins", all, ""], ...watchlists().map((w) => [w.id, w.name, (w.syms || []).length, ""]), ...[...store.lists.values()].map((l) => [l.id, l.name, (l.symbols || []).length, "Shared"])].map(([id, name, n, tag]) =>
+    `<button class="row" data-l="${esc(id)}"><span class="main"><span class="t">${esc(name)}${tag ? ` <span class="pill">${tag}</span>` : ""}</span><span class="s">${n} coin${n === 1 ? "" : "s"}</span></span>${id === cur ? `<span style="color:var(--accent);font-weight:800">✓</span>` : ""}</button>`).join("")}
+    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn sm" id="nwl">New watchlist</button><button class="btn sm" id="mwl">Share a list</button></div>
     <div class="label" style="margin:18px 0 8px">Order</div><div class="opts">${[["watchlist", "Watchlist order"], ["move", "Biggest move"], ["news", "Most news"], ["rsi", "Lowest RSI"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-o="${k}" aria-pressed="${chartSettings().order === k}">${l}</button>`).join("")}</div>`, (body) => {
     body.querySelectorAll("[data-l]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, list: b.dataset.l } }); closeSheet(); }));
     body.querySelectorAll("[data-o]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, chart: { ...chartSettings(), order: b.dataset.o } } }); closeSheet(); }));
     body.querySelector("#nwl").onclick = async () => { const n = prompt("Name the watchlist", "Semiconductors"); if (n) { const id = await newWatchlist(n); await save({ settings: { ...store.data.settings, list: id } }); closeSheet(); openAddSheet(); } };
-    body.querySelector("#mwl").onclick = () => { closeSheet(); showTab("dash"); };
-  }, () => buildFeed());
+    body.querySelector("#mwl").onclick = () => { closeSheet(); APP.backTo = APP.tab; showTab("profile", "lists"); };
+  }, onDone);
 }
 
-// ---------- Coins: your watchlists (picking one also sets what the feed shows), then your alerts.
+// ---------- Your market (1.2.0): the feed as a list. Each coin shows today's move against its usual move, any call
+// waiting, and your own record on it. Picking a watchlist here also sets what the feed shows.
 export function renderDash() {
   const el = $("dash");
-  el.innerHTML = `<h1>Coins</h1><div class="dview"></div>`;
+  el.innerHTML = `<div class="dview"></div>`;
   coinsView(el.querySelector(".dview"));
 }
 function coinsView(el) {
   const cs = chartSettings(), syms = currentSyms(), wl = watchlists();
   const cur = store.data?.settings?.list || "all", w = wl.find((x) => x.id === cur), editing = APP.dashEdit && w;
   // each row's %, sparkline and colour all describe the same period: the one that coin's chart shows (1D = 24 hours)
+  const rec = (key) => { const rs = store.results.filter((r) => r.coin === key && r.status === "scored"); return { n: rs.length, ok: rs.filter((r) => (r.target > r.p0) === (r.actual > r.p0)).length }; };
   const withData = syms.map((s) => { const v = view(s.key, dailyOf(cs)), rv = v && view(s.key, chartSettings(s.key));
-    return { s, v, rv, chg: rv ? rv.windowChange : v?.daily.now.changePct }; }).filter((x) => x.v);
+    const chg = rv ? rv.windowChange : v?.daily.now.changePct, typ = v?.daily.now.atrPct, x = typ ? Math.abs(chg) / typ : null;
+    return { s, v, rv, chg, x, r: rec(s.key), waiting: store.preds.filter((p) => p.coin === s.key).length }; }).filter((x) => x.v);
   const noData = syms.filter((s) => !view(s.key, dailyOf(cs)));
   const sort = APP.dashSort || "move";
-  if (!editing) withData.sort((a, b) => sort === "az" ? a.s.t.localeCompare(b.s.t) : sort === "rsi" ? (a.v.now.rsi14 ?? 999) - (b.v.now.rsi14 ?? 999) : Math.abs(b.chg) - Math.abs(a.chg));
-  const ups = withData.filter((x) => x.chg > 0).length, per = cs.range;
-  const today = new Date().toISOString().slice(0, 10), keys = new Set(syms.map((s) => s.key));
-  const newsToday = (D.news.stories || []).filter((st) => st.date === today && st.syms.some((k) => keys.has(k))).length;
-  const rulesToday = store.alerts.filter((a) => (a.at || "").slice(0, 10) === today).length;
-  const chip = (id, name, n) => `<button class="wchip" data-l="${esc(id)}" aria-pressed="${id === cur}">${esc(name)} <span>${n}</span></button>`;
-  const row = ({ s, v, rv, chg: c }, i) => {
+  if (!editing) withData.sort((a, b) => sort === "az" ? a.s.t.localeCompare(b.s.t) : sort === "record" ? (b.r.n ? b.r.ok / b.r.n : -1) - (a.r.n ? a.r.ok / a.r.n : -1) || b.r.n - a.r.n : sort === "uncalled" ? (a.waiting + a.r.n) - (b.waiting + b.r.n) : (b.x ?? 0) - (a.x ?? 0));
+  const moving = withData.filter((x) => x.x != null && x.x >= 1.5).length, all = store.results.filter((r) => r.status === "scored"), allOk = all.filter((r) => (r.target > r.p0) === (r.actual > r.p0)).length;
+  const row = ({ s, v, rv, chg: c, x, r, waiting }, i) => {
     return editing ? `<div class="row"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">${esc(s.n)}</span></span>
-      <button class="btn ghost sm" data-up="${esc(s.key)}" ${i === 0 ? "disabled" : ""} aria-label="Move ${esc(s.t)} up">↑</button><button class="btn ghost sm" data-dn="${esc(s.key)}" ${i === withData.length - 1 ? "disabled" : ""} aria-label="Move ${esc(s.t)} down">↓</button><button class="btn ghost sm" data-rm="${esc(s.key)}" aria-label="Remove ${esc(s.t)}">✕</button></div>`
-    : `<button class="row" data-open="${esc(s.key)}"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">RSI ${fmt(v.now.rsi14, 1)} · ${storiesFor(s.key).length} stories</span></span>${sparkline((rv || v).win.map((b) => b.c), 80, 28, c >= 0)}<span class="r"><b>${esc(money((rv || v).lastBar.c, s.m))}</b><span class="${c >= 0 ? "up" : "down"}">${arrow(c)} ${pct(c)}<small> ${esc(rv ? rv.range : "1D")}</small></span></span></button>`; };
-  el.innerHTML = `<div class="wchips" role="tablist" aria-label="Watchlists">${chip("all", "All", allSyms().length)}${wl.map((x) => chip(x.id, x.name, (x.syms || []).filter((s) => s.m === "CRYPTO").length)).join("")}<button class="wchip add" id="dNew">+ New</button></div>
-    <div class="wbar"><b>${esc(w ? w.name : "All my coins")}</b><span>${w ? `${editing ? `<button class="btn ghost sm" id="dRen">Rename</button><button class="btn ghost sm danger" id="dDel">Delete</button><button class="btn sm" id="dDone">Done</button>` : `<button class="btn ghost sm" id="dEdit">Edit</button>`}` : ""}<button class="btn sm" id="dAdd">+ Add coins</button></span></div>
-    ${editing ? "" : `<div class="summary"><div><b>${ups}<span class="hint" style="font-size:14px">/${withData.length}</span></b><span>coins up · ${esc(per)}</span></div><div><b>${newsToday}</b><span>stories today</span></div><div><b>${rulesToday}</b><span>rules met today</span></div></div>`}
-    ${withData.length ? `${editing ? `<p class="hint">Reorder or remove coins in “${esc(w.name)}”. The feed follows this order.</p>` : `<div class="opts" style="margin-bottom:10px">${[["move", "Biggest move"], ["rsi", "Lowest RSI"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-s="${k}" aria-pressed="${sort === k}">${l}</button>`).join("")}</div>`}
-    <div class="list">${withData.map(row).join("")}</div>` : ""}
+      <button class="btn ghost sm" data-up="${esc(s.key)}" ${i === 0 ? "disabled" : ""} aria-label="Move ${esc(s.t)} up">↑</button><button class="btn ghost sm" data-dn="${esc(s.key)}" ${i === withData.length - 1 ? "disabled" : ""} aria-label="Move ${esc(s.t)} down">↓</button><button class="btn ghost sm danger" data-rm="${esc(s.key)}" aria-label="Remove ${esc(s.t)}">✕</button></div>`
+    : `<button class="row mrow" data-open="${esc(s.key)}"><span class="main"><span class="t">${esc(s.n)}</span><span class="s">${x != null ? `<b class="${x >= 1.5 ? "warnt" : ""}">${x.toFixed(1)}× usual</b>` : ""}${r.n ? `${x != null ? ", " : ""}you ${r.ok} of ${r.n}` : waiting ? `${x != null ? ", " : ""}call waiting` : ""}</span></span>${sparkline((rv || v).win.map((b) => b.c), 64, 24, c >= 0)}<span class="r"><b>${esc(money((rv || v).lastBar.c, s.m))}</b><span class="${c >= 0 ? "up" : "down"}">${pct(c, 1)}</span></span></button>`;
+  };
+  el.innerHTML = `<div class="mtop"><button class="switcher" id="dSwitch"><span>${esc(w ? w.name : "All my coins")}</span><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
+      <span class="mtopb"><button class="iconbtn" id="dFeed" aria-label="Back to the chart feed"><svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 5-7 4 4"/></svg></button><button class="iconbtn ghost" id="dAdd" aria-label="Add a coin"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></span></div>
+    <h1 style="margin:18px 0 0">Your market</h1>
+    <p class="hint" style="margin:6px 0 0">${withData.length ? `${moving ? `${moving} of your ${withData.length} coins ${moving === 1 ? "is" : "are"} moving more than usual today.` : `None of your ${withData.length} coins is moving more than usual today.`}${all.length ? ` You've called the direction right ${allOk} time${allOk === 1 ? "" : "s"} in ${all.length}.` : ""}` : "Prices are loading."}</p>
+    ${editing ? `<p class="hint" style="margin-top:14px">Reorder or remove coins in “${esc(w.name)}”. The feed follows this order.</p>` : `<div class="opts" style="margin:16px 0 4px">${[["move", "Moving most"], ["record", "My record"], ["uncalled", "Not called yet"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-s="${k}" aria-pressed="${sort === k}">${l}</button>`).join("")}</div>`}
+    ${withData.length ? `<div class="hl mlist">${withData.map(row).join("")}</div>` : ""}
     ${noData.length ? `<p class="hint">Waiting for prices: ${noData.map((s) => esc(s.t)).join(", ")}.</p>` : ""}
     ${!syms.length ? `<div class="empty">Nothing in this watchlist yet.</div>` : ""}
-    <p class="hint" style="margin-top:12px">Choosing a watchlist here also sets what your feed shows.</p>
-    ${alertsHtml()}
-    <p class="disclaimer">${esc(DISCLAIMER)}</p>`;
+    <div style="display:flex;gap:8px;margin-top:16px">${w ? (editing ? `<button class="btn ghost sm" id="dRen">Rename</button><button class="btn ghost sm danger" id="dDel">Delete</button><button class="btn sm" id="dDone">Done</button>` : `<button class="btn ghost sm" id="dEdit">Edit this watchlist</button>`) : ""}</div>
+    <p class="hint" style="margin-top:12px">Choosing a watchlist here also sets what your feed shows. Moves are facts about the past, never advice.</p>`;
   const pick = async (id) => { APP.dashEdit = false; await save({ settings: { ...store.data.settings, list: id } }); APP.needsRebuild = true; renderDash(); };
-  el.querySelectorAll("[data-l]").forEach((b) => (b.onclick = () => pick(b.dataset.l)));
-  el.querySelector("#dNew").onclick = async () => { const n = prompt("Name the watchlist", "Layer 1 coins"); if (n) { const id = await newWatchlist(n); await pick(id); openAddSheet(); } };
+  el.querySelector("#dSwitch").onclick = () => openSwitcher(() => renderDash());
+  el.querySelector("#dFeed").onclick = () => showTab("feed");
   el.querySelector("#dAdd").onclick = () => openAddSheet();
   el.querySelector("#dEdit")?.addEventListener("click", () => { APP.dashEdit = true; renderDash(); });
   el.querySelector("#dDone")?.addEventListener("click", () => { APP.dashEdit = false; APP.needsRebuild = true; renderDash(); });
@@ -197,32 +196,10 @@ function coinsView(el) {
   el.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => { await save({ watchlists: watchlists().map((x) => (x.id === w.id ? { ...x, syms: x.syms.filter((s) => s.key !== b.dataset.rm) } : x)) }); APP.needsRebuild = true; renderDash(); }));
   el.querySelectorAll("[data-s]").forEach((b) => (b.onclick = () => { APP.dashSort = b.dataset.s; renderDash(); }));
   el.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { showTab("feed"); buildFeed({ keepKey: b.dataset.open }); }));
-  wireAlerts(el);
 }
-// Alerts on the Coins tab: anything new that fired, then your rules with an on/off switch each.
-function alertsHtml() {
-  const fresh = store.alerts.filter((a) => !a.read).slice(0, 3), rules = store.data?.rules || [];
-  const label = (r) => `${r.sym === "*" ? "Any coin" : esc(r.sym.split(":")[1])}: ${esc(METRICS[r.metric]?.label || r.metric)} ${esc(OPS[r.op])} ${esc(r.value)}${esc(METRICS[r.metric]?.unit || "")}`;
-  return `<div class="secrow"><span class="label">Alerts</span><button class="linkbtn" id="dNewRule">New alert</button></div>
-    ${fresh.map((a) => `<div class="strip alertstrip"><i></i><span class="m"><b>${esc(a.text)}</b><span class="s">${esc(ago(a.at))}</span></span><button class="btn ghost sm" data-aread="${esc(a.id)}">Dismiss</button></div>`).join("")}
-    ${rules.length ? `<div class="hl">${rules.slice(0, 5).map((r) => `<div class="row"><span class="main"><span class="t">${label(r)}</span><span class="s">${esc(r.note || (r.lastFired ? `last met ${fmtDay(r.lastFired)}` : "Checked after every refresh"))}</span></span><label class="switch"><input type="checkbox" data-ron="${esc(r.id)}" ${r.active !== false ? "checked" : ""} aria-label="Rule on"><span></span></label></div>`).join("")}</div>`
-      : `<p class="hint">Hold any chart in the feed and let go to set an alert at that price, or add a rule on any reading.</p>`}
-    <div class="opts" style="margin-top:10px">${rules.length ? `<button class="opt" id="dRules">All rules · ${rules.length}</button>` : ""}<button class="opt" id="dAlerts">Alert history${store.alerts.length ? ` · ${store.alerts.length}` : ""}</button></div>`;
-}
-function wireAlerts(el) {
-  const page = (sub) => { APP.backTo = "dash"; showTab("profile", sub); };
-  el.querySelector("#dNewRule").onclick = () => page("rules");
-  el.querySelector("#dRules")?.addEventListener("click", () => page("rules"));
-  el.querySelector("#dAlerts").onclick = () => page("alerts");
-  el.querySelectorAll("[data-aread]").forEach((b) => (b.onclick = async () => { await markAlertsRead([b.dataset.aread]); renderDash(); }));
-  el.querySelectorAll("[data-ron]").forEach((c) => (c.onchange = () => save({ rules: (store.data.rules || []).map((r) => (r.id === c.dataset.ron ? { ...r, active: c.checked } : r)) })));
-}
-
-
-
-// ---------- settings pages, opened from the avatar sheet on the Predict tab (or from Coins, for alerts and rules).
+// ---------- settings pages, opened from Settings on the You tab (or from a coin's details, for alerts).
 // Each has a Back button to wherever it was opened from. With no page given, the avatar sheet opens instead.
-const PAGES = () => ({ watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal, inbox: pInbox });
+const PAGES = () => ({ watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal, inbox: pInbox, learn: pLearn });
 export function renderProfile(sub, arg) {
   const el = $("profile"), fn = PAGES()[sub];
   if (!fn) { el.innerHTML = ""; setTimeout(() => { showTab("play"); if (sub !== "predictions") openAvatarSheet(); }, 0); return; }
@@ -391,7 +368,8 @@ function pLists(el, back) {
     <form class="box" id="lForm"><div class="field"><label for="lName">New shared list</label><input id="lName" maxlength="40" required placeholder="e.g. Weekend watchlist"></div><p class="hint">Members see each other by username${store.data?.username ? `: you're @${esc(store.data.username)}` : ". You'll pick one when you create or join a list"}.</p><button class="btn primary block">Create</button></form>
     ${lists.map((l) => `<div class="box"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h3>${esc(l.name)}</h3><span><button class="btn sm" data-copy="${esc(l.id)}">Invite link</button> <button class="btn ghost sm" data-leave="${esc(l.id)}">Leave</button></span></div>
       <p class="hint">Members: ${esc(Object.values(l.members || {}).join(", ") || "just you")}</p><p>${(l.symbols || []).map((s) => esc(s.t)).join(", ") || `<span class="hint">Empty</span>`}</p>
-      ${(l.symbols || []).length ? `<button class="btn sm" data-copyto="${esc(l.id)}">Copy into a watchlist</button>` : ""}</div>`).join("")}`;
+      ${(l.symbols || []).length ? `<button class="btn primary sm" data-scroll="${esc(l.id)}">Scroll these in the feed</button> <button class="btn sm" data-copyto="${esc(l.id)}">Copy into a watchlist</button>` : ""}</div>`).join("")}`;
+  el.querySelectorAll("[data-scroll]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, list: b.dataset.scroll } }); APP.needsRebuild = true; showTab("feed"); }));
   const re = () => { pLists(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
   el.querySelector("#lForm").onsubmit = (e) => {
     e.preventDefault();
@@ -405,67 +383,75 @@ function pLists(el, back) {
 async function joinFlow(id) {
   history.replaceState(null, "", location.pathname);
   withUsername(async () => {
-    try { await joinList(id, store.data.username); toast("Joined. Find it in Account → Shared lists."); renderProfile("lists"); } catch (e) { toast(e.message, { ms: 5000 }); }
+    try { await joinList(id, store.data.username); toast("Joined. Find it on Calls → With friends."); renderProfile("lists"); } catch (e) { toast(e.message, { ms: 5000 }); }
   });
 }
 // Every account starts by choosing its username: a full-screen first step that can't be skipped. It's the name
 // on the prediction game and in shared lists; it can be changed twice later. Closes by itself if the account
 // turns out to have one already (for example once the server copy loads).
-export function nameGate(onDone) {
-  if (store.data?.username) return onDone?.();
-  let el = document.getElementById("gate");
-  if (el) return;
-  el = document.createElement("div"); el.id = "gate"; el.className = "gate"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true");
-  el.innerHTML = `<div class="gatein"><div class="label">Welcome to ${esc(CONFIG.appName)}</div>
-    <h1>Pick your username</h1>
-    <p>It's your name in the prediction game: on your player card, in groups and on the leaderboard. Already have one? Type it to log in.</p>
-    <label class="field"><span>Username</span><div class="uname"><span>@</span><input id="gIn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="21" placeholder="e.g. chartwatcher"></div></label>
-    <p class="hint" id="gMsg">3–20 letters, numbers, dots or underscores.</p>
-    <div class="notice">You can change it only <b>${USERNAME_CHANGES} times</b> after this, so choose one you'll keep. Don't use your real name, email or phone number.</div>
-    <button class="btn primary block" id="gGo" disabled>Continue</button></div>`;
-  document.body.appendChild(el); document.body.classList.add("gated");
-  const inp = el.querySelector("#gIn"), msg = el.querySelector("#gMsg"), btn = el.querySelector("#gGo");
-  let seq = 0, held = false;
-  const set = (t, cls, ok) => { msg.textContent = t; msg.className = "hint " + (cls || ""); btn.disabled = !ok; };
-  const check = async () => {
-    const { name, error } = checkUsername(inp.value), my = ++seq;
-    if (error) return set(inp.value ? error : "3–20 letters, numbers, dots or underscores.", inp.value ? "bad" : "", false);
-    set(`Checking @${name}…`, "", false);
-    try {
-      const st = await usernameFree(name); if (my !== seq) return;
-      held = st !== "free"; btn.textContent = held ? `Log in as @${name}` : "Continue";
-      held ? set(`@${name} already has an account. If it's yours, log in to open it on this phone.`, "", true) : set(`@${name} is free.`, "good", true);
-    } catch { // slow or offline: let them go ahead; logging in finds the account if the name has one
-      if (my === seq) { held = true; btn.textContent = `Continue as @${name}`; set(`Couldn't check @${name} just now. Tap Continue: if it's already yours, you'll be logged in.`, "", true); }
-    }
-  };
-  let t = 0; inp.oninput = () => { clearTimeout(t); t = setTimeout(check, 250); };
-  const close = () => { el.remove(); document.body.classList.remove("gated"); off(); onDone?.(); };
-  const off = store.on((what) => { if (what === "account" && store.data?.username && document.getElementById("gate")) close(); });
-  btn.onclick = async () => {
-    const was = btn.textContent, login = held; btn.disabled = true; btn.textContent = login ? "Logging in…" : "Saving…";
-    try { const n = await (login ? loginUsername(inp.value, (t) => (btn.textContent = `${t}…`)) : setUsername(inp.value)); toast(login ? `Welcome back, @${n}.` : `Welcome, @${n}.`); close(); }
-    catch (e) { set(e.message || "Couldn't save. Check your connection and try again.", "bad", true); btn.textContent = was; }
-  };
-  setTimeout(() => inp.focus(), 200);
-}
 function withUsername(fn) {
   if (store.data?.username) return fn();
   openUsernameSheet(fn, "Shared lists show members by username, so pick one first.");
 }
 
 function pAccount(el, back) {
-  const n = store.data?.username;
+  const n = store.data?.username, pw = hasPassword();
   el.innerHTML = `${back}<h1>Account</h1>
-    <p>Your account has no name, email or phone number. It belongs to this app on this phone${store.mode === "demo" ? " (demo mode)" : ""}.</p>
-    <p class="hint">Uninstalling the app or clearing the browser's site data starts a fresh account. Moving to another phone will come later.</p>
+    <p>Your account is a username and a password, nothing else: no name, email or phone number${store.mode === "demo" ? " (demo mode)" : ""}.</p>
     <h2>Username</h2><p class="dline">${n ? `@${esc(n)} · ${usernameChangesLeft()} change${usernameChangesLeft() === 1 ? "" : "s"} left` : "Not set yet."} <button class="btn ghost sm" id="aName">${n ? "Change" : "Add"}</button></p>
+    <h2>Password</h2><p class="dline">${pw ? "Set." : "Not set yet."} <button class="btn ghost sm" id="aPw">${pw ? "Change" : "Set a password"}</button></p>
+    <h2>Recovery code</h2><p class="dline">${store.data?.recoveryHash ? `Saved ${esc(fmtDay(String(store.data.recoveryAt || "").slice(0, 10)))}.` : "None yet."} <button class="btn ghost sm" id="aCode">New code</button></p><p class="hint">The only way back in if you forget your password. A new code replaces the old one.</p>
+    <h2>Sign out</h2><p class="dline"><button class="btn sm" id="aOut">Sign out on this phone</button></p><p class="hint">Your account stays. Log in with your username and password to open it again, here or on another phone.</p>
     <h2>Delete</h2><button class="btn danger" id="del">Delete my account and all its data</button>
-    <h2>Sign-in id</h2><p class="dline"><code class="uid">${esc(myUid() || "connecting…")}</code> <button class="btn ghost sm" id="aUid">Copy</button></p><p class="hint">Only needed if you help run the app: an admin adds this id to give access to the feedback inbox.</p>
+    <h2>Sign-in id</h2><p class="dline"><code class="uid">${esc(myUid() || "connecting…")}</code> <button class="btn ghost sm" id="aUid">Copy</button></p><p class="hint">Only needed if you help run the app: an admin adds it to the admins list.</p>
     <h2>App version</h2><p class="dline">${esc(CONFIG.appName)} ${esc(CONFIG.version)}</p>`;
+  const re = () => { pAccount(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
   el.querySelector("#aUid").onclick = () => navigator.clipboard?.writeText(myUid() || "").then(() => toast("Copied."), () => toast("Couldn't copy."));
-  el.querySelector("#aName").onclick = () => openUsernameSheet(() => pAccount(el, back) || (el.querySelector("#pBack").onclick = () => backFromProfile()));
+  el.querySelector("#aName").onclick = () => openUsernameSheet(re);
+  el.querySelector("#aPw").onclick = () => openPasswordSheet(re);
+  el.querySelector("#aCode").onclick = () => openRecoverySheet(re);
+  el.querySelector("#aOut").onclick = () => { if (confirm("Sign out on this phone? You'll need your username and password to open the account again.")) signOutDevice(); };
   el.querySelector("#del").onclick = async () => { if (confirm("Delete your account, watchlists, rules, alerts, predictions and groups? This can't be undone.")) await deleteAccount(leaveAllGroups, deleteMySocial); };
+}
+// Set or change the password (1.2.0). Changing asks for the current one.
+export function openPasswordSheet(onDone) {
+  const has = hasPassword();
+  if (!ownsSignIn()) { toast("Passwords can only be set on the phone this account was made on.", { ms: 5000 }); return; }
+  openSheet(has ? "Change password" : "Set a password", `${has ? `<label class="field"><span>Current password</span><div class="uname"><input id="pwCur" type="password" autocomplete="current-password"></div></label>` : ""}
+    <label class="field"><span>${has ? "New password" : "Password"}</span><div class="uname"><input id="pwNew" type="password" autocomplete="new-password"></div></label>
+    <p class="hint" id="pwMsg">At least ${PASSWORD_MIN} characters.</p>
+    <button class="btn primary block" id="pwGo">${has ? "Change password" : "Save password"}</button>`, (body) => {
+    const go = body.querySelector("#pwGo"), msg = body.querySelector("#pwMsg");
+    go.onclick = async () => {
+      go.disabled = true;
+      try { await setPassword(body.querySelector("#pwNew").value, body.querySelector("#pwCur")?.value || null); closeSheet(); toast(has ? "Password changed." : "Password set."); onDone?.(); }
+      catch (e) { msg.textContent = e.message; msg.className = "hint bad"; go.disabled = false; }
+    };
+    setTimeout(() => body.querySelector(has ? "#pwCur" : "#pwNew").focus(), 250);
+  });
+}
+// A new recovery code (1.2.0), shown once; it replaces the old one.
+export function openRecoverySheet(onDone) {
+  const c = newRecoveryCode();
+  openSheet("Your new recovery code", `<p>Write it down or save it somewhere safe. It's shown once and replaces any older code.</p>
+    <div class="ob-code num">${esc(c)}</div><button class="btn block" id="rcCopy" style="margin-top:12px">Copy code</button><button class="btn primary block" id="rcSave" style="margin-top:8px">I've saved it</button>`, (body) => {
+    body.querySelector("#rcCopy").onclick = async () => { try { await navigator.clipboard.writeText(c); toast("Copied."); } catch { toast("Select the code and copy it."); } };
+    body.querySelector("#rcSave").onclick = async () => { try { await saveRecoveryCode(c); closeSheet(); toast("Recovery code saved."); onDone?.(); } catch (e) { toast(e.message); } };
+  });
+}
+// Learn (1.2.0): six short reads on what a score can and can't tell you before money goes in. Facts only.
+const READS = [
+  ["What your score measures", "How well you read where a price goes next, over an hour, a day or a year, judged against how much that coin usually moves. It does not measure how much money you'd make, or keep."],
+  ["Position size", "How much you put into one idea decides how much a wrong call costs. A good read with too much money behind it can still end badly."],
+  ["Leverage", "Borrowing to trade multiplies both gains and losses. A move of a few percent the wrong way can wipe out a leveraged position long before your call would have been scored."],
+  ["Cutting a loss", "A call that goes the wrong way on Pulse costs you nothing. With real money, the question is when you'd stop, and most people find that harder than they expect."],
+  ["Fees, spreads and tax", "Every trade pays a fee and a spread, and in India crypto gains are taxed at 30% with no set-off of losses. A read that wins by less than that loses money."],
+  ["Being sure", "Your own calls show whether being sure helps you. For most people, confidence and accuracy aren't the same thing, which is worth knowing before money is on the line."],
+];
+function pLearn(el, back) {
+  el.innerHTML = `${back}<h1>Before you put money in</h1><p class="hint">Six short reads. Your score shows how well you read moves; these are the other things that decide what happens with real money. Facts and general information only, never advice.</p>
+    ${READS.map(([t, b], i) => `<section class="dsec read"><h3><span class="num">${i + 1}</span> ${esc(t)}</h3><p>${esc(b)}</p></section>`).join("")}
+    <p class="hint">Indicator guides: tap any panel or line on a chart, or ƒx on a card.</p>`;
 }
 function pAppearance(el, back) {
   const t = store.data.settings?.theme || "dark";

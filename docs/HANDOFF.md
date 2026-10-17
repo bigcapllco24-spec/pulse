@@ -2,8 +2,68 @@
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open.
-Last updated 16 Oct 2026 (**version 1.1.4**, service worker `pulse-shell-v52`, firestore.rules published 13 Oct 8:51 AM IST; 1.1.0 needs no rules change). Version lives in `web/config.js` and shows at the
+Last updated 17 Oct 2026 (**version 1.2.0** on branch `mvp`, service worker `pulse-shell-v53`; firestore.rules CHANGED in 1.2.0 and must be published with it, see section 0). Version lives in `web/config.js` and shows at the
 bottom of the Account sheet and on Settings → Account and Legal.
+
+## 0. 1.2.0: the MVP redesign (17 Oct 2026, branch `mvp`, not yet merged)
+
+The thesis: *Pulse is a place where anyone can test how well they read the crypto market, and get an honest score for it,
+without risking money.* Tagline: **Swipe the market. Call the move.** The feed is the edge; the honest, verified record
+of judgment is the moat. Never claim readiness, returns or advice. The cofounder review deck and the mockups
+(dark and light) are in the claude.ai project "Pulse"; the mockups are the reference for every screen below.
+
+**What changed, in one list:**
+- **Tabs: Feed · Calls · You** (Feed on the left). "Coins" became **Your market**, a list view of the feed opened from
+  the feed's watchlist button; settings sit behind the gear on You. Predict/Groups/Ranks tiles are gone.
+- **First run (`js/onboard.js`):** welcome screen → create account (username + password) → one-time recovery code →
+  first call (Bitcoin in an hour: higher or lower, three sizes) → locked in (with the notify toggle). The 6-step tour,
+  the welcome card, the daily recap card and the once-a-day daily-coin popup are gone (`js/coach.js` deleted).
+- **Accounts have passwords.** Firebase email+password sign-in with the username as a hidden address (`<name>@pulse.app`,
+  never shown or mailed). The password is attached to the phone's anonymous sign-in, so the account id doesn't change.
+  Logging in elsewhere makes the account's own sign-in the current user (no more `devices` linking; the rule branch is
+  removed, old devices still work via `canUse`). No email means no reset: a 12-character **recovery code** (hash on the
+  account as `recoveryHash`) lets the 15-minute job set a new password (`resets/{uid}` → `pipeline/lib/resets.mjs`, via
+  the Identity Toolkit `accounts:update` API; the service-account token now asks for the identitytoolkit scope). Users
+  from before 1.2.0 are asked to set a password on their next open (only on the phone the account was made on).
+  **Console steps for Veer:** Authentication → Sign-in method → enable Email/Password; publish `firestore.rules`.
+- **Feed card:** coin name, price and move, a small **Call it** under the price with "n calls waiting, time left";
+  one quiet row with the range (1D/1W/1M/1Y, one shared choice), ƒx and S/R; full screen sits on the chart's corner;
+  panels stacked (never 2 × 2); no pager dots; your open calls drawn on the chart (`kind: "C"` levels; far-away calls
+  sit at the chart's edge as a marker). New calls redraw cards at once.
+- **Call it sheet (`openPredictSheet`):** period tabs, Higher/Lower, three sizes (½, 1 and 2 typical moves), "or your
+  own" as % or price (either fills the other), **how sure** (hunch / fairly / very), **based on** (chart / indicators /
+  news / gut), **show to followers once scored**. Saved on the prediction as `sure`, `basis`, `pub` (rules allow them;
+  results carry them). Group posting stays.
+- **Details pane = "Before you call":** how much the coin usually moves (30 min / 1 h / 1 d / 1 y typical moves), Right
+  now, Your <coin> calls card (→ Calls), Price alerts card (→ rules page), then the old sections folded under "More
+  about the price". Watchlists section removed. **News:** a "Since your call" marker.
+- **Calls tab (`renderPlay`):** search bar "Know how others are doing" in the header (replaces streak/level; those moved
+  into the progress card's line), progress card (verdict + n of ~30 + streak + level, → You), Today's coin row, With
+  friends (groups needing a pick, groups, shared lists; "All groups and lists" opens the hub with Start a group, Join
+  with a link, New shared list), Waiting, Scored (last 3 + See all). **Replay:** a scored call opens with the label,
+  the direction line, a small price-path chart (Kraken candles from the call to its end), the three prices and what
+  happened. **"Wrong way"** is shown (not stored) for any call that went the other way (`shownLabel`).
+- **You tab (`js/you.js`):** level avatar + followers, verdict in plain words (`verdictOf`: Make your first call → Too
+  early to tell (< 30 scored) → Still learning / Reading it well (≥ 600)), score with a likely range (±190/√n), right
+  direction and close-or-better tiles, breakdowns from level 3 (does being sure help, what works for you, by time
+  period), "What your score doesn't show" + **Learn** (6 short reads, `pLearn`), Where you rank (`ranksView`), How the
+  score works. Badges, the 90-day line and the old profile page are gone (cardHtml remains for the share image).
+- **Levels (`js/progress.js`, shared with the job):** effort, not skill. Scored calls count 1, 30-minute calls ½, max 5
+  a day (IST), voided 0, never down. Thresholds 1, 10, 30, 60, 100, 150, 210, 280, 360, 450, then +100. Ring colour at
+  levels 2, 4, 6, 9, 12, 16, 20, 25… (blue, teal, green, gold, orange, rose, violet, white, then double rings). Level-up
+  sheet once per level (`pl.level`). Player cards carry `level` and `right` (% right direction). Never used for ranking.
+- **People:** Find players opens with the **most followed** (`boards/followed`, written by the job). Player card:
+  level, followers, rank, verdict, score range, tiles, "Scored calls, public" (→ their public calls), Follow, Invite.
+  **Public scored calls:** the job copies each player's `pub: true` scored results to `players/{acct}/calls` (newest
+  100); rules let the owner and their followers read them. Open calls are never shown to anyone. Settings has the
+  default ("My scored calls are public", `callsPublic`), and each call has its own switch.
+- **Settings (gear on You):** Account page has password (set/change), recovery code (new), sign out, delete.
+- **Tests:** `tests/e2e.py` was rewritten for 1.2.0 (81 checks: first run, log in, forgot password, feed, Call it,
+  details, news, Your market, Calls, replay, With friends, You, levels, Learn, settings, people, groups, six screen sizes
+  in dark and light, iOS Home Screen).
+
+**Still to do after merge:** watch the first live sign-ups (Email/Password must be on), the first `resets` request, and
+`boards/followed` / `players/*/calls` appearing after the 2-hour job.
 
 ## 1. What Pulse is
 
@@ -18,7 +78,7 @@ they work.
   Every explanation describes the past.
 - **Free data:** Kraken, Binance's public market data, GDELT, outlet RSS feeds and GitHub release feeds. Nothing
   paid.
-- **No personal data:** an account is a device's anonymous Firebase sign-in. No name, email or phone.
+- **No personal data:** an account is a username and a password (1.2.0: Firebase email+password with a hidden address). No name, email or phone.
 - **Efficient code:** plain ES modules, no build step, no frameworks. Remove dead code and CSS as you go.
 - **Test before saying "done"**, without wasting time (section 7).
 
@@ -87,7 +147,7 @@ scripts/check.sh        all tests; tests/ = pipeline, levels, score, predict, so
 
 ## 4. Features as of 1.1.0 (14 Oct 2026)
 
-**Tabs:** Coins · Feed · Predict. Settings live in the Account sheet (tap your letter avatar on Predict).
+**Tabs (1.2.0): Feed · Calls · You.** Section 0 lists what changed; the rest of this section describes 1.1.x and is still right for charts, indicators, news, groups and the score.
 
 **Colours:** the original Midnight (dark) and light themes. 1.1.0 tried Paper (light) and Ink + Graphite (dark); Veer
 turned them down on the phone the same day and 1.1.1 put the original palette back. Explorations stay on
@@ -443,6 +503,7 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
   HYPE also need RSS sources.
 - **Prediction game:** compliance review of its wording (now also the leaderboard, groups, the "your calls tend to…"
   line and the Community section); confirm the 15-minute job scores real predictions and group picks.
+- **1.2.0 live checks:** Email/Password enabled, rules published, first sign-up and log-in on a second phone, a reset request, `boards/followed`.
 - **1.1.0 live checks:** the first morning push (7:47 AM IST run), daily.json's crowd once a day's calls are scored,
   and that the Snapshot and forum feeds return items from GitHub Actions (the sandbox can't reach them).
 - **iOS** has no vibration API, so the lock-in/reveal haptics only work on Android; the visual thump still shows.

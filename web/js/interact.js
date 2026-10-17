@@ -6,7 +6,6 @@ import { fmt, METRICS } from "./indicators.js";
 import { PANELS, OVERLAYS, valueAt, tagOf, panelFact } from "./studies.js";
 import { esc, money, pct, arrow, fmtDay, toast, openSheet, closeSheet, haptic, DISCLAIMER } from "./ui.js";
 import { APP } from "./app.js";
-import { coachEvent } from "./coach.js";
 
 // Chart geometry (must match chart.js): viewBox 360 x 210, 46 px price gutter on the right, 22 px top, 14 px bottom.
 const W = 360, H = 210, PR = 46, PT = 12, PB = 14;
@@ -54,7 +53,6 @@ function start(feed, id) {
   box.insertAdjacentHTML("beforeend", `<div class="xh"></div><div class="yh"><span></span></div><div class="scrubcard" aria-live="polite"></div>`);
   main.querySelectorAll(".lower .lplot").forEach((l) => l.insertAdjacentHTML("beforeend", `<div class="xh"></div>`));
   main.classList.add("scrubbing");
-  coachEvent("scrub");
   haptic();
   move(h.x2 ?? h.x, h.y2 ?? h.y);
 }

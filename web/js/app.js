@@ -3,7 +3,7 @@
 import { CONFIG } from "../config.js";
 import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists, settleDemoPredictions } from "./store.js";
 import { initSocial, settleDemoChallenges } from "./social.js";
-import { initPlay, renderPlay, openPredictSheet, openLink, badge, openAvatarSheet, closeGroup, closeProfile } from "./play.js";
+import { initPlay, renderPlay, openPredictSheet, openLink, badge, openAvatarSheet, closeGroup } from "./play.js";
 import { krakenRows } from "./predict.js";
 import { loadSymbols, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
@@ -12,20 +12,24 @@ import { mainChart, lowerChart } from "./chart.js";
 import { levelsFor, swingLevels } from "./levels.js";
 import { picks, studyWindow, maxPanels, OVERLAYS, PANELS } from "./studies.js";
 import { openPanels, withExpand } from "./panels.js";
-import { startTour, coachEvent } from "./coach.js";
 import { openFull } from "./full.js";
 import { initFeedback } from "./feedback.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz, cancelPendingHold } from "./interact.js";
-import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, krakenBars, INTRA, intraState, dailyOf, RANGE_LABEL } from "./data.js";
+import { dueAt, HORIZONS, dailyVol, typicalMove } from "./score.js";
+import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, INTRA, intraState, dailyOf, RANGE_LABEL } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, toast, haptic, openSheet, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openListsFor, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, nameGate, checkPanelFit } from "./pages.js";
+import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, checkPanelFit } from "./pages.js";
+import { startOnboarding, onboarding, needsOnboarding } from "./onboard.js";
+import { initYou, renderYou } from "./you.js";
 
 export const APP = { tab: "feed", seq: [], active: -1, syms: [], catalogue: [], built: false };
 
 // ---------- which symbols, in which order
 export function currentSyms() {
   const list = store.data?.settings?.list || "all";
-  let syms = list === "all" ? allSyms() : (watchlists().find((w) => w.id === list)?.syms || allSyms());
+  // a watchlist, or a shared list (1.2.0: "Scroll these in the feed")
+  let syms = list === "all" ? allSyms() : (watchlists().find((w) => w.id === list)?.syms || (store.lists.get(list)?.symbols || []).filter((x) => x.m === "CRYPTO") || allSyms());
+  if (!syms.length) syms = allSyms();
   const order = chartSettings().order;
   const chg = (s) => view(s.key, dailyOf(chartSettings()))?.daily.now.changePct;
   if (order === "move") syms = [...syms].sort((a, b) => Math.abs(chg(b) ?? -1) - Math.abs(chg(a) ?? -1));
@@ -150,7 +154,7 @@ function flushIdle() { if (!idle()) return; const jobs = [...idleJobs.values()];
 feed.addEventListener("scroll", () => { scrolling = true; clearTimeout(idleT); idleT = setTimeout(() => { scrolling = false; flushIdle(); }, 140); }, { passive: true });
 export function buildFeed({ keepKey } = {}) {
   APP.syms = currentSyms();
-  APP.seq = [{ type: "catchup" }];
+  APP.seq = []; // 1.2.0: the feed opens on the first coin; the daily recap card is gone (the list view covers it)
   pushRound(1);
   feed.innerHTML = APP.seq.map((it, i) => shell(it, i)).join("");
   APP.active = -1;
@@ -196,7 +200,6 @@ function setActive(i) {
   cards.forEach((c, k) => c.classList.toggle("active", k === i));
   const it = APP.seq[i];
   if (it.type === "sym") markSeen(it.sym.key);
-  if (prevActive >= 0) coachEvent("card", { sym: it.type === "sym" });
   progress();
   whenIdle("sync", syncCards);
 }
@@ -221,8 +224,7 @@ function markSeen(key) { const s = ls.get("pl.seen", {}); s[key] = new Date().to
 
 function fillCard(c, it) {
   c.dataset.filled = "1";
-  if (it.type === "catchup") c.innerHTML = catchupHtml();
-  else if (it.type === "done") c.innerHTML = doneHtml(it.round);
+  if (it.type === "done") c.innerHTML = doneHtml(it.round);
   else if (it.type === "empty") c.innerHTML = emptyHtml();
   else {
     c.innerHTML = `<div class="panes"><div class="pane side news" data-pane="news"></div><div class="pane main" data-pane="main"></div><div class="pane side details" data-pane="details"></div></div>`;
@@ -246,12 +248,16 @@ function renderMain(c, it) {
     // indicators are one shared choice (the ƒx button); cards show as many panels as the screen fits
     const pk = picks(store.data?.settings?.chart), shown = pk.lower.slice(0, maxPanels()), ov = studyWindow(v.bars, v.ov, v.bars.length - v.win.length, v.bars.length, [...pk.over, ...shown]);
     c._v = { ...v, ov, picks: { over: pk.over, lower: shown } }; // what hold-to-read and the panel guides read from
-    main.innerHTML = `<div class="head"><div class="hl"><div class="tkrow"><span class="tk">${esc(s.t)}</span><span class="chg ${chg >= 0 ? "up" : "down"}" title="Change over ${esc(RANGE_LABEL[v.range] || v.range)}">${arrow(chg)} ${pct(chg)}<small>${esc(v.range)}</small></span></div>
-      <div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span></div>${predChip(s)}</div>
-      <div class="hr"><div class="hr1"><button class="fxbtn hfull" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button><button class="tfbtn${own ? " own" : ""}" data-tf aria-label="Chart settings for ${esc(s.t)}: ${esc(v.range)}, ${esc(v.ivLabel.toLowerCase())} candles"><b>${esc(v.range)}</b><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button></div>
-      <div class="hr2"><button class="lvbtn fxchip" data-fx aria-label="Indicators: ${pk.over.length + pk.lower.length} on"><i>ƒx</i>${pk.over.length + pk.lower.length || "Add"}</button><button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div></div>
-      <div class="chartbox">${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: pk.over, interval: v.interval, days: RANGES[v.range], levels: levelsFor(v, lvMode) })}</div>
-      ${shown.length ? `<div class="lowers${shown.length > 2 ? " g2" : ""}">${withExpand(shown.map((k) => lowerChart(v.win, ov, k)).join(""), shown.length)}</div>` : ""}<div class="cfoot">${dots}</div>`;
+    // 1.2.0: name, price and move, then a small Call it under the price with your open call; one quiet row for the time
+    // range, indicators and lines; the chart (full screen from its corner); panels stacked below.
+    const calls = callLevels(s, v);
+    main.innerHTML = `<div class="head2"><div class="tkrow"><span class="tk">${esc(s.n || s.t)}</span><span class="tks">${esc(s.t)}</span></div>
+      <div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span><span class="chg ${chg >= 0 ? "up" : "down"}" title="Change over ${esc(RANGE_LABEL[v.range] || v.range)}">${pct(chg, 1)}<small>${esc(v.range === "1D" ? "today" : v.range)}</small></span></div>
+      ${predChip(s)}</div>
+      <div class="rangerow"><div class="seg" role="group" aria-label="Time range">${["1D", "1W", "1M", "1Y"].map((r) => `<button data-range="${r}" aria-pressed="${v.range === r}">${r}</button>`).join("")}</div>
+        <div class="hr2"><button class="lvbtn fxchip" data-fx aria-label="Indicators: ${pk.over.length + pk.lower.length} on"><i>ƒx</i>${pk.over.length + pk.lower.length || "Add"}</button><button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div>
+      <div class="chartbox"><button class="fxbtn cfull" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: pk.over, interval: v.interval, days: RANGES[v.range], levels: [...levelsFor(v, lvMode), ...calls] })}</div>
+      ${shown.length ? `<div class="lowers">${withExpand(shown.map((k) => lowerChart(v.win, ov, k)).join(""), shown.length)}</div>` : ""}`;
   } else {
     c._v = null;
     main.innerHTML = `<div class="head"><div class="hl"><div class="tk">${esc(s.t)}</div><div class="pxrow"><span class="price muted">–</span></div></div><div class="hr"><button class="tfbtn" data-tf aria-label="Chart settings for ${esc(s.t)}"><b>${esc(cs.range)}</b><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg></button></div></div>
@@ -274,7 +280,11 @@ function renderNews(c, it, scope) {
   let events = evSyms.flatMap((x) => priceEvents(x).map((e) => ({ ...e, x })));
   if (scope === "mine" && events.some((e) => e.w)) events = events.filter((e) => e.w); // one summary per coin would crowd the list
   events = events.sort((p, q) => (q.t > p.t ? 1 : q.t < p.t ? -1 : q.w - p.w)).slice(0, scope === "sym" ? 6 : 10);
-  const sect = (title, note, list) => (list.length ? `<h3 class="nsec">${title}<span>${note}</span></h3>${list.map((st) => storyHtml(st, winDates.has(st.date) && scope === "sym")).join("")}` : "");
+  // since your call (1.2.0): a marker between stories newer and older than your oldest open call on this coin
+  const oldest = scope === "sym" ? store.preds.filter((p) => p.coin === s.key).map((p) => p.createdAt).sort()[0] : null;
+  let marked = false;
+  const withMark = (list) => list.map((st, i) => { const at = st.ts || st.date, before = oldest && at && at < oldest; const mk = oldest && !marked && before ? (marked = true, `<div class="sincecall"><i></i><span>Since your call · ${esc(new Date(oldest).toLocaleString("en-IN", { weekday: "short", hour: "numeric", minute: "2-digit" }))}</span><i></i></div>`) : ""; return mk + storyHtml(st, winDates.has(st.date) && scope === "sym"); }).join("");
+  const sect = (title, note, list) => (list.length ? `<h3 class="nsec">${title}<span>${note}</span></h3>${withMark(list)}` : "");
   pane.innerHTML = `<div class="pane-wrap"><h2 class="side">News · ${esc(scope === "sym" ? s.t : "My coins")}</h2>
     <div class="seg" role="group" aria-label="Which news">${[["sym", s.t], ["mine", "All my coins"]].map(([k, l]) => `<button data-scope="${k}" aria-pressed="${k === scope}">${esc(l)}</button>`).join("")}</div>
     ${sect("Confirmed", "2+ independent outlets", by("confirmed"))}
@@ -372,7 +382,11 @@ function renderDetails(c, it) {
     const rng = (n) => { const w = all.slice(-n); const lo = Math.min(...w.map((x) => x.l)), hi = Math.max(...w.map((x) => x.h)); return { lo, hi, p: hi > lo ? ((last - lo) / (hi - lo)) * 100 : 50 }; };
     const yr = rng(Math.min(365, all.length)), typical = d.atrPct, moveX = typical ? Math.abs(chg) / typical : null;
     const avgs = [["20-day", d.sma20], ["50-day", d.sma50], ["200-day", d.sma200]].filter(([, x]) => x != null);
-    html += `<div class="dhead"><div><h2>${esc(s.t)}</h2><span>${esc(s.n)}</span></div><div class="r"><b>${esc(money(last, s.m))}</b><span class="${hv >= 0 ? "up" : "down"}">${arrow(hv)} ${pct(hv)} ${esc(hLab)}</span></div></div>`;
+    html += `<div class="dhead"><div><h2>${esc(s.n)}</h2><span>${esc(s.t)}</span></div><div class="r"><b>${esc(money(last, s.m))}</b><span class="${hv >= 0 ? "up" : "down"}">${pct(hv, 1)}</span></div></div>
+      <h2 class="dtitle">Before you call</h2>`;
+    // 0. how much it usually moves, per call length (1.2.0): what every call is judged against
+    const sg = dailyVol(all.map((x) => x.c));
+    if (sg != null) html += `<section class="dsec"><h3>How much ${esc(s.n)} usually moves</h3><div class="usual">${Object.entries(HORIZONS).map(([h, o]) => `<div><b>${(Math.expm1(typicalMove(sg, h)) * 100).toFixed(h === "1y" ? 0 : 1)}%</b><span>${esc(o.label)}</span></div>`).join("")}</div><p class="hint">Either way, from the last 30 days. Your calls are judged against these sizes.</p></section>`;
     // 1. at a glance: three or four plain facts
     const names = (ls) => (ls.length > 1 ? ls.slice(0, -1).map((l) => l.replace("-day", "")).join(", ") + " and " + ls.at(-1) : ls[0] || "");
     const above = names(avgs.filter(([, x]) => last > x).map(([l]) => l)), below = names(avgs.filter(([, x]) => last <= x).map(([l]) => l));
@@ -382,7 +396,12 @@ function renderDetails(c, it) {
       `${yr.p >= 80 ? "Near the top" : yr.p <= 20 ? "Near the bottom" : yr.p >= 60 ? "In the upper part" : yr.p <= 40 ? "In the lower part" : "Around the middle"} of its ${all.length >= 365 ? "52-week" : `${all.length}-day`} range.`,
       d.rsi14 != null ? `Daily RSI ${d.rsi14.toFixed(0)}: ${describe("rsi14", d, v.daily.prev).toLowerCase()}` : "",
     ].filter(Boolean);
-    html += sec("At a glance", "glance", `<ul class="glance">${glance.map((g) => `<li>${esc(g)}</li>`).join("")}</ul>`);
+    html += sec("Right now", "glance", `<ul class="glance">${glance.map((g) => `<li>${esc(g)}</li>`).join("")}</ul>`);
+    // your record on this coin, and your alerts (1.2.0)
+    const mine = store.results.filter((r) => r.coin === s.key && r.status === "scored"), rightN = mine.filter((r) => (r.target > r.p0) === (r.actual > r.p0)).length, waiting = store.preds.filter((p) => p.coin === s.key).length;
+    html += `<button class="dcard" data-mycalls><span class="main"><span class="t">Your ${esc(s.t)} calls</span><span class="s">${mine.length ? `${mine.length} scored, right direction in ${rightN}. Last one: <b class="good">${esc(mine[0].label)}</b>.` : "None scored yet."}${waiting ? ` ${waiting} waiting.` : ""}</span></span><span class="chev">›</span></button>`;
+    html += `<button class="dcard" data-addrule><span class="main"><span class="t">Price alerts</span><span class="s">${rules.length ? `${rules.length} on: ${rules.slice(0, 1).map((r) => `${esc(METRICS[r.metric]?.label || r.metric)} ${esc(OPS[r.op])} ${esc(r.value)}${esc(METRICS[r.metric]?.unit || "")}`).join("")}${rules.length > 1 ? "…" : "."}` : "Tell me when a price or a reading is crossed."}</span></span><span class="linkbtn">${rules.length ? "Edit" : "Add"}</span></button>`;
+    html += `<h3 class="dmore">More about the price</h3><div class="folds">`;
     // 2. today
     const dayP = b.h > b.l ? ((b.c - b.l) / (b.h - b.l)) * 100 : 50;
     html += sec(`Daily candle · ${esc(fmtDay(b.t))}`, "today", `<div class="stat-grid">${[["Open", b.o], ["High", b.h], ["Low", b.l], ["Close", b.c]].map(([k, x]) => `<div><span>${k}</span><b>${esc(money(x, s.m))}</b></div>`).join("")}</div>
@@ -415,17 +434,16 @@ function renderDetails(c, it) {
     const r1 = lv.find((l) => l.kind === "R"), s1 = lv.find((l) => l.kind === "S");
     html += sec("Where the price sits", "ranges", [[30, "30-day range"], [Math.min(365, all.length), all.length >= 365 ? "52-week range" : `${all.length}-day range`]].map(([n, l]) => { const r = rng(n); return `<div class="rng"><div class="rangerow"><b>${l}</b><span>${r.p.toFixed(0)}% of the way up</span></div><div class="rangebar"><i style="left:${r.p.toFixed(1)}%"></i></div><div class="rangerow"><span>${esc(money(r.lo, s.m))}</span><span>${esc(money(r.hi, s.m))}</span></div></div>`; }).join("") +
       (r1 || s1 ? `<div class="srrow">${s1 ? `<div><span>Nearest support</span><b class="up">${esc(money(s1.price, s.m))}</b><em>${sign(((s1.price - last) / last) * 100)} · turned ${s1.touches}×</em></div>` : ""}${r1 ? `<div><span>Nearest resistance</span><b class="down">${esc(money(r1.price, s.m))}</b><em>${sign(((r1.price - last) / last) * 100)} · turned ${r1.touches}×</em></div>` : ""}</div>` : ""));
-    // 8. alerts
-    html += sec("Your alerts", "alerts", `${rules.length ? `<div class="list">${rules.map((r) => { const met = ruleMet(r, d, v.daily.prev); return `<div class="row"><div class="main"><span class="t">${esc(METRICS[r.metric]?.label || r.metric)} ${esc(OPS[r.op])} ${esc(r.metric === "price" ? money(+r.value, s.m) : r.value)}</span><span class="s">${met ? "Met on the latest candle" : "Not met yet"}${r.note ? " · " + esc(r.note) : ""}</span></div>${met ? `<span class="tag rule" style="opacity:1;transform:none">Met</span>` : ""}</div>`; }).join("")}</div>` : `<p class="hint">No alerts for ${esc(s.t)} yet.</p>`}
-      <button class="btn sm" data-addrule>Add an alert</button>`);
+    html += `</div>`;
   }
-  html += sec("Watchlists", "", `<p class="dline">${lists.length ? lists.map((n) => `<span class="pill">${esc(n)}</span>`).join(" ") : "Not in a watchlist"} <button class="btn ghost sm" data-save>Change</button></p>`);
-  html += sec("About", "", `<p class="dline">${esc(s.n)} · ${esc(TYLABEL[s.ty] || "")}</p><p class="hint">Prices: ${esc(v?.source || "Kraken")} daily candles${v?.live ? ", refreshed when you opened the app" : ""}. Facts and explanations only, never advice.</p><p class="disclaimer">${esc(DISCLAIMER)}</p>`);
+  html += sec(`About ${esc(s.n)}`, "", `<p class="dline">${esc(s.n)} · ${esc(TYLABEL[s.ty] || "")}</p><p class="hint">Prices: ${esc(v?.source || "Kraken")} daily candles${v?.live ? ", refreshed when you opened the app" : ""}. Facts and explanations only, never advice.</p><p class="disclaimer">${esc(DISCLAIMER)}</p>`);
   pane.innerHTML = html + `</div>`;
   pane.querySelectorAll("[data-how]").forEach((bt) => (bt.onclick = () => { const p = bt.closest("section").querySelector(".how"); p.hidden = !p.hidden; bt.setAttribute("aria-expanded", String(!p.hidden)); }));
   pane.querySelectorAll("[data-ind]").forEach((bt) => (bt.onclick = () => openLearn(bt.dataset.ind, c._v)));
   pane.querySelector("[data-addrule]")?.addEventListener("click", () => { location.hash = ""; APP.backTo = "feed"; showTab("profile", "rules", s.key); });
-  pane.querySelectorAll("[data-save]").forEach((bt) => (bt.onclick = () => openListsFor(s)));
+  pane.querySelector("[data-mycalls]")?.addEventListener("click", () => showTab("play"));
+  // the sections under "More about the price" start folded; tap a title to open it
+  pane.querySelectorAll(".folds > .dsec > h3").forEach((h) => { h.setAttribute("role", "button"); h.tabIndex = 0; h.onclick = (e) => { if (e.target.closest(".ibtn")) return; h.parentElement.classList.toggle("open"); }; });
   const mb = pane.querySelector("[data-movebox]");
   mb?.querySelectorAll("[data-gonews]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); c._go(PANE.news); }));
 }
@@ -439,63 +457,6 @@ function moveHtml(s, v) {
 }
 
 // ---------- special cards
-function catchupHtml() {
-  const first = !ls.get("pl.lastOpen");
-  const since = ls.get("pl.prevOpen");
-  const facts = [];
-  if (first) {
-    return `<div class="special"><div class="label">Welcome to ${esc(CONFIG.appName)}</div><h1>Your coins,<br>one chart at a time.</h1>
-      <p>Swipe through your watchlist like a feed. Every chart is drawn the same way, so moves are easy to compare.</p>
-      <p class="hint">Information only, never advice.</p></div>`;
-  }
-  // Daily recap: every coin's change since the day started (12:00 AM your time), a fixed point that doesn't depend on
-  // when you last opened the app. Worked out from 15-minute candles; until they arrive, nothing misleading is shown.
-  const ref = since9Ref(), m9 = APP.s9?.ref === ref.key ? APP.s9.chg : null;
-  const vs = APP.syms.map((s) => ({ s, c: m9?.[s.key] })).filter((x) => x.c != null);
-  const chg = (x) => x.c;
-  const ups = vs.filter((x) => chg(x) > 0).length;
-  const best = vs.reduce((a, x) => (!a || chg(x) > chg(a) ? x : a), null), worst = vs.reduce((a, x) => (!a || chg(x) < chg(a) ? x : a), null);
-  const keys = new Set(APP.syms.map((s) => s.key)), stories = D.news.stories || [];
-  const newsBy = vs.map((x) => ({ x, n: stories.filter((st) => st.syms.includes(x.s.key)).length })).sort((a, b) => b.n - a.n)[0];
-  const tile = (label, val, sub, cls = "") => `<div><span>${label}</span><b class="${cls}">${val}</b>${sub ? `<em>${sub}</em>` : ""}</div>`;
-  const tiles = vs.length ? `<div class="recap">${tile("Up today", `${ups}/${vs.length}`, "coins")}${best ? tile("Biggest rise", esc(best.s.t), pct(chg(best)), chg(best) >= 0 ? "up" : "down") : ""}${worst && worst !== best ? tile("Biggest fall", esc(worst.s.t), pct(chg(worst)), chg(worst) >= 0 ? "up" : "down") : ""}${newsBy?.n ? tile("Most news", esc(newsBy.x.s.t), `${newsBy.n} ${newsBy.n === 1 ? "story" : "stories"}`) : ""}</div>` : "";
-  const fresh = stories.filter((st) => st.syms.some((k) => keys.has(k)) && (!since || (st.ts || st.date) > since));
-  if (fresh.length) {
-    const top = fresh.find((st) => st.status === "confirmed") || fresh[0];
-    facts.push(`<div class="fact"><span class="ic acc">${fresh.length}</span><div><b>${fresh.length} new ${fresh.length === 1 ? "story" : "stories"}</b> since you last looked. Latest: “${esc(top.title.slice(0, 80))}${top.title.length > 80 ? "…" : ""}”</div></div>`);
-  }
-  const unread = store.alerts.filter((a) => !a.read).length;
-  if (unread) facts.push(`<div class="fact"><span class="ic acc">!</span><div><b>${unread} alert${unread === 1 ? "" : "s"}</b> waiting. See Coins → Alerts.</div></div>`);
-  const today = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
-  if (!m9 && APP.syms.length) loadSince9(ref);
-  return `<div class="special" data-recap><div class="label">Daily recap · ${esc(today)}</div>
-    <h1>${vs.length ? `${ups} of ${vs.length} up today.` : APP.s9?.failed ? "Couldn't load the latest prices." : "Checking today's prices…"}</h1>
-    <p class="hint" style="margin:-4px 0 10px">Change from ${esc(ref.label)} to now.</p>${tiles}${facts.join("")}
-    <p class="hint">${APP.syms.length} in ${esc(listName())} · swipe up to start</p></div>`;
-}
-// The start of today (12:00 AM) in the person's own time zone.
-function since9Ref() {
-  const d = new Date(); d.setHours(0, 0, 0, 0);
-  return { ms: d.getTime(), key: d.toISOString().slice(0, 16), label: "midnight (12:00 AM) your time" };
-}
-let s9busy = null;
-function loadSince9(ref) {
-  if (s9busy === ref.key) return;
-  s9busy = ref.key;
-  Promise.all(APP.syms.map(async (s) => {
-    try {
-      const bars = await krakenBars(s.t, 15), i = bars.findIndex((b) => Date.parse(b.t + ":00Z") >= ref.ms);
-      if (i < 0) return [s.key, 0]; // the first candle of the day hasn't closed yet
-      return [s.key, ((bars[bars.length - 1].c - bars[i].o) / bars[i].o) * 100];
-    } catch { return [s.key, null]; }
-  })).then((rows) => {
-    const chg = Object.fromEntries(rows.filter(([, x]) => x != null));
-    APP.s9 = { ref: ref.key, chg, failed: !Object.keys(chg).length };
-    s9busy = APP.s9.failed ? null : s9busy;
-    const c = document.querySelector(".card [data-recap]")?.closest(".card");
-    if (c) c.innerHTML = catchupHtml();
-  });
-}
 function doneHtml(round) {
   return `<div class="special done" style="align-items:flex-start"><svg class="done-ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="34"/><path d="M26 41l9 9 19-20"/></svg>
     <h1>You're all caught up.</h1><p>You've seen all ${APP.syms.length} in ${esc(listName())}${round > 1 ? ` (round ${round})` : ""}. Prices refresh each time you open the app.</p>
@@ -519,7 +480,6 @@ function setupSwipe(c, it) {
     if (idx !== 1) ensureSides();
     c.dataset.view = ["news", "main", "details"][idx];
     c.querySelectorAll(".dots i").forEach((d, k) => d.classList.toggle("on", k === idx));
-    coachEvent("pane", { view: c.dataset.view });
   };
   track.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -583,20 +543,34 @@ function wire(c, it) {
   // ƒx chip: add or remove indicators. S/R chip: pick the lines on the chart. Both apply to every coin, so every
   // card on screen redraws at once.
   c.querySelector("[data-fx]")?.addEventListener("click", (e) => { e.stopPropagation(); openIndicatorsSheet(() => redrawCards()); });
+  c.querySelectorAll("[data-range]").forEach((b) => b.addEventListener("click", async (e) => { e.stopPropagation(); if (b.getAttribute("aria-pressed") === "true") return; const by = { ...(store.data.settings.chartBy || {}) }; if (by[it.sym.key]) { const { range, ...rest } = by[it.sym.key]; by[it.sym.key] = rest; } await save({ settings: { ...store.data.settings, chartBy: by, chart: { ...store.data.settings.chart, range: b.dataset.range } } }); redrawCards(); }));
   c.querySelector("[data-lv]")?.addEventListener("click", (e) => { e.stopPropagation(); openLinesSheet(() => redrawCards()); });
   c.querySelector(".chartbox:not(.nodata)")?.addEventListener("click", () => { if (!justScrubbed()) chartTapHint(); });
   // two fingers on a card's chart: open it full screen, where pinching zooms the chart
   c.querySelector(".chartbox")?.addEventListener("touchstart", (e) => { if (e.touches.length === 2) { cancelPendingHold(); openFull(it.sym); } }, { passive: true });
-  c.querySelector("[data-full]")?.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) { coachEvent("full"); openFull(it.sym); } });
-  c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); coachEvent("tf"); openChartSheet(it.sym, () => redrawCards()); });
+  c.querySelector("[data-full]")?.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) openFull(it.sym); });
+  c.querySelector("[data-tf]")?.addEventListener("click", (e) => { e.stopPropagation(); openChartSheet(it.sym, () => redrawCards()); });
   c.querySelector("[data-pred]")?.addEventListener("click", (e) => { e.stopPropagation(); openPredictSheet(it.sym, () => redrawCards(it.sym.key)); });
 }
-// Prediction game: the Predict chip on a card, with how many predictions are open on that coin.
+// Call it (1.2.0): the small button under the price, with how many calls are waiting on that coin.
 function predChip(s) {
-  const n = store.preds.filter((p) => p.coin === s.key).length;
-  return `<button class="lvbtn pdbtn" data-pred aria-label="Predict ${esc(s.t)}'s price${n ? `, ${n} open` : ""}"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/></svg>Predict${n ? `<b>${n}</b>` : ""}</button>`;
+  const open = store.preds.filter((p) => p.coin === s.key).sort((a, b) => Date.parse(dueAt(a)) - Date.parse(dueAt(b)));
+  const next = open[0], left = next ? Math.max(0, Math.round((Date.parse(dueAt(next)) - Date.now()) / 60000)) : 0;
+  const leftText = !next ? "" : left <= 0 ? "scoring now" : left < 60 ? `${left} min` : left < 2880 ? `${Math.floor(left / 60)} h` : `${Math.round(left / 1440)} days`;
+  return `<div class="callrow2"><button class="callit" data-pred aria-label="Call ${esc(s.t)}${open.length ? `, ${open.length} waiting` : ""}">Call it</button>${open.length ? `<span class="hint">${open.length} call${open.length === 1 ? "" : "s"} waiting${leftText ? `, ${leftText}` : ""}</span>` : ""}</div>`;
 }
-
+// Your open calls on this coin, as lines on its chart (1.2.0): from the candle they were made in, at the price called.
+function callLevels(s, v) {
+  const out = [];
+  for (const p of store.preds) {
+    if (p.coin !== s.key || !p.target) continue;
+    const made = p.createdAt ? p.createdAt.slice(0, v.win[0]?.t?.length || 10) : null;
+    let from = made ? v.win.findIndex((b) => b.t >= made) : -1;
+    if (from < 0 && made && v.win.length && made > v.win.at(-1).t) from = v.win.length - 1;
+    out.push({ kind: "C", price: p.target, from: Math.max(0, from), id: p.id || "", label: p.horizon ? `Your ${HORIZONS[p.horizon]?.label || ""} call` : "Your call" });
+  }
+  return out;
+}
 // Redraw every filled coin card in place (after a chart setting changes or intraday candles arrive), so no card
 // on screen shows an older setting. key: only that coin's cards.
 export function redrawCards(key) {
@@ -611,29 +585,30 @@ export function redrawCards(key) {
 let dashT = 0;
 // new intraday prices: the open cards redraw, and Coins or Predict (prices, "now x% away") once things settle
 document.addEventListener("pulse-intra", (e) => { redrawCards(e.detail); if (APP.tab === "dash" || APP.tab === "play") { clearTimeout(dashT); dashT = setTimeout(() => keepScroll(APP.tab), 300); } });
-const keepScroll = (tab) => { const el = $(tab === "dash" ? "dash" : "play"), pg = el.parentElement, y = pg.scrollTop; (tab === "dash" ? renderDash : renderPlay)(); pg.scrollTop = y; };
+const keepScroll = (tab) => { const el = $(tab === "dash" ? "dash" : tab === "you" ? "you" : "play"), pg = el.parentElement, y = pg.scrollTop; (tab === "dash" ? renderDash : tab === "you" ? renderYou : renderPlay)(); pg.scrollTop = y; };
 // turning the phone changes how many panels fit, so cards redraw once the rotation settles
 let rzT = 0, lastFit = maxPanels();
 addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { if (maxPanels() !== lastFit) { lastFit = maxPanels(); redrawCards(); checkPanelFit(() => redrawCards()); } }, 250); });
 
 // ---------- tabs and refresh
-// Tabs: Coins ("dash"), Feed and Predict ("play"). "profile" is the settings pages, opened from the avatar sheet
-// on Predict (or from Coins for alerts); the tab bar keeps showing where they were opened from.
+// Tabs: Feed, Calls ("play") and You. "dash" is Your market (the feed as a list), opened from the feed's top bar, and
+// "profile" is the settings pages, opened from You; the tab bar keeps showing where they were opened from.
 export function showTab(tab, sub, arg) {
-  closeGroup(); closeProfile(); // the group and profile pages sit over the tabs; going anywhere else closes them
-  if (tab === "profile" && !sub) { tab = "play"; setTimeout(openAvatarSheet, 0); }
+  closeGroup(); // the group page sits over the tabs; going anywhere else closes it
+  if (tab === "profile" && !sub) { tab = "you"; }
   APP.tab = tab;
-  $("sFeed").hidden = tab !== "feed"; $("sDash").hidden = tab !== "dash"; $("sPlay").hidden = tab !== "play"; $("sProfile").hidden = tab !== "profile";
-  const lit = tab === "profile" ? APP.backTo || "play" : tab;
+  $("sFeed").hidden = tab !== "feed"; $("sDash").hidden = tab !== "dash"; $("sPlay").hidden = tab !== "play"; $("sYou").hidden = tab !== "you"; $("sProfile").hidden = tab !== "profile";
+  const lit = tab === "profile" ? APP.backTo || "you" : tab === "dash" ? "feed" : tab;
   document.querySelectorAll(".tabbar button").forEach((b) => b.setAttribute("aria-current", b.dataset.tab === lit ? "page" : "false"));
-  if (tab === "dash") { renderDash(); setTimeout(() => APP.tab === "dash" && startTour("dash"), 350); }
-  if (tab === "play") { renderPlay(); setTimeout(() => APP.tab === "play" && startTour("play"), 350); }
+  if (tab === "dash") renderDash();
+  if (tab === "play") renderPlay();
+  if (tab === "you") renderYou();
   if (tab === "profile") renderProfile(sub, arg);
   if (tab === "feed" && APP.needsRebuild) { APP.needsRebuild = false; buildFeed({ keepKey: APP.seq[APP.active]?.sym?.key }); }
 }
 document.querySelectorAll(".tabbar button").forEach((b) => (b.onclick = () => { APP.backTo = null; showTab(b.dataset.tab); }));
 $("addBtn").onclick = () => openAddSheet();
-$("switcher").onclick = () => openSwitcher();
+$("switcher").onclick = () => showTab("dash"); // Your market: the feed as a list, with the watchlist chooser
 $("status").onclick = () => doRefresh(true);
 
 function setStatus() {
@@ -704,23 +679,24 @@ export function applyTheme() {
   initPages();
   initSocial();
   initPlay();
+  initYou();
   store.on((what) => {
     $("alertDot").hidden = !store.alerts.some((a) => !a.read);
-    if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") keepScroll("dash"); if (store.ready && !store.data?.username) nameGate(); }
+    if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") keepScroll("dash"); if (store.ready && needsOnboarding() && !onboarding()) startOnboarding(); }
     if (what === "alerts" && APP.tab === "dash") keepScroll("dash");
-    if (what === "preds") APP.needsRebuild = true; // the Predict chips on cards show open counts
-    // the Predict tab follows new and scored predictions, and your name or score changing
+    if (what === "preds" && APP.tab === "feed" && APP.built) redrawCards(); else if (what === "preds") APP.needsRebuild = true; // cards show calls waiting and draw them on the chart
+    // the Calls tab follows new and scored calls, and your name or score changing
     if ((what === "preds" || what === "account") && APP.tab === "play" && $("sheet").hidden) keepScroll("play");
+    if ((what === "preds" || what === "account") && APP.tab === "you" && $("sheet").hidden) keepScroll("you");
     badge();
   });
   $("alertDot").hidden = !store.alerts.some((a) => !a.read);
   buildFeed();
-  const named = new Promise((r) => nameGate(r)); // a new account picks its username first
+  const named = new Promise((r) => startOnboarding(r)); // a new account is made first (welcome, username + password, first call)
   if (/^#\/(g\/|predict)/.test(location.hash)) named.then(() => openLink()); // a group's invite link, or a push about a challenge
   addEventListener("hashchange", () => { if (/^#\/(g\/|predict)/.test(location.hash)) named.then(() => openLink()); });
   await doRefresh(false);
   await named;
-  setTimeout(() => APP.tab === "feed" && startTour("feed"), 500);
   setTimeout(() => ls.set("pl.lastOpen", new Date().toISOString()), 4000);
   loadSymbols().catch(() => {});
 })();

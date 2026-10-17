@@ -1,5 +1,5 @@
 // Feedback on any part of the app. Press and hold anything (text, a chart, a panel, a button) for 3 seconds to leave
-// a note about that exact part, on any screen or sheet; or switch on Feedback mode in the Account sheet, where every tap on a page
+// a note about that exact part, on any screen or sheet; or switch on Feedback mode in Settings (You → gear), where every tap on a page
 // (buttons too) opens the note instead of acting.
 // Notes go to Firestore "feedback" with where they were left, so whoever builds from them knows exactly what's meant.
 import { esc, openSheet, closeSheet, toast, haptic } from "./ui.js";
