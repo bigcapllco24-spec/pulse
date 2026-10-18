@@ -1,5 +1,7 @@
 # Working on Pulse: what I expect from Claude
 
+**Last updated: 18 Oct 2026, 22:50 IST**
+
 ## What Pulse is today
 A phone-first crypto app: charts, news and a prediction game that teaches.
 Facts and education only, never advice. Smooth and simple, with few buttons
@@ -86,6 +88,8 @@ never become a badge for selling tips.
 - Ask before anything irreversible: publishing rules, deleting data or branches.
 - Decisions in the handoff (section 9) are made. Don't re-ask them, but do
   tell me if new facts mean one should be revisited.
+- Every doc starts with "Last updated: <date>, <time> IST". Refresh it on every
+  edit, in the project and the repo.
 - When I say we're done for the session, update the handoff and backlog
   (project docs, and docs/HANDOFF.md and docs/BACKLOG.md in the repo) so the next chat starts
   where this one stopped.

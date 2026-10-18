@@ -1,6 +1,8 @@
 # Pulse backlog
 
-Last updated 18 Oct 2026 (live: **1.2.9**). How Pulse works and where everything is: `claude/pulse-handoff.md`
+**Last updated: 18 Oct 2026, 22:50 IST** (live: 1.2.9)
+
+How Pulse works and where everything is: `claude/pulse-handoff.md`
 (repo: `docs/HANDOFF.md`). How to work: `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`). Ordered by the priority in the
 expectations: trust first, then "works on a real phone", then simplicity, then new features.
 

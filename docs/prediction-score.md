@@ -1,5 +1,7 @@
 # Prediction score
 
+**Last updated: 12 Oct 2026, 01:28 IST** (describes the score live today; score v2 is in `claude/pulse-score-v2-factors.md`, not built)
+
 A game: predict where a coin's price will be after 30 minutes, 1 hour, 1 day or 1 year. Each person has **one public
 number, the profile score (300 to 900)**, comparable between everyone. Each prediction shows only how close it was.
 The code is `web/js/score.js` (shared by the app and the data job); the checks are `tests/score.test.mjs`.
