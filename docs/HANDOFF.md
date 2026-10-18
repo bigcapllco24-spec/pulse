@@ -1,8 +1,8 @@
 # Pulse: handoff for a new chat
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
-things safely, and what's open. Read `claude/pulse-expectations.md` (also the project's custom instructions) for how
-Veer wants you to work, and `claude/pulse-backlog.md` for what's next.
+things safely, and what's open. Read `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`; also the project's custom instructions) for how
+Veer wants you to work, and `claude/pulse-backlog.md` (repo: `docs/BACKLOG.md`) for what's next.
 
 Last updated 18 Oct 2026: **version 1.2.9** live, service worker `pulse-shell-v62`. Version lives in `web/config.js`
 and shows on the welcome screens and Settings → Account and Legal. The database rules are published by every deploy
@@ -38,6 +38,7 @@ skill and not by luck or gaming. India-first, built to scale. The score review (
 | Code | GitHub `bigcapllco24-spec/pulse`, public, single branch `main` |
 | Firebase | Project `pulseapp-e536f` (console name "pulseapp"), Spark (free) plan, Firestore `(default)` in asia-south1 |
 | Project docs (claude.ai project "Pulse") | `claude/pulse-expectations.md`, `claude/pulse-handoff.md` (this file), `claude/pulse-backlog.md`, `claude/pulse-rca-2026-10-17.md`, `claude/pulse-score-review-2026-10-18.md` |
+| Same docs in the repo | `docs/HANDOFF.md`, `docs/BACKLOG.md`, `docs/EXPECTATIONS.md` (keep them equal to the project docs) |
 | Prediction scoring spec | `docs/prediction-score.md` |
 | Designs | 1.2.0 mockups and the cofounder review deck in the claude.ai project; 1.1.0 colour explorations at https://claude.ai/artifact/J9GbykhVNMbWf442SYA3yg |
 
@@ -278,7 +279,7 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 - Report the moment something is pushed. Keep replies short, outcome first.
 - Ask before anything irreversible: deleting data, deleting branches, rules changes.
 - Changes beyond what was asked are discussed first.
-- **When Veer says the session is done, update this handoff and the backlog** (project docs and `docs/HANDOFF.md`).
+- **When Veer says the session is done, update this handoff and the backlog** (project docs and `docs/HANDOFF.md`, `docs/BACKLOG.md`).
 - If other chats push branches, merge into `main`, resolve conflicts, run the tests, then delete the branch (the
   GitHub UI works; the API proxy blocks it).
 
