@@ -6,20 +6,32 @@ expectations: trust first, then "works on a real phone", then simplicity, then n
 
 ## Now: trust
 1. **Score v2: make the score a credential** (score review, 18 Oct). The current score can be gamed, rewards luck and
-   market direction, and barely separates real skill. Needs a decision on direction before any building:
-   - a proper scoring rule, so the honest call is always the best call (e.g. direction + how sure, or a range);
-   - score against a benchmark (the market's own move), so a bull year isn't skill;
-   - volatility by time of day / day of week, or realised volatility over the call;
-   - calls made together on correlated coins count as one piece of evidence;
-   - start price at the exact moment; end price as a median across exchanges over a few minutes; liquid coins only;
-   - bands and the chance level re-set from simulations on real price history; a "luck ruled out" marker.
-   First step: measure real 30-min and 1-hour volatility by hour from Kraken candles (fault 4), since it may decide how
-   big the problem is.
+   market direction, and barely separates real skill. v2 is designed and tested in simulation:
+   `claude/pulse-score-v2-factors.md` (ten fundamentals, exact starting values, experiments). Waiting on Veer: fading
+   at 9 months, looser proof for 650–800 with strict proof above 800, and the respect rule. Next: replay ~2 years of
+   real Kraken prices through the same players, then real players. Still to test: stacking overlapping long calls.
+   **Build "market" in from day one** (all-markets vision, 18 Oct): instrument ids tagged by market, a score per
+   market, an overall score that combines evidence (not a plain average; shown only once two markets are proven,
+   proposed), correlated calls across markets count as one. Cheap now, expensive later.
 2. **Sign-in decision before real users.** Anyone who types a username can open that account; clearing Safari data
    loses the phone's sign-in. Options to weigh: Google sign-in, email link, passkeys. Conflicts with "no personal
    data" for email/Google: needs a decision on what "no personal data" means at scale.
 3. **Compliance review before a wide launch:** game wording, leaderboard, groups, public scored calls, Learn, "your
    calls tend to…", Community. Ideally with a lawyer who knows SEBI's finfluencer and investment-adviser rules.
+   Also ask:
+   - Is a free, no-stakes prediction game on live Indian stock prices allowed at all? (SEBI: no real-time data
+     sharing with virtual trading/fantasy platforms, May 2024; public warning, Nov 2024; educational platforms may use
+     only 30-day-old data from 1 Jul 2026.) Our view: likely not as a live game; possible as blind-chart practice.
+   - Which non-Indian market is cleanest to add second (US stocks, indices, gold, forex), including data licences?
+   - Terms: minimum age, DPDP Act (usernames, device ids and connection data can be personal data).
+4. **Trust and safety: the score must not become a tipster's badge.** Before a wide launch:
+   - terms with a tick-box at sign-up, in plain words: no using the score to promote paid tips or advice;
+   - share card says "Skill score, not advice" and links to the real profile so claims can be checked;
+   - keep profiles free of bios, links and contact details;
+   - a report button, a warn/hide/suspend process, and a record of actions taken;
+   - never partner with or take money from tip-sellers;
+   - decide who handles reports (minutes a week at CUG scale, a real job if Pulse grows).
+   Terms alone don't protect: regulators look at what actually happens and whether Pulse acted.
 
 ## Next: works on a real phone, against the real database
 - **Live-site check after each deploy:** a throwaway account signs up, makes a call, is deleted (catches what the
@@ -46,7 +58,11 @@ expectations: trust first, then "works on a real phone", then simplicity, then n
 - iOS has no vibration API: lock-in and reveal haptics work on Android only.
 - Firebase MCP (local server via Claude desktop config): setup steps given 15 Oct; parked.
 - Reddit mention counts: only if Reddit confirms Pulse's use is allowed; a number only, never posts.
-- To discuss: compare two coins on one chart; moving an account to a new phone; stock data (needs a licence).
+- **More markets (the bigger picture):** a score per market and overall. Only after score v2 is proven on real
+  players (this month's score predicts next month's results) and the lawyer's answers. Indian stocks as blind-chart
+  practice (30+ day old charts, name and dates hidden); live credential markets outside India first.
+- Brand: "Pulse" is a crowded name in fintech; run a trademark search before investing in the brand at scale.
+- To discuss: compare two coins on one chart; moving an account to a new phone.
 
 ## Recent releases (details in git log and the handoff)
 - **1.2.9 (17 Oct):** How Pulse works, a five-card guide; the score explainer row removed.

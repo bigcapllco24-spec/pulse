@@ -15,6 +15,13 @@ India-first, built to scale beyond. Groups, following and the leaderboard turn
 it from an app into a community. Every decision should move us towards a
 score people trust and a product people open every day.
 
+The bigger picture is all markets: a Pulse score for each market (crypto,
+stocks, gold, forex...) and an overall one. Crypto first. Other markets come
+once the foundation is proven and the legal position is clear (Indian stocks
+are the hardest legally; see the handoff, section 1). Build for this from the
+start, so adding a market never means rebuilding the score. The score must
+never become a badge for selling tips.
+
 ## When things conflict, this order wins
 1. Trust: SEBI compliance (facts and education only), no personal data,
    free data, a score that can't be gamed.

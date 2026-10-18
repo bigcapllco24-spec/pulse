@@ -16,7 +16,30 @@ record of judgment is the moat. Never claim readiness, returns or advice.
 
 **Where it's going:** a score that means something to others, like a credential ("my Pulse score is 780"), earned by
 skill and not by luck or gaming. India-first, built to scale. The score review (18 Oct,
-`claude/pulse-score-review-2026-10-18.md`) found the score isn't there yet; that's the biggest open issue (section 10).
+`claude/pulse-score-review-2026-10-18.md`) found the score isn't there yet; score v2 is designed and tested in
+simulation (`claude/pulse-score-v2-factors.md`), nothing built yet.
+
+**The bigger picture (Veer, 18 Oct): all markets.** A Pulse score for each market (crypto, stocks, gold, forex…) and an
+overall one. Crypto first; other markets only once the foundation (score v2, real players) is proven and the legal
+position is clear. What follows from that, as agreed on 18 Oct:
+- **Build "market" into score v2 from day one:** instrument ids tagged by market, a score per market, an overall
+  score that combines evidence (not a plain average, so nobody games it by picking the easiest market), and calls
+  across correlated markets counting as one. The overall score shows only once two markets are proven (proposed).
+- **Indian stocks are the hardest market legally, not the easiest.** SEBI stopped exchanges and brokers sharing
+  real-time prices with virtual trading and fantasy-game platforms (May 2024), warned the public about such apps
+  (Nov 2024), and since 1 July 2026 platforms that call themselves educational may use only price data at least
+  30 days old (circular of 8 May 2026, aimed at gaming apps "posing as educational platforms"). Being educational
+  puts Pulse inside that rule for Indian stocks, not outside it. A live-price Indian stock game would also bar every
+  SEBI-registered firm (brokers, exchanges) from associating with Pulse. Crypto isn't a SEBI security.
+- **So:** India-first means who Pulse is for, not which market it scores. Indian stocks could come as a blind-chart
+  practice mode (charts 30+ days old, name and dates hidden, instant result, a separate practice score, not the
+  credential). Live credential markets: crypto now, non-Indian markets later, after legal advice.
+- **The score must not become a tipster's badge** ("820 on Pulse, join my Telegram"). Terms with a tick-box at
+  sign-up help but don't protect on their own; what counts is design (share card says "Skill score, not advice" and
+  links to the real profile; no bios, links or contact details), enforcement (report, warn, suspend, keep a record)
+  and never partnering with tip-sellers. Plan who handles reports before a wide launch.
+- The 2025 Online Gaming Act bans real-money games only; free games with no stakes are "online social games".
+  Pulse's no-money design is on the safe side.
 
 **Feel:** easy, smooth and habit-forming, but always useful. As few buttons as possible, swipes wherever they work.
 
@@ -37,7 +60,7 @@ skill and not by luck or gaming. India-first, built to scale. The score review (
 | Live app | https://bigcapllco24-spec.github.io/pulse/ |
 | Code | GitHub `bigcapllco24-spec/pulse`, public, single branch `main` |
 | Firebase | Project `pulseapp-e536f` (console name "pulseapp"), Spark (free) plan, Firestore `(default)` in asia-south1 |
-| Project docs (claude.ai project "Pulse") | `claude/pulse-expectations.md`, `claude/pulse-handoff.md` (this file), `claude/pulse-backlog.md`, `claude/pulse-rca-2026-10-17.md`, `claude/pulse-score-review-2026-10-18.md` |
+| Project docs (claude.ai project "Pulse") | `claude/pulse-expectations.md`, `claude/pulse-handoff.md` (this file), `claude/pulse-backlog.md`, `claude/pulse-rca-2026-10-17.md`, `claude/pulse-score-review-2026-10-18.md`, `claude/pulse-score-v2-factors.md` |
 | Same docs in the repo | `docs/HANDOFF.md`, `docs/BACKLOG.md`, `docs/EXPECTATIONS.md` (keep them equal to the project docs) |
 | Prediction scoring spec | `docs/prediction-score.md` |
 | Designs | 1.2.0 mockups and the cofounder review deck in the claude.ai project; 1.1.0 colour explorations at https://claude.ai/artifact/J9GbykhVNMbWf442SYA3yg |
@@ -334,14 +357,15 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 ## 10. Open items
 
 See `claude/pulse-backlog.md` for the prioritised list. The big ones:
-- **The score isn't a credential yet** (score review, 18 Oct): proper scoring rule, benchmark against the market,
-  time-of-day volatility, correlated calls, exact start price, bands re-set on real price history.
+- **The score isn't a credential yet** (score review, 18 Oct). Score v2 designed and simulated
+  (`claude/pulse-score-v2-factors.md`); proposals await Veer; next is a replay on ~2 years of real Kraken prices.
+  Build "market" into it from the start (section 1).
 - **Real sign-in** before real users (anyone who knows a username can open the account; Safari data clearing loses
   the phone's sign-in).
 - **Test gaps:** a live-site check after each deploy; shared lists, alerts, push, username change and account deletion
   in the real-database tests.
 - **Compliance review** of the game wording, leaderboard, groups, public calls, Learn, "your calls tend to…" and
-  Community before a wide launch.
+  Community before a wide launch; plus the multi-market questions and the trust-and-safety plan (section 1).
 - **Live checks still owed:** first morning push, daily.json crowd, Community feeds from GitHub Actions,
   `boards/followed` and `players/*/calls` after the 2-hour job, the share menu on real phones.
 - **iOS:** no vibration API (haptics Android only). Home Screen strip: `--gapb` stays 0; status-bar style `black`;
