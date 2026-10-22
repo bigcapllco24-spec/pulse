@@ -5,7 +5,7 @@ import { store, ls, myScore, pendingHere } from "./store.js";
 import { CHANCE, SCORE_MIN, SCORE_MAX, PROVISIONAL_UNDER, HORIZONS, isRight, bandOf } from "./score.js";
 import { $, esc, openSheet } from "./ui.js";
 import { myName, myCard } from "./social.js";
-import { verdictOf, VERDICT_AT, myLevel, ranksView, openAvatarSheet, myFullCard, levelAvatar, SURE, BASIS, resultRow, openResult } from "./play.js";
+import { verdictOf, VERDICT_AT, myLevel, ranksView, openAvatarSheet, myFullCard, levelAvatar, SURE, BASIS, resultRow, openResult, openAboutScore, openCoinPicker } from "./play.js";
 import { backLabel } from "./app.js";
 import { openPage, closePage, backBtn } from "./nav.js";
 import { openProfile } from "./pages.js";
@@ -42,7 +42,10 @@ export function renderYou() {
   el.querySelector("#youLearn").onclick = () => openProfile("learn");
 }
 const wireNote = (el) => el.querySelector("[data-v2ok]")?.addEventListener("click", () => { ls.set(V2_NOTE, 1); el.querySelector("#youNote")?.remove(); });
-export const openMyCard = () => openSheet("How others see you", cardHtml(myFullCard(), { mine: true }) + `<p class="hint">Other players see your username, level, score, followers and record. Your price calls are never shown unless you make them public once scored.</p>`);
+export const openMyCard = () => openSheet("How others see you", cardHtml(myFullCard(), { mine: true }) + `<p class="hint">Other players see your username, level, score, followers and record. Your price calls are never shown unless you make them public once scored.</p>`, (body) => {
+  body.querySelector("[data-how]")?.addEventListener("click", openAboutScore);
+  body.querySelector("[data-first]")?.addEventListener("click", openCoinPicker);
+});
 // Your record (1.3.0): the same as the score part of You, as a page over Calls from its progress card.
 export function openRecord() {
   const back = backLabel();

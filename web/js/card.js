@@ -102,9 +102,3 @@ export function cardHtml(c, { mine = false, actions = "", common = [] } = {}) {
     ${common.length ? `<div><span class="label">Groups in common</span><p style="margin:4px 0 0">${common.map((g) => esc(g.name)).join(", ")}</p></div>` : ""}
   </div>`;
 }
-
-// the help sheet behind "How it works": the same general points as About your score, never how it's worked out
-export const HOW_SCORE = `<p>The score runs from 300 to 900. Everyone starts at ${CHANCE}, about what guessing scores, and it's provisional until ${PROVISIONAL_UNDER} calls are scored.</p>
-  <p class="hint">Calling the right direction matters. Getting close to the real price matters too. One call can be luck: the score shows skill over many calls, so give it about 30.</p>
-  <div class="pc2-key" style="margin-top:12px">${[...BANDS].reverse().map(([min, name]) => `<span><i style="background:var(--${BAND_CLASS[name]})"></i>${esc(name)} ${num(min)}</span>`).join("")}</div>
-  <p class="hint">A learning game: no money, nothing to buy, and never advice.</p>`;

@@ -14,7 +14,6 @@ export function dropLayer(l) {
 }
 // The on-screen back: exactly what the phone's back does.
 export function back() { layers.at(-1)?.close({}); }
-export const layerCount = () => layers.length;
 
 function arm() {
   if (armed || pending || !layers.length) return; // with a back on its way, the guard is pushed once it has landed

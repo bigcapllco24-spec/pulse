@@ -36,7 +36,6 @@ export function dailyCoin(day) {
   return { key: `CRYPTO:${t}`, t, n: DAILY_NAMES[t], m: "CRYPTO", ty: "C" };
 }
 // A daily-coin call is simply a 1-day call on that day's coin, made that day (no extra data is stored).
-export const isDailyCall = (p) => p?.horizon === "1d" && p.createdAt && dailyCoin(istDay(Date.parse(p.createdAt))).key === p.coin;
 // How everyone did on one day's coin, from everyone's scored results: label counts only.
 export function crowdOf(resultsByAccount, day) {
   const coin = dailyCoin(day).key, labels = Object.fromEntries(LABELS.map((l) => [l, 0]));

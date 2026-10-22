@@ -118,24 +118,6 @@ async function addStarter(k) {
   doRefresh(false);
 }
 
-// Watchlists for one symbol (from the bookmark on a card)
-export function openListsFor(sym) {
-  openSheet(esc(sym.t), "", (body) => {
-    const cur = new Set(listsOf(sym.key));
-    body.innerHTML = `<p class="hint">${esc(sym.n)}</p>${watchlists().map((w) => `<label class="check"><input type="checkbox" value="${esc(w.id)}" ${cur.has(w.id) ? "checked" : ""}><span><b>${esc(w.name)}</b></span></label>`).join("")}
-      <div class="check"><span style="font-size:22px;width:22px;text-align:center;color:var(--accent)">+</span><input class="input" id="newWl2" placeholder="New watchlist" maxlength="32" style="padding:9px 12px"></div>
-      <button class="btn primary block" id="saveL" style="margin-top:14px">Save</button>`;
-    body.querySelector("#saveL").onclick = async () => {
-      const ids = [...body.querySelectorAll("input[type=checkbox]:checked")].map((x) => x.value);
-      const nw = body.querySelector("#newWl2").value.trim();
-      if (nw) ids.push(await newWatchlist(nw));
-      await setSymLists(sym, ids);
-      closeSheet();
-      toast(ids.length ? "Watchlists updated." : `${sym.t} removed from your watchlists.`);
-    };
-  }, () => buildFeed({ keepKey: sym.key }));
-}
-
 // Coins in your feed (1.3.2): "All my coins" at the top of the feed opens this sheet, not a new screen (designer's
 // feedback: it looked like a drop-down but swapped the whole page). Pick which list the feed scrolls, its order, or go on
 // to the list view and to editing lists.
