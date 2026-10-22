@@ -18,11 +18,11 @@ jobs:
         with: { node-version: 22 }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      # the install sometimes stalls: give each try 5 minutes, up to 3 tries. Runners pinned to 24.04: Playwright 1.56
-      # installs Ubuntu 24 packages, and ubuntu-latest moves to Ubuntu 26 from 19 Oct 2026
-      - run: |
-          pip install playwright==1.56.0
-          for i in 1 2 3; do if timeout 300 python -m playwright install --with-deps chromium; then exit 0; fi; echo "install try $i failed or stalled"; done; exit 1
+      # Runners pinned to 24.04: Playwright 1.56 installs Ubuntu 24 packages (ubuntu-latest moves to 26 from 19 Oct 2026).
+      # The browsers are cached, so most runs skip the download.
+      - uses: actions/cache@v4
+        with: { path: ~/.cache/ms-playwright, key: "pw-1.56.0-${{ runner.os }}-chromium" }
+      - run: bash scripts/install-browsers.sh chromium
       - run: bash scripts/check.sh
         env: { PW_CHROMIUM: "" }
 
@@ -37,10 +37,10 @@ jobs:
         with: { distribution: temurin, java-version: "21" }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      # the install sometimes stalls: give each try 5 minutes, up to 3 tries. Runners pinned to 24.04: Playwright 1.56
-      # installs Ubuntu 24 packages, and ubuntu-latest moves to Ubuntu 26 from 19 Oct 2026
-      - run: |
-          pip install playwright==1.56.0
-          for i in 1 2 3; do if timeout 300 python -m playwright install --with-deps chromium webkit; then exit 0; fi; echo "install try $i failed or stalled"; done; exit 1
+      # Runners pinned to 24.04: Playwright 1.56 installs Ubuntu 24 packages (ubuntu-latest moves to 26 from 19 Oct 2026).
+      # The browsers are cached, so most runs skip the download.
+      - uses: actions/cache@v4
+        with: { path: ~/.cache/ms-playwright, key: "pw-1.56.0-${{ runner.os }}-chromium-webkit" }
+      - run: bash scripts/install-browsers.sh chromium webkit
       - name: Real-database tests (Firebase emulators)
         run: npx -y firebase-tools@13.29.1 emulators:exec --project demo-pulse --only auth,firestore "python3 tests/live.py -v"
