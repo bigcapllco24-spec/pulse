@@ -43,8 +43,9 @@ def binance_route(route):
         rows.append([t, f"{o:.6f}", f"{h:.6f}", f"{l:.6f}", f"{c:.6f}", f"{rnd.uniform(1e3, 1e6):.2f}", t + 86399999]); price = c; t += 86400000
     route.fulfill(status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"}, body=json.dumps(rows))
 
-def new_ctx(b, w=390, h=844, **kw):
+def new_ctx(b, w=390, h=844, hint=False, **kw):
     ctx = b.new_context(viewport={"width": w, "height": h}, device_scale_factor=2, is_mobile=True, has_touch=True, **kw)
+    if not hint: ctx.add_init_script("localStorage.setItem('pl.swipeHint','1')")  # the one-time swipe hint has its own check
     ctx.route("**/api.kraken.com/**", kraken_route); ctx.route("**/data-api.binance.vision/**", binance_route); demo_mode(ctx)
     p = ctx.new_page(); errs = []
     p.on("pageerror", lambda e: errs.append(str(e))); p.on("dialog", lambda d: d.accept())
@@ -54,8 +55,8 @@ def onboard(p, name="chart_fan", first_call=False):
     """A new phone: welcome → create account (username) → first call (made or skipped)."""
     p.goto(BASE); p.wait_for_timeout(2500)
     if not p.locator("#obNew").count(): return
-    p.click("#obNew"); typein(p, "#obU", name); p.wait_for_timeout(500); p.click("#obGo"); p.wait_for_timeout(2500)
-    if first_call and p.locator("#obGo").count(): p.click("#obGo"); p.wait_for_timeout(900); p.click("#obGo"); p.wait_for_timeout(700)
+    p.click("#obNew"); p.wait_for_timeout(300); p.click("#obGo"); p.wait_for_timeout(300); typein(p, "#obU", name); p.wait_for_timeout(500); p.click("#obGo"); p.wait_for_timeout(2500)
+    if first_call and p.locator("#obGo").count(): p.click("[data-dir='1']"); p.wait_for_timeout(200); p.click("#obGo"); p.wait_for_timeout(900); p.click("#obGo"); p.wait_for_timeout(700)
     elif p.locator("#obSkip").count(): p.click("#obSkip"); p.wait_for_timeout(600)
     p.wait_for_timeout(800)
     if p.locator("#gdSkip").count(): p.click("#gdSkip"); p.wait_for_timeout(300)  # the guide a new account sees once
@@ -85,13 +86,16 @@ def close_sheet(p): p.click("#sheet [data-close]"); p.wait_for_timeout(400)
 
 # ---------- 1. the first run: welcome, username, first call, locked in; then sign out and log in
 def onboarding_test(b):
-    ctx, p, errs = new_ctx(b)
+    ctx, p, errs = new_ctx(b, hint=True)
     p.goto(BASE); p.wait_for_timeout(2500)
     g = p.inner_text("#gate")
     check("start: a new phone sees the welcome screen with the tagline and two ways in", p.is_visible("#gate") and "Swipe the market" in g and "Call the move" in g and p.is_visible("#obNew") and p.is_visible("#obHave"), g[:120].replace("\n", " "))
     tabs = p.evaluate("[...document.querySelectorAll('.tabbar button')].map(b=>b.dataset.tab+':'+b.textContent.trim()).join()")
     check("start: the app's tabs are Feed, Calls and You, with the feed on the left", tabs == "feed:Feed,play:Calls,you:You", tabs)
     p.click("#obNew"); p.wait_for_timeout(300)
+    h = p.inner_text("#gate")
+    check("how it works: before any question, one screen says what a call is (coin and time, where the price will be, scored against the real price)", "You make calls" in h and "keeps score" in h and p.locator("#gate .ob-step").count() == 3 and "That's a call" in h and "Very close" in h and "about 30" in h and "not advice" in h and p.is_visible("#obBack"), h[:200].replace("\n", " "))
+    p.click("#obGo"); p.wait_for_timeout(300)
     check("account: only a username is asked for (no password field)", p.locator("#gate input").count() == 1 and not p.locator("#gate input[type=password]").count())
     typein(p, "#obU", "ab"); p.wait_for_timeout(450)
     check("account: a short username is refused before anything is sent", p.is_disabled("#obGo") and "3 to 20" in p.inner_text("#obUMsg"), p.inner_text("#obUMsg"))
@@ -101,14 +105,15 @@ def onboarding_test(b):
     acct = p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount'))")
     check("account: the username is saved on the account", acct.get("username") == "chart_fan", json.dumps(acct)[:120])
     g = p.inner_text("#gate")
-    check("first call: Bitcoin in an hour, higher or lower, three sizes with prices", "Bitcoin be in an hour" in g and p.is_visible("[data-dir='1']") and p.locator("#obSizes [data-k]").count() == 3 and "$" in p.inner_text("#obSizes"), g[:160].replace("\n", " "))
-    p.click("[data-dir='-1']"); p.wait_for_timeout(200); p.click("#obSizes [data-k='2']"); p.wait_for_timeout(200)
-    prices = [float(x) for x in re.findall(r"\$([\d.]+)", p.inner_text("#obSizes").replace(",", ""))]
+    check("first call: Bitcoin tomorrow; nothing is picked, Lock in waits on higher or lower, and how far isn't shown yet", "Bitcoin be tomorrow at" in g and p.is_visible("[data-dir='1']") and p.get_attribute("[data-dir='1']", "aria-pressed") == "false" and p.get_attribute("[data-dir='-1']", "aria-pressed") == "false" and p.is_disabled("#obGo") and "Pick higher or lower" in p.inner_text("#obGo") and not p.locator("#obFar [data-k]").count() and "No money involved" in g, g[:200].replace("\n", " "))
     now_px = float(re.search(r"\$([\d,.]+)", g).group(1).replace(",", ""))
-    check("first call: Lower turns the three prices below the current price", all(x < now_px for x in prices) and prices[0] > prices[1] > prices[2], f"{now_px} {prices}")
+    p.click("[data-dir='-1']"); p.wait_for_timeout(200)
+    call = lambda: float(re.search(r"\$([\d,.]+)", p.inner_text("#obFar .pnow")).group(1).replace(",", ""))
+    c1 = call(); p.click("#obFar [data-k='2']"); p.wait_for_timeout(200); c2 = call()
+    check("first call: Lower shows how far (three sizes) and the call below the price; a bigger size moves it further; Lock in is on", p.locator("#obFar [data-k]").count() == 3 and "↓" in p.inner_text("#obFar .pnow") and now_px > c1 > c2 and not p.is_disabled("#obGo") and "Lock in" in p.inner_text("#obGo"), f"{now_px} {c1} {c2}")
     p.click("#obGo"); p.wait_for_timeout(1000)
     pr = demo_preds(p).get("open", [])
-    check("first call: Lock in saves a 1-hour Bitcoin call on the account and shows Locked in with the time it's scored", len(pr) == 1 and pr[0]["horizon"] == "1h" and pr[0]["t"] == "BTC" and pr[0]["target"] < now_px and "Locked in" in p.inner_text("#gate") and p.is_visible("#obPush"), json.dumps(pr)[:160])
+    check("first call: Lock in saves a 1-day Bitcoin call on the account and shows Locked in with when it's scored", len(pr) == 1 and pr[0]["horizon"] == "1d" and pr[0]["t"] == "BTC" and pr[0]["target"] < now_px and "Locked in" in p.inner_text("#gate") and "tomorrow" in p.inner_text("#gate") and p.is_visible("#obPush"), json.dumps(pr)[:160])
     p.click("#obGo"); p.wait_for_timeout(1200)
     # the guide: five cards, one idea each, once per account; no explanation of how scoring works
     g = p.inner_text("#guide") if p.locator("#guide").count() else ""
@@ -117,6 +122,11 @@ def onboarding_test(b):
     for k in range(5): seen.append(p.inner_text("#guide .gd-h")); words.append(p.inner_text("#guide .gd-p")); p.click("#gdNext"); p.wait_for_timeout(250)
     check("guide: Next walks through the five cards and Start calling closes it", seen == ["Swipe up for the next coin", "Swipe sideways for more", "Call where it goes next", "See how you did", "Play with others"] and not p.locator("#guide").count(), str(seen))
     check("guide: it doesn't explain how scoring works", not any("score" in w.lower() for w in words), " | ".join(words))
+    p.wait_for_timeout(1600)
+    hint = p.inner_text(".card.active .swhint") if p.locator(".card.active .swhint").count() else ""
+    p.evaluate("document.querySelector('.card.active')._go(2)"); p.wait_for_timeout(500)
+    check("feed: once the guide is closed, the first coin shows a one-time hint that news and Before you call are a swipe away; a swipe clears it", "News" in hint and "Before you call" in hint and not p.locator(".card.active .swhint:not(.out)").count(), hint)
+    p.evaluate("document.querySelector('.card.active')._go(1)"); p.wait_for_timeout(400)
     check("guide: it's remembered on the account and the phone", p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount')).guideSeen") == 1 and p.evaluate("localStorage.getItem('pl.guideSeen')") == "1")
     p.reload(); p.wait_for_timeout(2500)
     check("guide: it isn't shown again on the next open", not p.locator("#guide").count())
@@ -207,12 +217,15 @@ def calls_test(b):
     check("replay: a scored call opens as a replay: label, direction, the price path, the three prices and what happened", "Wrong way" in s and "You called up, it went down" in s and p.locator("#rpChart svg").count() == 1 and "Price when you called" in s and "Your call" in s and "Price at the end" in s, s[:200].replace("\n", " "))
     close_sheet(p)
     p.click("#plProg"); p.wait_for_timeout(600)
-    check("calls: the progress card opens You", p.is_visible("#sYou") and "where you stand" in p.inner_text("#you").lower())
-    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(500); p.click("#plFriends"); p.wait_for_timeout(500)
-    f = p.inner_text("#play").lower()
+    lit = p.get_attribute(".tabbar [data-tab=play]", "aria-current")
+    check("calls: the progress card opens Your record over Calls (‹ Calls), and Calls stays lit", p.is_visible("#sRecord") and "where you stand" in p.inner_text("#record").lower() and p.inner_text("#record #pBack").strip() == "Calls" and lit == "page")
+    p.click("#record #pBack"); p.wait_for_timeout(500)
+    check("record: back returns to Calls", not p.is_visible("#sRecord") and p.is_visible("#sPlay"))
+    p.click("#plFriends"); p.wait_for_timeout(500)
+    f = p.inner_text("#friends").lower()
     check("with friends: the hub explains groups, offers Start a group and Join with a link, and shared lists", "with friends" in f and p.is_visible("#plNewG") and p.is_visible("#plJoinG") and "shared lists" in f and p.is_visible("#plNewL"), f[:160].replace("\n", " "))
-    p.click("#plBack"); p.wait_for_timeout(400)
-    check("with friends: Back returns to Calls", "Today's coin" in p.inner_text("#play"))
+    p.click("#friends #pBack"); p.wait_for_timeout(500)
+    check("with friends: Back returns to Calls", not p.is_visible("#sFriends") and "Today's coin" in p.inner_text("#play"))
     check("calls: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
@@ -237,8 +250,8 @@ def you_test(b):
     p.click("#youLearn"); p.wait_for_timeout(600)
     l = p.inner_text("#profile")
     check("learn: six short reads on what a score doesn't show", "Before you put money in" in l and p.locator("#profile .dsec.read").count() == 6 and "Leverage" in l, l[:120].replace("\n", " "))
-    p.click("#pBack"); p.wait_for_timeout(500)
-    check("learn: Back returns to You", p.is_visible("#sYou"))
+    p.click("#profile #pBack"); p.wait_for_timeout(500)
+    check("learn: Back returns to You", p.is_visible("#sYou") and not p.is_visible("#sProfile"))
     # settings: public calls default
     p.click("#youSet"); p.wait_for_timeout(600)
     s = sheet_text(p)
@@ -292,7 +305,61 @@ def people_test(b):
     check("people: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
-# ---------- 6. every screen at common phone sizes, sideways, desktop and the light theme: nothing wider than the screen
+# ---------- 6. back everywhere (1.3.0): the phone's back closes the top sheet or page and never leaves the app from one
+def nav_test(b):
+    ctx, p, errs = new_ctx(b)
+    onboard(p); p.wait_for_timeout(500)
+    set_results(p, fake_results(3)); p.reload(); p.wait_for_timeout(3000)
+    if p.is_visible("#sheet"): close_sheet(p)
+    here = lambda: p.evaluate("location.href")
+    start = here()
+    def phone_back():
+        try: p.go_back(timeout=2500)
+        except Exception: pass
+        p.wait_for_timeout(500)
+    p.click(".card.active .callit"); p.wait_for_timeout(600)
+    phone_back()
+    check("back: the phone's back closes a sheet and stays in the app", not p.is_visible("#sheet") and here() == start and p.is_visible("#sFeed"))
+    p.click("#switcher"); p.wait_for_timeout(700)
+    open_ok = p.is_visible("#sDash") and "Feed" in p.inner_text("#dash #dFeed")
+    phone_back()
+    check("back: the coins list slides in with ‹ Feed, and the phone's back closes it", open_ok and not p.is_visible("#sDash") and p.is_visible("#sFeed") and here() == start)
+    p.click(".card.active [data-full]"); p.wait_for_timeout(900)
+    full_ok = p.is_visible("#full") and p.is_visible("#full [data-fclose]")
+    phone_back()
+    check("back: the full-screen chart has a close button, and the phone's back closes it", full_ok and not p.is_visible("#full"), str(full_ok))
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(600)
+    p.click("#plProg"); p.wait_for_timeout(600)
+    rec = p.is_visible("#sRecord")
+    phone_back()
+    check("back: Your record closes with the phone's back, back on Calls", rec and not p.is_visible("#sRecord") and p.is_visible("#sPlay"))
+    # page, then a sheet on it, then back twice
+    p.click("#plFriends"); p.wait_for_timeout(500); p.click("#plNewG"); p.wait_for_timeout(500)
+    both = p.is_visible("#sFriends") and p.is_visible("#sheet")
+    phone_back(); one = p.is_visible("#sFriends") and not p.is_visible("#sheet")
+    phone_back()
+    check("back: a sheet over a page closes first, then the page", both and one and not p.is_visible("#sFriends") and p.is_visible("#sPlay"), f"{both} {one}")
+    # group page
+    p.click("#plFriends"); p.wait_for_timeout(500); p.click("#plNewG"); p.wait_for_timeout(500); typein(p, "#ngIn", "Backers"); p.click("#ngGo"); p.wait_for_timeout(1300)
+    g = p.is_visible("#grp")
+    phone_back(); g1 = not p.is_visible("#grp") and p.is_visible("#sFriends")
+    phone_back()
+    check("back: the group page closes with the phone's back, then With friends", g and g1 and not p.is_visible("#sFriends"), f"{g} {g1}")
+    # settings page from the Settings sheet returns to the sheet
+    p.click(".tabbar [data-tab=you]"); p.wait_for_timeout(600); p.click("#youSet"); p.wait_for_timeout(500); p.click("#sheet [data-av=appearance]"); p.wait_for_timeout(600)
+    lab = p.inner_text("#profile #pBack").strip() if p.is_visible("#sProfile") else ""
+    phone_back()
+    check("back: a settings page says ‹ Settings and back reopens the Settings sheet", lab == "Settings" and not p.is_visible("#sProfile") and "Settings" in (p.inner_text("#shTitle") if p.is_visible("#sheet") else ""), lab)
+    close_sheet(p)
+    # nothing left open: history is back where it started, and a tab tap closes any page
+    p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(500); p.click("#plProg"); p.wait_for_timeout(500); p.click(".tabbar [data-tab=you]"); p.wait_for_timeout(700)
+    check("back: tapping a tab closes the page on top", not p.is_visible("#sRecord") and p.is_visible("#sYou"))
+    p.wait_for_timeout(300)
+    check("back: with everything closed, no extra history entries are left behind", p.evaluate("history.state") in (None, {}) and here() == start, json.dumps(p.evaluate("history.state")))
+    check("back: no JavaScript errors", not errs, " | ".join(errs[:3]))
+    ctx.close()
+
+# ---------- 7. every screen at common phone sizes, sideways, desktop and the light theme: nothing wider than the screen
 def screens_test(b):
     sizes = [(320, 640, False, "dark"), (360, 780, False, "dark"), (390, 844, False, "light"), (430, 932, False, "dark"), (844, 390, False, "dark"), (1280, 800, True, "light")]
     over = """((sel)=>{const W=innerWidth, bad=[]; const root=document.querySelector(sel); if(!root) return ['missing '+sel];
@@ -307,9 +374,9 @@ def screens_test(b):
         p = ctx.new_page(); errs = []; p.on("pageerror", lambda e: errs.append(str(e))); p.on("dialog", lambda d: d.accept())
         p.goto(BASE); p.wait_for_timeout(2000)
         bad = {"welcome": p.evaluate(over, "#gate")}
-        p.click("#obNew"); p.wait_for_timeout(300); bad["create"] = p.evaluate(over, "#gate")
+        p.click("#obNew"); p.wait_for_timeout(300); bad["how it works"] = p.evaluate(over, "#gate"); p.click("#obGo"); p.wait_for_timeout(300); bad["create"] = p.evaluate(over, "#gate")
         typein(p, "#obU", "sizer"); p.wait_for_timeout(500); p.click("#obGo"); p.wait_for_timeout(2500)
-        if p.locator("#obSizes").count(): bad["first call"] = p.evaluate(over, "#gate"); p.evaluate("document.querySelector('#obSkip').click()")
+        if p.locator("#obFar").count(): p.click("[data-dir='1']"); p.wait_for_timeout(200); bad["first call"] = p.evaluate(over, "#gate"); p.evaluate("document.querySelector('#obSkip').click()")
         p.wait_for_timeout(1000)
         if p.locator("#guide").count(): bad["guide"] = p.evaluate(over, "#guide"); p.click("#gdSkip"); p.wait_for_timeout(300)
         if theme == "light":
@@ -324,7 +391,7 @@ def screens_test(b):
         p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(600); bad["calls"] = p.evaluate(over, "#play")
         p.click("#play [data-res='0']"); p.wait_for_timeout(1200); bad["replay"] = p.evaluate(over, "#sheet"); close_sheet(p)
         p.click("#plFind"); p.wait_for_timeout(800); bad["find players"] = p.evaluate(over, "#sheet"); close_sheet(p)
-        p.click("#plFriends"); p.wait_for_timeout(400); bad["with friends"] = p.evaluate(over, "#play")
+        p.click("#plFriends"); p.wait_for_timeout(500); bad["with friends"] = p.evaluate(over, "#friends")
         p.click("#plNewG"); p.wait_for_timeout(500); typein(p, "#ngIn", "A group with a long name"); p.click("#ngGo"); p.wait_for_timeout(1200); bad["group page"] = p.evaluate(over, "#grp")
         foot = p.evaluate("(()=>{const f=document.querySelector('#grp .grp-f'); if(!f) return 'missing'; const r=f.getBoundingClientRect(); return r.bottom<=innerHeight+1 && r.top>=0 ? 'ok' : r.top+'..'+r.bottom})()")
         p.click("#grBack"); p.wait_for_timeout(500)
@@ -352,7 +419,9 @@ def ios_homescreen_test(b):
 if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch(**({"executable_path": CHROME} if CHROME else {}))
-        for name, fn in [("start", onboarding_test), ("feed", feed_test), ("calls", calls_test), ("you", you_test), ("people", people_test), ("screens", screens_test), ("iOS Home Screen", ios_homescreen_test)]:
+        only = set(filter(None, __import__("os").environ.get("ONLY", "").split(",")))  # e.g. ONLY=nav,calls while working on them
+        for name, fn in [("start", onboarding_test), ("feed", feed_test), ("calls", calls_test), ("you", you_test), ("people", people_test), ("nav", nav_test), ("screens", screens_test), ("iOS Home Screen", ios_homescreen_test)]:
+            if only and name not in only: continue
             try: fn(b)
             except Exception as e: check(f"{name}: suite ran to the end", False, repr(e)[:300])
         b.close()

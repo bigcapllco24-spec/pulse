@@ -123,13 +123,15 @@ def uid_of(name):
 
 def create_account(p, name, first_call=True):
     p.wait_for_selector("#obNew", timeout=20000); p.click("#obNew")
+    p.wait_for_selector(".ob-step", timeout=5000); p.click("#obGo")  # what a call is (1.3.1)
     typein(p, "#obU", name)
     p.wait_for_function("document.querySelector('#obUMsg')?.textContent.includes('free')", timeout=15000)
     t0 = time.time(); p.click("#obGo")
     p.wait_for_function("!document.querySelector('#obU')", timeout=20000)
     took = time.time() - t0
     if first_call:
-        p.wait_for_selector("#obSizes [data-k]", timeout=20000); p.click("#obGo")
+        p.wait_for_selector("#gate [data-dir='1']", timeout=20000); p.click("#gate [data-dir='1']")  # nothing is picked for you
+        p.wait_for_selector("#obFar [data-k]", timeout=5000); p.click("#obGo")
         p.wait_for_function("document.querySelector('#gate')?.innerText.includes('Locked in')", timeout=20000)
         p.click("#obGo")
     else:
@@ -182,13 +184,13 @@ def run(pw, base):
     check("iphone: creating an account by typing a username saves the name and the account in the database", bool(ana) and acct and acct.get("username") == "ana_live", json.dumps(acct)[:160] if acct else "no account")
     check("iphone: creating the account answers within 6 s", took < 6, f"{took:.1f}s")
     preds = eventually(lambda: docs(f"accounts/{ana}/predictions"))
-    check("iphone: the first call (Bitcoin, 1 hour) is saved in the database", preds and preds[0]["_id"] == "BTC_1h" and preds[0].get("target", 0) > 0, json.dumps(preds)[:200])
+    check("iphone: the first call (Bitcoin, 1 day, higher) is saved in the database", preds and preds[0]["_id"] == "BTC_1d" and preds[0].get("target", 0) > preds[0].get("clientP0", 1e18), json.dumps(preds)[:200])
     no_errors(iphone, "sign-up")
 
     # ---- 2. Call it with everything: own %, how sure, based on, public
-    msg = make_call(iphone, "1d", pct="2.5", sure="very", basis="news", public=True)
-    d = eventually(lambda: (lambda x: x if x and x.get("sure") else None)(doc(f"accounts/{ana}/predictions/BTC_1d")))
-    check("iphone: Call it saves a 1-day call with how sure, what it was based on and public", d and d.get("sure") == "very" and d.get("basis") == "news" and d.get("pub") is True, (json.dumps(d) if d else "nothing saved") + " | " + msg[:120])
+    msg = make_call(iphone, "1h", pct="0.6", sure="very", basis="news", public=True)
+    d = eventually(lambda: (lambda x: x if x and x.get("sure") else None)(doc(f"accounts/{ana}/predictions/BTC_1h")))
+    check("iphone: Call it saves a 1-hour call with how sure, what it was based on and public", d and d.get("sure") == "very" and d.get("basis") == "news" and d.get("pub") is True, (json.dumps(d) if d else "nothing saved") + " | " + msg[:120])
     iphone.wait_for_timeout(800)
     check("iphone: the card shows 2 calls waiting", "2 calls waiting" in iphone.inner_text(".card.active"), iphone.inner_text(".card.active .head2")[:120])
     iphone.click(".card.active .callit"); iphone.wait_for_selector("#sheet [data-dir]")

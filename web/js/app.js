@@ -3,7 +3,7 @@
 import { CONFIG } from "../config.js";
 import { store, ls, init, save, STARTER, chartSettings, allSyms, watchlists, settleDemoPredictions, connected } from "./store.js";
 import { initSocial, settleDemoChallenges } from "./social.js";
-import { initPlay, renderPlay, openPredictSheet, openLink, badge, openAvatarSheet, closeGroup } from "./play.js";
+import { initPlay, renderPlay, openPredictSheet, openLink, badge, closeGroup, openCoinCalls, rerenderPages } from "./play.js";
 import { krakenRows } from "./predict.js";
 import { loadSymbols, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
@@ -12,13 +12,14 @@ import { mainChart, lowerChart } from "./chart.js";
 import { levelsFor, swingLevels } from "./levels.js";
 import { picks, studyWindow, maxPanels, OVERLAYS, PANELS } from "./studies.js";
 import { openPanels, withExpand } from "./panels.js";
-import { openFull } from "./full.js";
+import { openFull, closeFull } from "./full.js";
+import { openPage, closeAllPages, topPage, pageOpen } from "./nav.js";
 import { initFeedback } from "./feedback.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz, cancelPendingHold } from "./interact.js";
 import { dueAt, HORIZONS, dailyVol, typicalMove } from "./score.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, INTRA, intraState, dailyOf, RANGE_LABEL } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, toast, haptic, openSheet, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, renderProfile, openAddSheet, openSwitcher, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, checkPanelFit } from "./pages.js";
+import { initPages, renderDash, openProfile, openAddSheet, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, checkPanelFit } from "./pages.js";
 import { startOnboarding, onboarding, needsOnboarding } from "./onboard.js";
 import { openGuide, guideSeen } from "./guide.js";
 import { initYou, renderYou } from "./you.js";
@@ -441,8 +442,8 @@ function renderDetails(c, it) {
   pane.innerHTML = html + `</div>`;
   pane.querySelectorAll("[data-how]").forEach((bt) => (bt.onclick = () => { const p = bt.closest("section").querySelector(".how"); p.hidden = !p.hidden; bt.setAttribute("aria-expanded", String(!p.hidden)); }));
   pane.querySelectorAll("[data-ind]").forEach((bt) => (bt.onclick = () => openLearn(bt.dataset.ind, c._v)));
-  pane.querySelector("[data-addrule]")?.addEventListener("click", () => { location.hash = ""; APP.backTo = "feed"; showTab("profile", "rules", s.key); });
-  pane.querySelector("[data-mycalls]")?.addEventListener("click", () => showTab("play"));
+  pane.querySelector("[data-addrule]")?.addEventListener("click", () => openProfile("rules", s.key));
+  pane.querySelector("[data-mycalls]")?.addEventListener("click", () => openCoinCalls(s));
   // the sections under "More about the price" start folded; tap a title to open it
   pane.querySelectorAll(".folds > .dsec > h3").forEach((h) => { h.setAttribute("role", "button"); h.tabIndex = 0; h.onclick = (e) => { if (e.target.closest(".ibtn")) return; h.parentElement.classList.toggle("open"); }; });
   const mb = pane.querySelector("[data-movebox]");
@@ -527,7 +528,7 @@ function setupSwipe(c, it) {
 
 // Keyboard on desktop: up/down for the next symbol, left/right for news and details.
 document.addEventListener("keydown", (e) => {
-  if (APP.tab !== "feed" || !$("sheet").hidden || /input|select|textarea/i.test(e.target.tagName)) return;
+  if (APP.tab !== "feed" || topPage() || !$("sheet").hidden || /input|select|textarea/i.test(e.target.tagName)) return;
   const c = feed.querySelector(".card.active");
   if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); stepFeed(e.key === "ArrowDown" ? 1 : -1); }
   else if (c?._go && (e.key === "ArrowLeft" || e.key === "ArrowRight")) { const cur = PANE[c.dataset.view || "main"]; c._go(cur + (e.key === "ArrowRight" ? 1 : -1)); }
@@ -535,7 +536,7 @@ document.addEventListener("keydown", (e) => {
 
 // ---------- interactions on a card
 function wire(c, it) {
-  c.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => (b.dataset.act === "add" ? openAddSheet() : showTab("dash"))));
+  c.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => (b.dataset.act === "add" ? openAddSheet() : openDash())));
   if (it.type === "done") wireQuiz(c);
   if (it.type !== "sym") return;
   const justScrubbed = () => Date.now() - (APP.scrubEndAt || 0) < 400;
@@ -585,31 +586,39 @@ export function redrawCards(key) {
 }
 let dashT = 0;
 // new intraday prices: the open cards redraw, and Coins or Predict (prices, "now x% away") once things settle
-document.addEventListener("pulse-intra", (e) => { redrawCards(e.detail); if (APP.tab === "dash" || APP.tab === "play") { clearTimeout(dashT); dashT = setTimeout(() => keepScroll(APP.tab), 300); } });
-const keepScroll = (tab) => { const el = $(tab === "dash" ? "dash" : tab === "you" ? "you" : "play"), pg = el.parentElement, y = pg.scrollTop; (tab === "dash" ? renderDash : tab === "you" ? renderYou : renderPlay)(); pg.scrollTop = y; };
+document.addEventListener("pulse-intra", (e) => { redrawCards(e.detail); if (onScreen("dash") || onScreen("play")) { clearTimeout(dashT); dashT = setTimeout(() => keepScroll(onScreen("dash") ? "dash" : "play"), 300); } });
+// redraw a screen in place, keeping where it was scrolled to
+export const keepScroll = (name) => { const el = $(name), pg = el.parentElement, y = pg.scrollTop; ({ dash: renderDash, you: renderYou, play: renderPlay }[name] || (() => rerenderPages(name)))(); pg.scrollTop = y; };
 // turning the phone changes how many panels fit, so cards redraw once the rotation settles
 let rzT = 0, lastFit = maxPanels();
 addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { if (maxPanels() !== lastFit) { lastFit = maxPanels(); redrawCards(); checkPanelFit(() => redrawCards()); } }, 250); });
 
 // ---------- tabs and refresh
-// Tabs: Feed, Calls ("play") and You. "dash" is Your market (the feed as a list), opened from the feed's top bar, and
-// "profile" is the settings pages, opened from You; the tab bar keeps showing where they were opened from.
-export function showTab(tab, sub, arg) {
-  closeGroup(); // the group page sits over the tabs; going anywhere else closes it
-  if (tab === "profile" && !sub) { tab = "you"; }
+// Tabs: Feed, Calls ("play") and You. Everything else is a page sliding in over the tab it was opened from (nav.js):
+// the coins list ("dash"), With friends, Your record and the settings pages ("profile"). The tab bar keeps that tab lit.
+export function showTab(tab) {
+  closeAllPages(); closeGroup(); closeFull(); // a tab tap always lands on the tab itself
   APP.tab = tab;
-  $("sFeed").hidden = tab !== "feed"; $("sDash").hidden = tab !== "dash"; $("sPlay").hidden = tab !== "play"; $("sYou").hidden = tab !== "you"; $("sProfile").hidden = tab !== "profile";
-  const lit = tab === "profile" ? APP.backTo || "you" : tab === "dash" ? "feed" : tab;
-  document.querySelectorAll(".tabbar button").forEach((b) => b.setAttribute("aria-current", b.dataset.tab === lit ? "page" : "false"));
-  if (tab === "dash") renderDash();
+  $("sFeed").hidden = tab !== "feed"; $("sPlay").hidden = tab !== "play"; $("sYou").hidden = tab !== "you";
+  document.querySelectorAll(".tabbar button").forEach((b) => b.setAttribute("aria-current", b.dataset.tab === tab ? "page" : "false"));
   if (tab === "play") renderPlay();
   if (tab === "you") renderYou();
-  if (tab === "profile") renderProfile(sub, arg);
   if (tab === "feed" && APP.needsRebuild) { APP.needsRebuild = false; buildFeed({ keepKey: APP.seq[APP.active]?.sym?.key }); }
 }
-document.querySelectorAll(".tabbar button").forEach((b) => (b.onclick = () => { APP.backTo = null; showTab(b.dataset.tab); }));
+// What's on screen: the top page, or the tab.
+export const onScreen = (name) => (topPage() ? topPage() === PAGE_OF[name] : APP.tab === name);
+const PAGE_OF = { dash: "sDash", friends: "sFriends", record: "sRecord", profile: "sProfile" };
+// Where a page's back button goes, in words: the page under it, or the tab.
+export const backLabel = () => ({ sDash: "Coins", sFriends: "With friends", sRecord: "Your record", sProfile: "Back" }[topPage()] || { feed: "Feed", play: "Calls", you: "You" }[APP.tab]);
+// The coins in your feed, as a list (Your market).
+export function openDash() {
+  APP.dashBack = backLabel();
+  openPage("sDash", { onClose: () => { if (APP.tab === "feed" && APP.needsRebuild) { APP.needsRebuild = false; buildFeed({ keepKey: APP.seq[APP.active]?.sym?.key }); } } });
+  renderDash();
+}
+document.querySelectorAll(".tabbar button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 $("addBtn").onclick = () => openAddSheet();
-$("switcher").onclick = () => showTab("dash"); // Your market: the feed as a list, with the watchlist chooser
+$("switcher").onclick = () => openDash();
 $("status").onclick = () => doRefresh(true);
 
 function setStatus() {
@@ -638,6 +647,21 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") ls.set("pl.lastOpen", new Date().toISOString());
   else if (Date.now() - lastRefresh > 60000) doRefresh(false);
 });
+
+// Once per phone (1.3.1): a quiet hint on the first coin that its news and "Before you call" are a swipe away. It goes at
+// the first sideways swipe, a tap, or after 8 seconds. Waits until nothing else is on top.
+function swipeHint(tries = 0) {
+  if (ls.get("pl.swipeHint") || tries > 120) return;
+  const c = feed.querySelector(".card.active");
+  if (APP.tab !== "feed" || topPage() || onboarding() || document.getElementById("guide") || !$("sheet").hidden || !c?.querySelector(".chartbox")) { setTimeout(() => swipeHint(tries + 1), 1000); return; }
+  ls.set("pl.swipeHint", 1);
+  const h = document.createElement("div"); h.className = "swhint"; h.setAttribute("role", "note");
+  h.innerHTML = `<span>‹ News</span><b>Swipe sideways</b><span>Before you call ›</span>`;
+  c.querySelector('[data-pane="main"]').appendChild(h);
+  const off = () => { h.classList.add("out"); setTimeout(() => h.remove(), 300); };
+  h.onclick = off; setTimeout(off, 8000);
+  new MutationObserver((_, o) => { if (c.dataset.view && c.dataset.view !== "main") { off(); o.disconnect(); } }).observe(c, { attributes: true, attributeFilter: ["data-view"] });
+}
 
 // Nothing is ever pushed below the visible area. (Until 1.0.9 the app pushed its bottom bars down to cover a strip that
 // older iPhones left under Home Screen apps; on current iOS that strip isn't drawn, so the bars' lower half - tab
@@ -682,12 +706,11 @@ export function applyTheme() {
   initYou();
   store.on((what) => {
     $("alertDot").hidden = !store.alerts.some((a) => !a.read);
-    if (what === "account") { applyTheme(); APP.needsRebuild = true; if (APP.tab === "dash") keepScroll("dash"); if (store.ready && needsOnboarding() && !onboarding()) startOnboarding(); }
-    if (what === "alerts" && APP.tab === "dash") keepScroll("dash");
+    if (what === "account") { applyTheme(); APP.needsRebuild = true; if (pageOpen("sDash")) keepScroll("dash"); if (store.ready && needsOnboarding() && !onboarding()) startOnboarding(); }
+    if (what === "alerts" && pageOpen("sDash")) keepScroll("dash");
     if (what === "preds" && APP.tab === "feed" && APP.built) redrawCards(); else if (what === "preds") APP.needsRebuild = true; // cards show calls waiting and draw them on the chart
-    // the Calls tab follows new and scored calls, and your name or score changing
-    if ((what === "preds" || what === "account") && APP.tab === "play" && $("sheet").hidden) keepScroll("play");
-    if ((what === "preds" || what === "account") && APP.tab === "you" && $("sheet").hidden) keepScroll("you");
+    // Calls, You and Your record follow new and scored calls, and your name or score changing
+    if ((what === "preds" || what === "account") && $("sheet").hidden) { if (APP.tab === "play") keepScroll("play"); if (APP.tab === "you") keepScroll("you"); if (pageOpen("sRecord")) keepScroll("record"); }
     badge();
   });
   $("alertDot").hidden = !store.alerts.some((a) => !a.read);
@@ -700,6 +723,7 @@ export function applyTheme() {
   // the guide, once per account: accounts made before it existed see it on their next open (new ones see it after
   // their first call, from onboard.js). Waits briefly for the account so one that has seen it elsewhere isn't shown it.
   if (store.data?.username && !guideSeen() && !location.hash) { await Promise.race([connected(), new Promise((r) => setTimeout(r, 4000))]); if (store.data?.username && !guideSeen() && !onboarding()) openGuide(); }
+  swipeHint();
   setTimeout(() => ls.set("pl.lastOpen", new Date().toISOString()), 4000);
   loadSymbols().catch(() => {});
 })();

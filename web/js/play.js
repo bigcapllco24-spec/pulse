@@ -4,13 +4,15 @@
 import { CONFIG } from "../config.js";
 import { store, ls, save, allSyms, makePrediction, addCallDetails, myScore, enablePush, isAdmin, pendingHere, settleHere, nextDue } from "./store.js";
 import { openGuide } from "./guide.js";
-import { HORIZONS, PROVISIONAL_UNDER, CHANCE, checkPrediction, canPredict, allowedRange, dailyVol, dueAt, closenessText, typicalMove } from "./score.js";
+import { HORIZONS, PROVISIONAL_UNDER, CHANCE, callSizes, checkPrediction, canPredict, allowedRange, dailyVol, dueAt, closenessText, typicalMove } from "./score.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { krakenBars } from "./data.js";
 import { D } from "./data.js";
 import { $, esc, money, pct, toast, haptic, openSheet, setSheetBody, closeSheet, ago } from "./ui.js";
-import { APP, showTab } from "./app.js";
-import { renderYou } from "./you.js";
+import { APP, showTab, backLabel } from "./app.js";
+import { renderYou, openRecord, renderRecord, openMyCard } from "./you.js";
+import { addLayer, dropLayer, openPage, closePage, backBtn, pageOpen } from "./nav.js";
+import { openProfile } from "./pages.js";
 import { setFeedbackMode } from "./feedback.js";
 import { svgIcon, BAND_CLASS, SHORT } from "./card.js";
 import { mixOf, streakOf, streakBadges, istDay, dailyCoin, msUntilNextDay, whatHappened } from "./habit.js";
@@ -48,8 +50,8 @@ const groupName = (g) => S.groups.get(g)?.name || "a group";
 
 // ---------- the Calls tab
 export function initPlay() {
-  onSocial(() => { badge(); if (APP.tab === "play") rerender(); });
-  setInterval(() => { if (APP.tab === "play" && $("sheet").hidden && !document.hidden) { rerender(); if (APP.openGroup) drawGroup(); } }, 30000); // countdowns
+  onSocial(() => { badge(); if (APP.tab === "play") rerender(); if (pageOpen("sFriends")) rerenderPages("friends"); });
+  setInterval(() => { if ($("sheet").hidden && !document.hidden) { if (APP.tab === "play") rerender(); if (APP.openGroup) drawGroup(); } }, 30000); // countdowns
   // score calls and challenges on this phone the moment they're due (the data job confirms them a few minutes later)
   store.on((w) => w === "preds" && scheduleScoring()); onSocial(scheduleScoring);
   store.on((w) => (w === "preds" || w === "account" || w === "all") && checkLevelUp());
@@ -73,6 +75,8 @@ async function scoreDue() {
   scoring = false; scheduleScoring();
 }
 const rerender = () => { const pg = $("play").parentElement, y = pg.scrollTop; renderPlay(); pg.scrollTop = y; };
+// pages that live with Calls, redrawn in place when their data changes
+export function rerenderPages(name) { if (name === "friends") renderFriends(); else if (name === "record") renderRecord(); }
 // The Calls tab's badge: picks waiting for you and invites.
 export function badge() {
   const n = waitingForMe().length + S.invites.length, b = document.querySelector('.tabbar [data-tab="play"] .badge'); // picks and invites waiting for you
@@ -81,15 +85,8 @@ export function badge() {
 const groupsNeedYou = () => waitingForMe().length + unseenResults().length + S.invites.length > 0;
 
 // Calls: a search bar in the header, your progress, today's coin, friends, calls waiting and calls scored.
-// "friends" is the With friends page (every group and shared list), opened from the Calls tab.
 export function renderPlay() {
-  const el = $("play"), view = APP.playView === "friends" ? "friends" : "calls";
-  if (view === "friends") {
-    el.innerHTML = `<button class="btn ghost sm" id="plBack" style="padding-left:0">‹ Calls</button><h1 style="margin:10px 0 4px">With friends</h1><p class="hint" style="margin:0 0 18px">Call the same coins as people you know.</p><div class="pl-view" data-view="friends"></div>`;
-    el.querySelector("#plBack").onclick = () => { APP.playView = "calls"; renderPlay(); $("play").parentElement.scrollTop = 0; };
-    groupsView(el.querySelector(".pl-view"));
-    return;
-  }
+  const el = $("play");
   el.innerHTML = `<div class="pl-top2"><h1>Calls</h1><button class="searchbar" id="plFind" aria-label="Find players"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><span>Know how others are doing</span></button></div>
     <div class="pl-view" data-view="calls"></div>`;
   callsView(el.querySelector(".pl-view"));
@@ -137,8 +134,8 @@ function callsView(el) {
     ${open.length ? `<div class="hl">${open.map(callRow).join("")}</div>` : `<p class="hint pl-empty">Nothing waiting. Tap Call it on any chart in the feed.</p>`}
     <div class="secrow"><span class="label">Scored</span>${done.length > 3 ? `<button class="linkbtn" id="plAll">See all ${done.length}</button>` : ""}</div>
     ${done.length ? `<div class="hl pl-scored">${done.slice(0, 3).map(resultRow).join("")}</div>` : `<p class="hint pl-empty">Scored calls show here, with how close each one was.</p>`}`;
-  el.querySelector("#plProg").onclick = () => showTab("you");
-  el.querySelector("#plFriends").onclick = () => { APP.playView = "friends"; renderPlay(); $("play").parentElement.scrollTop = 0; };
+  el.querySelector("#plProg").onclick = () => openRecord();
+  el.querySelector("#plFriends").onclick = () => openFriends();
   el.querySelector("[data-daily]")?.addEventListener("click", () => { const { dc, mine, blocked } = dailyState(here); if (!mine && !blocked) openPredictSheet(dc, () => APP.tab === "play" && renderPlay(), "1d"); });
   el.querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openGroup(b.dataset.g)));
   el.querySelectorAll("[data-list]").forEach((b) => (b.onclick = () => openListPage(b.dataset.list)));
@@ -179,8 +176,20 @@ function checkLevelUp() {
 // the level line on the progress card (progress.js): effort, not skill
 export const myLevel = () => levelOf([...store.results, ...pendingHere()]);
 const levelText = () => `Level ${myLevel().level}`;
+// With friends (every group and shared list): a page over Calls.
+export function openFriends() {
+  const back = backLabel();
+  openPage("sFriends");
+  $("friends").dataset.back = back; renderFriends();
+}
+function renderFriends() {
+  const el = $("friends");
+  el.innerHTML = `${backBtn(esc(el.dataset.back || "Calls"))}<h1 style="margin:10px 0 4px">With friends</h1><p class="hint" style="margin:0 0 18px">Call the same coins as people you know.</p><div class="pl-view" data-view="friends"></div>`;
+  el.querySelector("#pBack").onclick = () => closePage("sFriends");
+  groupsView(el.querySelector(".pl-view"));
+}
 // a shared list's page lives with the settings pages for now (Sharing › Shared lists)
-function openListPage(id) { APP.backTo = "play"; showTab("profile", "lists", id); }
+const openListPage = (id) => openProfile("lists", id);
 // ---------- the replay (1.2.0): one scored call, played back on a small chart, with what happened over its period
 function openResult(r) {
   if (!r || r.status !== "scored") return;
@@ -248,13 +257,13 @@ function groupsView(el) {
   el.querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openGroup(b.dataset.g)));
   el.querySelector("#plNewG").onclick = () => openNewGroup();
   el.querySelector("#plJoinG").onclick = () => { const l = prompt("Paste the group's link"); const m = l && l.match(/#\/g\/[a-z0-9]{20,}/); if (m) openLink(m[0]); else if (l) toast("That doesn't look like a group link."); };
-  el.querySelectorAll("[data-list]").forEach((b) => (b.onclick = () => { APP.backTo = "play"; showTab("profile", "lists", b.dataset.list); }));
-  el.querySelector("#plNewL").onclick = () => { APP.backTo = "play"; showTab("profile", "lists"); };
+  el.querySelectorAll("[data-list]").forEach((b) => (b.onclick = () => openListPage(b.dataset.list)));
+  el.querySelector("#plNewL").onclick = () => openProfile("lists");
   el.querySelectorAll("[data-join]").forEach((b) => (b.onclick = async () => { b.disabled = true; try { await joinGroup(b.dataset.join); haptic(); toast("You're in."); openGroup(b.dataset.join); } catch (e) { toast(e.message, { ms: 4500 }); b.disabled = false; } }));
   el.querySelectorAll("[data-decline]").forEach((b) => (b.onclick = async () => { b.disabled = true; await declineInvite(b.dataset.decline).catch(() => {}); }));
   // member letters on the rows are coloured by their cards, fetched once
   const others = groups.flatMap((g) => Object.keys(g.members || {}).slice(0, 3)).filter((a) => a !== me() && !S.cards.has(a));
-  if (others.length) getCards(others).then(() => APP.tab === "play" && APP.playView === "groups" && rerender()).catch(() => {});
+  if (others.length) getCards(others).then(() => pageOpen("sFriends") && renderFriends()).catch(() => {});
 }
 
 // ---------- Ranks
@@ -333,7 +342,7 @@ export function myFullCard() {
 }
 export const myStreak = () => streakOf([...store.preds, ...store.results, ...S.picks.filter((p) => !p.counts)]);
 export async function openPlayerCard(a, u = "") {
-  if (a === me()) { showTab("you"); return; }
+  if (a === me()) { openMyCard(); return; }
   openSheet("Player", `<p class="hint">Loading…</p>`);
   let c; try { c = await getCard(a); } catch { c = null; }
   // A new player's card is made by the 2-hour data job; until then they can still be followed (17 Oct 2026: the
@@ -434,7 +443,7 @@ async function shareLink(g) {
 }
 // ---------- a group's own page: its challenges as a timeline, oldest first, newest at the bottom (like a chat, with
 // no chat). Older results fold to one line; the live challenge and the latest results show in full.
-let grpOff = null; const opened = new Set(); // results rows unfolded on this visit
+let grpOff = null, grpLayer = null; const opened = new Set(); // results rows unfolded on this visit
 const dayLabel = (iso) => {
   const d = new Date(iso), t = new Date(), y = new Date(Date.now() - 864e5), same = (a, b) => a.toDateString() === b.toDateString();
   return same(d, t) ? "Today" : same(d, y) ? "Yesterday" : d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
@@ -445,20 +454,19 @@ export function openGroup(g, { fresh = false } = {}) {
   if (!el) { el = document.createElement("section"); el.id = "grp"; el.className = "grp"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); document.body.appendChild(el); }
   APP.openGroup = g; APP.groupFresh = fresh; opened.clear();
   el.hidden = false; document.body.classList.add("grpopen"); requestAnimationFrame(() => el.classList.add("on"));
-  if (history.state?.grp !== g) history.pushState({ grp: g }, "");
+  grpLayer ||= addLayer(() => closeGroup());
   grpOff?.(); grpOff = onSocial(() => APP.openGroup === g && drawGroup());
   drawGroup(true);
 }
 // Back (the button, Escape, or the phone's back): the page slides away
 export function closeGroup() {
   const el = $("grp"); if (!el || el.hidden) return;
+  const l = grpLayer; grpLayer = null; dropLayer(l);
   grpOff?.(); grpOff = null; APP.openGroup = null; document.body.classList.remove("grpopen");
   el.classList.remove("on"); setTimeout(() => { if (!APP.openGroup) { el.hidden = true; el.innerHTML = ""; } }, 260);
-  if (APP.tab === "play") renderPlay(); badge();
+  if (APP.tab === "play") rerender(); if (pageOpen("sFriends")) renderFriends(); badge();
 }
-const backFromGroup = () => (history.state?.grp ? history.back() : closeGroup());
-addEventListener("popstate", () => { if (APP.openGroup && history.state?.grp !== APP.openGroup) { closeSheet(); closeGroup(); } });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && APP.openGroup && $("sheet").hidden) backFromGroup(); });
+const backFromGroup = () => closeGroup();
 
 function drawGroup(toBottom = false) {
   const g = APP.openGroup, el = $("grp"); if (!g || !el) return;
@@ -607,11 +615,9 @@ function lockFeel(btn) { haptic([10, 40, 16]); btn.classList.remove("thump"); vo
 // also post the call to a group as a challenge.
 export const SURE = [["hunch", "A hunch"], ["fairly", "Fairly sure"], ["very", "Very sure"]];
 export const BASIS = [["chart", "Chart"], ["indicators", "Indicators"], ["news", "News"], ["gut", "Gut"]];
-const SIZES = [["A little", 0.5], ["A usual move", 1], ["A big move", 2]];
 // Call it (1.2.8): one decision per screen. 1 · the period and which way; 2 · how far, then Lock in (your own price
 // opens on a tap; public and posting to a group sit in one quiet line); 3 · locked in, with "how sure" and "based on"
 // as optional extras that can't slow the call down (it's already saved). Before, all of it was on one screen.
-const UNIT = { "30m": "half hour", "1h": "hour", "1d": "day", "1y": "year" };
 export function openPredictSheet(sym, onDone, prefer = null) {
   const p0 = lastPrice(sym.key), sigmaD = sigmaOf(sym.key);
   if (!p0 || sigmaD == null) { toast(`${sym.t} prices haven't loaded yet.`); return; }
@@ -619,7 +625,7 @@ export function openPredictSheet(sym, onDone, prefer = null) {
   let horizon = prefer && free.includes(prefer) ? prefer : free.includes("1d") ? "1d" : free[0];
   let step = "dir", dir = 1, size = 1, own = null, typing = false, sure = null, basis = null, pub = store.data?.callsPublic !== false, post = false, g = myGroups()[0]?.id || null, made = null;
   const tm = () => typicalMove(sigmaD, horizon);
-  const sizes = () => [["A little", 0.5], [`A usual ${UNIT[horizon]}`, 1], ["A big move", 2]];
+  const sizes = () => callSizes(horizon);
   const price = () => (own != null ? own : p0 * Math.exp(dir * sizes()[size][1] * tm()));
   const scored = () => when(new Date(Date.now() + HORIZONS[horizon].days * 864e5).toISOString(), horizon);
   openSheet(`Call ${esc(sym.t)}`, "", (body) => {
@@ -629,7 +635,7 @@ export function openPredictSheet(sym, onDone, prefer = null) {
       if (x) { x.textContent = "Close"; x.hidden = step === "done"; } // nothing is saved until Lock in; after it, Done below
       if (!horizon) {
         body.innerHTML = `<p>You have a call waiting on every period for ${esc(sym.t)}. Each one can be made again once it has been scored.</p><button class="btn block" id="pSee">See your calls</button>`;
-        body.querySelector("#pSee").onclick = () => { closeSheet(); APP.playView = "calls"; showTab("play"); };
+        body.querySelector("#pSee").onclick = () => openCoinCalls(sym);
         return;
       }
       if (step === "dir") return drawDir();
@@ -796,12 +802,12 @@ export function openAvatarSheet() {
     </div>
     <p class="hint pl-ver">${esc(CONFIG.appName)} ${esc(CONFIG.version)}</p>`, (body) => {
     const go = (k) => {
-      if (k === "card") { closeSheet(); return openPlayerCard(me()); }
+      if (k === "card") return openMyCard();
       if (k === "guide") { closeSheet(); return openGuide(); }
       if (k === "following") return openFollowing();
       if (k === "push") return enablePush().then(() => toast("Notifications are on for this phone."), (e) => toast(e.message, { ms: 5000 }));
       if (k === "feedback") { closeSheet(); setFeedbackMode(true); showTab("feed"); return; }
-      closeSheet(); APP.backTo = APP.tab === "profile" ? APP.backTo : APP.tab; showTab("profile", k);
+      closeSheet(); openProfile(k, null, { fromSettings: true });
     };
     body.querySelectorAll("[data-av]").forEach((b) => (b.onclick = () => go(b.dataset.av)));
     body.querySelector("#avPub").onchange = async (e) => { await setPublic(e.target.checked); toast(e.target.checked ? "You'll show on the public leaderboard at the next update." : "You're off the public leaderboard from the next update."); };
@@ -827,7 +833,6 @@ export async function openLink(hash = location.hash) {
   const m = hash.match(/^#\/g\/([a-z0-9]{20,})/);
   if (/^#\/predict/.test(hash) || m) { history.replaceState(null, "", location.pathname); showTab("play"); }
   if (!m) return;
-  APP.playView = "groups"; renderPlay();
   const g = m[1];
   let info; try { info = await peekGroup(g); } catch { toast("Couldn't open that group just now. Check your connection and try the link again.", { ms: 5000 }); return; }
   if (!info) { toast("That group doesn't exist any more, or the link is wrong.", { ms: 5000 }); return; }
@@ -844,9 +849,12 @@ export async function openLink(hash = location.hash) {
     };
   });
 }
-// After the profile pages: back to where you came from (the avatar sheet reopens on Predict)
-export function backFromProfile() {
-  const to = APP.backTo || "play"; APP.backTo = null;
-  showTab(to);
-  if (to === "play") setTimeout(openAvatarSheet, 50);
+// Your calls on one coin (from the feed's "Before you call"): waiting and scored, in a sheet over the feed.
+export function openCoinCalls(sym) {
+  const here = pendingHere().filter((r) => r.coin === sym.key), open = store.preds.filter((p) => p.coin === sym.key && !here.some((r) => r.createdAt === p.createdAt && r.horizon === p.horizon)).sort((a, b) => Date.parse(dueAt(a)) - Date.parse(dueAt(b)));
+  const done = [...here, ...store.results.filter((r) => r.coin === sym.key)].sort((a, b) => Date.parse(b.resolvedAt || 0) - Date.parse(a.resolvedAt || 0));
+  openSheet(`Your ${esc(sym.t)} calls`, `${open.length ? `<div class="label">Waiting</div><div class="hl">${open.map((p) => `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">Called ${num(esc(m$(p.target)))}</span></span><b class="num">${esc(Date.now() >= Date.parse(dueAt(p)) ? "scoring…" : leftText(dueAt(p), p.horizon))}</b></div>`).join("")}</div>` : ""}
+    ${done.length ? `<div class="label" style="margin-top:${open.length ? 16 : 0}px">Scored</div><div class="hl">${done.map(resultRow).join("")}</div>` : `<p class="hint">None scored yet. Tap Call it on the ${esc(sym.t)} chart to make one.</p>`}`, (body) => {
+    body.querySelectorAll("[data-res]").forEach((b) => (b.onclick = () => openResult(done[+b.dataset.res])));
+  });
 }

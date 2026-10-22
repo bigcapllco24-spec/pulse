@@ -72,6 +72,9 @@ export function checkPrediction({ horizon, p0, target, sigmaD }) {
   return { ok: true, moves };
 }
 // One open prediction per coin per period: a new one can be made once the last one has been scored.
+// The sizes a call offers before "type my own": a share of a typical move for the period ("A usual day" = one).
+const UNIT = { "30m": "half hour", "1h": "hour", "1d": "day", "1y": "year" };
+export const callSizes = (horizon) => [["A little", 0.5], [`A usual ${UNIT[horizon]}`, 1], ["A big move", 2]];
 export const canPredict = (predictions, coin, horizon) => !predictions.some((p) => p.coin === coin && p.horizon === horizon && p.actual == null);
 // The nearest valid prices either side of today's, for the prediction sheet to show.
 export function allowedRange({ horizon, p0, sigmaD }) {

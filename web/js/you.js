@@ -6,7 +6,9 @@ import { CHANCE, SCORE_MIN, SCORE_MAX, PROVISIONAL_UNDER, HORIZONS } from "./sco
 import { $, esc, openSheet } from "./ui.js";
 import { myName, myCard } from "./social.js";
 import { verdictOf, VERDICT_AT, myLevel, ranksView, openAvatarSheet, myFullCard, levelAvatar, SURE, BASIS } from "./play.js";
-import { APP, showTab } from "./app.js";
+import { backLabel } from "./app.js";
+import { openPage, closePage, backBtn } from "./nav.js";
+import { openProfile } from "./pages.js";
 import { openShareSheet } from "./share.js";
 import { svgIcon, cardHtml } from "./card.js";
 import { UNLOCKS, callsFor } from "./progress.js";
@@ -18,12 +20,46 @@ const pc = (a, b) => (b ? Math.round((a / b) * 100) : null);
 const rangeOf = (score, n) => { const w = Math.round(190 / Math.sqrt(Math.max(1, n))); return [Math.max(SCORE_MIN, score - w), Math.min(SCORE_MAX, score + w)]; };
 
 export function renderYou() {
-  const el = $("you"), u = myName(), sc = myScore(), card = myCard(), v = verdictOf(sc), lv = myLevel();
+  const el = $("you"), u = myName(), card = myCard(), lv = myLevel(), followers = card?.followers || 0;
+  const sub = [`Level ${lv.level}`, followers ? `${followers} follower${followers === 1 ? "" : "s"}` : "", `${lv.toNext} call${lv.toNext === 1 ? "" : "s"} to level ${lv.level + 1}`].filter(Boolean).join(" · ");
+  el.innerHTML = `<div class="you-top">
+      <button class="you-me" id="youCard" aria-label="Your player card">${levelAvatar(u, lv.level, "lg")}<span class="main"><span class="t">@${esc(u || "you")}</span><span class="s">${esc(sub)}</span></span></button>
+      <span class="pl-topb"><button class="iconbtn ghost" id="youShare" aria-label="Share your card">${svgIcon("share")}</button><button class="iconbtn ghost" id="youSet" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button></span>
+    </div>
+    ${recordHtml()}
+    <div class="you-box">
+      <h2 class="you-h2" style="margin-top:0">What your score doesn't show</h2>
+      <p class="hint">It shows how well you read moves. Making money also depends on:</p>
+      <ul class="you-list"><li>How much you put in</li><li>Borrowing to trade (leverage)</li><li>When you cut a loss</li><li>How you act with real money on the line</li><li>Fees and tax</li></ul>
+      <button class="btn block" id="youLearn" style="margin-top:14px">Read the basics, 6 short reads</button>
+    </div>
+    <h2 class="you-h2">Where you rank</h2>
+    <div class="pl-view" data-view="ranks"></div>
+    <p class="hint" style="margin-top:14px">Levels show how much you've played, not how good you are. Scores describe your own past calls in a learning game. Not advice.</p>`;
+  ranksView(el.querySelector(".pl-view"));
+  el.querySelector("#youCard").onclick = openMyCard;
+  el.querySelector("#youShare").onclick = () => openShareSheet(myFullCard());
+  el.querySelector("#youSet").onclick = () => openAvatarSheet();
+  el.querySelector("#youLearn").onclick = () => openProfile("learn");
+}
+export const openMyCard = () => openSheet("How others see you", cardHtml(myFullCard(), { mine: true }) + `<p class="hint">Other players see your username, level, score, followers and record. Your price calls are never shown unless you make them public once scored.</p>`);
+// Your record (1.3.0): the same as the score part of You, as a page over Calls from its progress card.
+export function openRecord() {
+  const back = backLabel();
+  openPage("sRecord");
+  renderRecord(back);
+}
+export function renderRecord(back = $("record").dataset.back) {
+  const el = $("record"); el.dataset.back = back;
+  el.innerHTML = `${backBtn(esc(back))}${recordHtml()}<p class="hint" style="margin-top:18px">The same record lives in the You tab.</p>`;
+  el.querySelector("#pBack").onclick = () => closePage("sRecord");
+}
+// The record: where you stand, your score, your tiles and (from level 3) the breakdowns.
+function recordHtml() {
+  const sc = myScore(), v = verdictOf(sc), lv = myLevel();
   const scored = [...pendingHere(), ...store.results].filter((r) => r.status === "scored"), n = scored.length;
   const right = scored.filter((r) => r.direction === "right" || (r.direction == null && (r.target > r.p0) === (r.actual > r.p0))).length;
   const closePlus = scored.filter((r) => ["Spot on", "Very close", "Close"].includes(r.label)).length;
-  const followers = card?.followers || 0;
-  const sub = [`Level ${lv.level}`, followers ? `${followers} follower${followers === 1 ? "" : "s"}` : "", `${lv.toNext} call${lv.toNext === 1 ? "" : "s"} to level ${lv.level + 1}`].filter(Boolean).join(" · ");
   const intro = v.key === "none" ? "Your first scored call starts your score. Tap Call it on any chart."
     : v.key === "early" ? `${n} call${n === 1 ? "" : "s"} so far. Around ${VERDICT_AT} shows how well you really read the market.`
     : `Based on ${n} calls. Each call makes this surer.`;
@@ -37,11 +73,7 @@ export function renderYou() {
   const byBasis = BASIS.map(([k, l]) => { const rs = scored.filter((r) => r.basis === k); return { label: l === "Gut" ? "Gut feeling" : l, p: pc(okOf(rs), rs.length), note: rs.length ? "" : "No calls yet" }; });
   const sureP = bySure.map((x) => x.p), sureLine = sureP[2] != null && sureP[1] != null ? (sureP[2] > sureP[1] + 5 ? "Your very sure calls do better than your fairly sure ones." : sureP[2] < sureP[1] - 5 ? "Your very sure calls do no better than your fairly sure ones." : "Being surer hasn't made much difference yet.") : "Needs a few calls of each kind.";
   const bestBasis = byBasis.filter((x) => x.p != null).sort((a, b) => b.p - a.p)[0];
-  el.innerHTML = `<div class="you-top">
-      <button class="you-me" id="youCard" aria-label="Your player card">${levelAvatar(u, lv.level, "lg")}<span class="main"><span class="t">@${esc(u || "you")}</span><span class="s">${esc(sub)}</span></span></button>
-      <span class="pl-topb"><button class="iconbtn ghost" id="youShare" aria-label="Share your card">${svgIcon("share")}</button><button class="iconbtn ghost" id="youSet" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button></span>
-    </div>
-    <p class="label" style="margin:22px 0 0">Where you stand</p>
+  return `<p class="label" style="margin:22px 0 0">Where you stand</p>
     <h1 class="you-h1">${v.key === "well" ? "You’re reading it well" : esc(v.text)}</h1>
     <p class="hint" style="margin:6px 0 0">${esc(intro)}</p>
     ${v.key === "early" || v.key === "none" ? `<span class="pl-prog you-prog" aria-hidden="true"><i style="width:${Math.min(100, (n / VERDICT_AT) * 100)}%"></i></span>`
@@ -62,19 +94,5 @@ export function renderYou() {
     ${full ? `<h2 class="you-h2">Does being sure help?</h2><p class="hint" style="margin:0 0 10px">Right direction, by how sure you said you were. ${esc(sureLine)}</p>${bars(bySure)}
       <h2 class="you-h2">What works for you</h2><p class="hint" style="margin:0 0 10px">Right direction, by what your call was based on.${bestBasis ? ` ${esc(bestBasis.label)} calls are your strongest.` : ""}</p>${bars(byBasis)}
       <h2 class="you-h2">By time period</h2><p class="hint" style="margin:0 0 10px">Right direction, by how long the call was.</p>${bars(byH.map((x) => ({ label: HORIZONS[x.h].label, p: x.p, note: x.n ? "" : "No calls yet" })))}`
-      : `<div class="you-lock"><b>Opens at level 3 (${callsFor(3)} calls)</b><span class="hint">${esc(UNLOCKS[3])}</span></div>`}
-    <div class="you-box">
-      <h2 class="you-h2" style="margin-top:0">What your score doesn't show</h2>
-      <p class="hint">It shows how well you read moves. Making money also depends on:</p>
-      <ul class="you-list"><li>How much you put in</li><li>Borrowing to trade (leverage)</li><li>When you cut a loss</li><li>How you act with real money on the line</li><li>Fees and tax</li></ul>
-      <button class="btn block" id="youLearn" style="margin-top:14px">Read the basics, 6 short reads</button>
-    </div>
-    <h2 class="you-h2">Where you rank</h2>
-    <div class="pl-view" data-view="ranks"></div>
-    <p class="hint" style="margin-top:14px">Levels show how much you've played, not how good you are. Scores describe your own past calls in a learning game. Not advice.</p>`;
-  ranksView(el.querySelector(".pl-view"));
-  el.querySelector("#youCard").onclick = () => openSheet("How others see you", cardHtml(myFullCard(), { mine: true }) + `<p class="hint">Other players see your username, level, score, followers and record. Your price calls are never shown unless you make them public once scored.</p>`);
-  el.querySelector("#youShare").onclick = () => openShareSheet(myFullCard());
-  el.querySelector("#youSet").onclick = () => openAvatarSheet();
-  el.querySelector("#youLearn").onclick = () => { APP.backTo = "you"; showTab("profile", "learn"); };
+      : `<div class="you-lock"><b>Opens at level 3 (${callsFor(3)} calls)</b><span class="hint">${esc(UNLOCKS[3])}</span></div>`}`;
 }

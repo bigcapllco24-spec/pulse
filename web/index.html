@@ -26,7 +26,7 @@
   <link rel="modulepreload" href="config.js">
   <link rel="modulepreload" href="js/app.js">
   <link rel="modulepreload" href="js/store.js">
-  <link rel="modulepreload" href="js/ui.js">
+  <link rel="modulepreload" href="js/ui.js"><link rel="modulepreload" href="js/nav.js">
   <link rel="modulepreload" href="js/data.js">
   <link rel="modulepreload" href="js/indicators.js">
   <link rel="modulepreload" href="js/chart.js"><link rel="modulepreload" href="js/studies.js"><link rel="modulepreload" href="js/feedback.js">
@@ -60,9 +60,12 @@
     </div>
     <div class="feed" id="feed" tabindex="-1"></div>
   </section>
-  <section class="screen" id="sDash" hidden aria-label="Coins"><div class="page"><div class="page-inner" id="dash"></div></div></section>
   <section class="screen" id="sPlay" hidden aria-label="Calls"><div class="page"><div class="page-inner" id="play"></div></div></section>
   <section class="screen" id="sYou" hidden aria-label="You"><div class="page"><div class="page-inner" id="you"></div></div></section>
+  <!-- pages: slide in over the tab they were opened from (nav.js) -->
+  <section class="screen" id="sDash" hidden aria-label="Your coins as a list"><div class="page"><div class="page-inner" id="dash"></div></div></section>
+  <section class="screen" id="sFriends" hidden aria-label="With friends"><div class="page"><div class="page-inner" id="friends"></div></div></section>
+  <section class="screen" id="sRecord" hidden aria-label="Your record"><div class="page"><div class="page-inner" id="record"></div></div></section>
   <section class="screen" id="sProfile" hidden aria-label="Settings"><div class="page"><div class="page-inner" id="profile"></div></div></section>
 
   <nav class="tabbar" aria-label="Main">

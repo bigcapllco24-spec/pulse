@@ -14,6 +14,7 @@ import { APP, buildFeed } from "./app.js";
 import { openIndicatorsSheet, openLinesSheet } from "./pages.js";
 import { openPanels, withExpand } from "./panels.js";
 import { esc, money, pct, arrow, haptic, fmtDay, toast, openSheet, closeSheet } from "./ui.js";
+import { addLayer, dropLayer } from "./nav.js";
 
 // range → candle size (Kraken minutes, or "d" for the app's daily candles) and how much time to show first
 const RANGES = { "1D": [15, 1], "1W": [60, 7], "1M": ["d", 30], "3M": ["d", 91], "6M": ["d", 182], "1Y": ["d", 365], "2Y": ["d", 730], "4Y": ["d", 1461], Max: [10080, 1e6] };
@@ -44,22 +45,23 @@ async function olderDaily(t) {
   cache.set(k, { at: Date.now(), bars: out }); return out;
 }
 
-let el = null, st = null, raf = 0, fling = 0;
+let el = null, st = null, raf = 0, fling = 0, layer = null;
 export function openFull(sym) {
   if (!el) {
     el = document.createElement("div"); el.id = "full"; el.className = "full"; el.hidden = true;
     document.body.appendChild(el);
     initInteract(el, { holdMs: 480 }); // hold still to read (longer than the feed, so a slow drag still pans)
     wireGestures(el);
-    addEventListener("keydown", (e) => { if (e.key === "Escape" && !el.hidden) closeFull(); });
   }
   const cs = chartSettings(sym.key);
   st = { sym, range: NEXT[cs.range] || "2Y", levels: cs.levels && cs.levels !== "off" ? cs.levels : "off", type: cs.type, ...picks(store.data?.settings?.chart) };
   el.hidden = false; document.body.classList.add("fullopen");
+  layer ||= addLayer(() => closeFull()); // the phone's back closes it (1.3.0)
   load(); haptic();
 }
 export function closeFull() {
-  if (!el) return; stopFling();
+  if (!el || el.hidden) return; stopFling();
+  const l = layer; layer = null; dropLayer(l);
   if (st?.changed) { const k = st.sym.key; setTimeout(() => buildFeed({ keepKey: k }), 0); } /* the feed picks up new indicators */ el.hidden = true; el.innerHTML = ""; document.body.classList.remove("fullopen"); st = null; }
 
 // ---------- data for the chosen range

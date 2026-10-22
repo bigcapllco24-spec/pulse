@@ -5,6 +5,7 @@
 import { esc, openSheet, closeSheet, toast, haptic } from "./ui.js";
 import { sendFeedback, ls } from "./store.js";
 import { APP } from "./app.js";
+import { topPage } from "./nav.js";
 
 const VERSION = "pulse-web";
 const DAILY = 20; // notes per phone per day, so one person can't flood the list
@@ -17,7 +18,7 @@ function describeTarget(el) {
   const txt = (n) => (n?.getAttribute?.("aria-label") || n?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
   const card = t(".card"), it = card ? APP.seq[+card.dataset.i] : null, coin = it?.sym?.t || null;
   const view = card?.dataset.view || "main";
-  const screen = t("#gate") ? "Username step" : t("#grp") ? `Group page · ${t("#grp").querySelector(".grp-t b")?.textContent || ""}` : t("#full") ? "Full-screen chart" : t(".sheet") ? "Sheet" : t("#sDash") ? "Coins" : t("#sPlay") ? "Predict" : t("#sProfile") ? "Settings" : t(".tabbar") ? "Tab bar" : t(".topbar") ? "Top bar" : "Feed";
+  const screen = t("#gate") ? "Username step" : t("#grp") ? `Group page · ${t("#grp").querySelector(".grp-t b")?.textContent || ""}` : t("#full") ? "Full-screen chart" : t(".sheet") ? "Sheet" : t("#sDash") ? "Coins list" : t("#sFriends") ? "With friends" : t("#sRecord") ? "Your record" : t("#sPlay") ? "Calls" : t("#sYou") ? "You" : t("#sProfile") ? "Settings" : t(".tabbar") ? "Tab bar" : t(".topbar") ? "Top bar" : "Feed";
   const parts = [
     [".lower[data-learn]", (n) => `${n.dataset.learn} panel`], [".oli", (n) => `${txt(n).split(" ")[0]} line`], [".lvtag", () => "Support/resistance label"],
     [".scrubcard", () => "Hold-to-read card"], ["[data-fx]", () => "ƒx (indicators) button"], ["[data-lv]", () => "S/R button"], ["[data-tf]", () => "Time range chip"], [".head .chg", () => "Change % next to the coin name"],
@@ -33,7 +34,7 @@ function describeTarget(el) {
   const sheet = t(".sheet")?.querySelector("#shTitle")?.textContent;
   return {
     where: where || `${el.tagName.toLowerCase()}: ${txt(el) || "(no text)"}`,
-    screen: sheet ? `Sheet · ${sheet}` : screen + (screen === "Feed" && view !== "main" ? ` · ${view}` : "") + (screen === "Profile" ? ` · ${document.querySelector("#profile h1")?.textContent || "home"}` : ""),
+    screen: sheet ? `Sheet · ${sheet}` : screen + (screen === "Feed" && view !== "main" ? ` · ${view}` : "") + (screen === "Settings" ? ` · ${document.querySelector("#profile h1")?.textContent || "home"}` : ""),
     coin, detail: txt(el),
   };
 }
@@ -64,7 +65,7 @@ export function openFeedback(el, ctx = describeTarget(el)) {
       btn.disabled = true; btn.textContent = "Sending…";
       try {
         await sendFeedback({ text: ta.value.trim(), where: ctx.where, screen: ctx.screen, coin: ctx.coin, detail: ctx.detail,
-          ctx: { w: innerWidth, h: innerHeight, landscape: innerWidth > innerHeight, tab: APP.tab, v: VERSION } });
+          ctx: { w: innerWidth, h: innerHeight, landscape: innerWidth > innerHeight, tab: topPage() || APP.tab, v: VERSION } });
         ls.set("pl.fbDay", { day, n: count + 1 });
         closeSheet(); toast("Thanks, your feedback was sent.");
       } catch { btn.disabled = false; btn.textContent = "Send"; toast("Couldn't send just now. Check your connection and try again."); }

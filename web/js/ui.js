@@ -1,4 +1,5 @@
 // Small shared UI helpers: escaping, formatting, toast, bottom sheet.
+import { addLayer, dropLayer } from "./nav.js";
 export const $ = (id) => document.getElementById(id);
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 export const DISCLAIMER = "Information is for general understanding only. It is not investment advice or a recommendation to buy, sell or hold any security. We are not registered with SEBI or any other regulator as an adviser or research analyst.";
@@ -30,7 +31,7 @@ export function toast(msg, { action, onAction, ms = 3200 } = {}) {
 }
 
 let onCloseFn = null;
-let closeTimer = null;
+let closeTimer = null, layer = null; // the sheet's place in the back stack (nav.js); one for whatever sheet is showing
 export function openSheet(title, body, onMount, onClose) {
   const sh = $("sheet"), bd = $("backdrop");
   // A sheet opened right after another one closes (e.g. "Open the full guide") must not be hidden by the
@@ -42,17 +43,18 @@ export function openSheet(title, body, onMount, onClose) {
   sh.onclick = (e) => { if (e.target.closest("[data-close]")) closeSheet(); }; // Done, and any "Not now" etc. in the body
   bd.onclick = closeSheet;
   onCloseFn = onClose || null;
+  layer ||= addLayer(() => closeSheet()); // a sheet replacing another keeps its place
   onMount?.(sh.querySelector(".sh-body"), sh);
 }
 export function setSheetBody(html) { const b = document.querySelector("#sheet .sh-body"); if (b) b.innerHTML = html; return b; }
 export function closeSheet() {
   const sh = $("sheet"), bd = $("backdrop");
-  if (sh.hidden) return;
+  if (sh.hidden || !sh.classList.contains("on") && !layer) return;
+  const l = layer; layer = null; dropLayer(l);
   sh.classList.remove("on"); bd.classList.remove("on");
   closeTimer = setTimeout(() => { closeTimer = null; sh.hidden = true; bd.hidden = true; sh.innerHTML = ""; sh.style.bottom = sh.style.maxHeight = ""; }, 260);
   const fn = onCloseFn; onCloseFn = null; fn?.();
 }
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
 // Swipe a sheet down to close it, like any phone sheet: from its top bar, or from its content once that's scrolled to
 // the top. A short drag springs back.
 {

@@ -1,14 +1,14 @@
-// The first run (1.2.0): welcome, a username (no password: a username creates or opens the account, as in 1.1.4), then a
-// first call on Bitcoin in an hour, so the first result arrives within the first session. Everything sits in one
-// full-screen gate (#gate) over the app; the feed keeps loading behind it.
+// The first run (1.3.1): welcome, what a call is, a username (no password: a username creates or opens the account), then
+// a first call on Bitcoin for tomorrow, with no direction chosen for you. Everything sits in one full-screen gate (#gate)
+// over the app; the feed keeps loading behind it.
 import { CONFIG } from "../config.js";
 import { store, ls, checkUsername, usernameFree, setUsername, loginUsername, makePrediction, enablePush, USERNAME_CHANGES, signedOut } from "./store.js";
-import { HORIZONS, typicalMove } from "./score.js";
+import { HORIZONS, typicalMove, callSizes } from "./score.js";
 import { D } from "./data.js";
 import { $, esc, money, toast, haptic } from "./ui.js";
 import { openGuide, guideSeen } from "./guide.js";
 
-const FIRST_COIN = "CRYPTO:BTC", FIRST_H = "1h";
+const FIRST_COIN = "CRYPTO:BTC", FIRST_H = "1d";
 const SEEN = "pl.firstCall"; // the first-call step has been shown (made or skipped) on this phone
 let gate = null, onDone = null, isNew = false; // isNew: an account made just now gets the guide after its first call
 
@@ -43,7 +43,7 @@ const LOGO = `<span class="ob-logo"><svg width="28" height="28" viewBox="0 0 28 
 const field = (id, label) => `<label class="field"><span>${label}</span><div class="uname"><span>@</span><input id="${id}" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="21" enterkeyhint="go"></div></label>`;
 
 function show(step) {
-  ({ welcome, create, login, firstcall }[step] || welcome)();
+  ({ welcome, how, create, login, firstcall }[step] || welcome)();
 }
 // 1 · Welcome
 function welcome() {
@@ -56,17 +56,32 @@ function welcome() {
     <h1 class="ob-h1">Swipe the market.<br>Call the move.</h1>
     <p>Everyone has a market opinion. ${esc(CONFIG.appName)} keeps score.</p>
     <div class="ob-actions"><button class="btn primary block" id="obNew">Get started</button><button class="btn ghost block" id="obHave">I already have an account</button></div>`);
-  gate.querySelector("#obNew").onclick = () => show("create");
+  gate.querySelector("#obNew").onclick = () => show("how");
   gate.querySelector("#obHave").onclick = () => show("login");
 }
 
-// 2 · Create account: just a username
+// 2 · What a call is, before anything is asked (designer's feedback, 22 Oct: the first ask was "make a call", unexplained)
+function how() {
+  const step = (n, title, body) => `<div class="ob-step"><span class="ob-n">${n}</span><div><b>${title}</b>${body}</div></div>`;
+  frame(`<div class="label">How ${esc(CONFIG.appName)} works</div>
+    <h1>You make calls.<br>${esc(CONFIG.appName)} keeps score.</h1>
+    <div class="ob-steps">
+      ${step(1, "Pick a coin and a time", `<span class="ob-chips"><span class="ob-chip">Bitcoin</span><span class="ob-chip">1 day</span></span>`)}
+      ${step(2, "Say where the price will be", `<span class="hint">Higher or lower, and roughly how far. That's a <b>call</b>.</span>`)}
+      ${step(3, "Get scored against the real price", `<span class="ob-chips"><span class="lab good">Very close</span><span class="hint">Right way, near your price</span></span>`)}
+    </div>
+    <p class="hint">Every call adds to your record. After about 30, it starts to show how well you really read the market. No money involved, and it's not advice.</p>
+    <div class="ob-actions"><button class="btn primary block" id="obGo">Continue</button></div>`, { back: "welcome" });
+  gate.querySelector("#obGo").onclick = () => show("create");
+}
+
+// 3 · Create account: just a username
 function create() {
   frame(`<div class="label">Create your account</div>
     <h1>Pick a username</h1>
     ${field("obU", "Username")}<p class="hint" id="obUMsg">3–20 letters, numbers, dots or underscores. Not your real name.</p>
     <button class="btn primary block" id="obGo" disabled>Create account</button>
-    <p class="hint" style="text-align:center">Your username is public with your score. You can change it ${USERNAME_CHANGES} times.</p>`, { back: "welcome" });
+    <p class="hint" style="text-align:center">Your username is public with your score. You can change it ${USERNAME_CHANGES} times.</p>`, { back: "how" });
   const u = $("obU"), um = $("obUMsg"), go = $("obGo");
   let seq = 0, uok = false;
   const set = (t, cls) => { um.textContent = t; um.className = "hint " + (cls || ""); };
@@ -89,7 +104,7 @@ function create() {
   setTimeout(() => u.focus(), 200);
 }
 
-// 2b · Log in: type the username, this phone joins that account
+// 3b · Log in: type the username, this phone joins that account
 function login() {
   frame(`<div class="label">Welcome back</div>
     <h1>Log in</h1>
@@ -105,7 +120,8 @@ function login() {
   setTimeout(() => u.focus(), 200);
 }
 
-// 3 · The first call: Bitcoin in an hour, higher or lower, then a size. Scored in an hour, by notification.
+// 4 · The first call: Bitcoin tomorrow. Nothing is chosen for you: Lock in waits until higher or lower is picked, then
+// "how far" and the call itself appear. Scored tomorrow, by notification if wanted.
 function firstcall() {
   ls.set(SEEN, 1);
   const sym = { key: FIRST_COIN, t: "BTC", n: "Bitcoin", m: "CRYPTO", ty: "C" };
@@ -117,42 +133,45 @@ function firstcall() {
     setTimeout(() => gate && gate.querySelector("#obSkip") && firstcall(), 1500);
     return;
   }
-  const tm = typicalMove(sigmaD, FIRST_H), sizes = [["A little", 0.5], ["About a usual move", 1], ["A big move", 2]];
-  let dir = 1, size = 1;
-  const price = (k) => p0 * Math.exp(dir * k * tm);
-  frame(`<div class="ob-top"><span class="label">Welcome, @${esc(store.data?.username || "")}</span><button class="btn ghost sm" id="obSkip">Skip</button></div>
-    <h1>Where will Bitcoin be in an hour?</h1>
-    <p>It's <b class="num">${esc(money(p0, "CRYPTO"))}</b> now. In an hour it usually moves about ${(Math.expm1(tm) * 100).toFixed(1)}%, either way.</p>
-    <div class="ob-dir"><button class="opt big" data-dir="1" aria-pressed="true">Higher</button><button class="opt big" data-dir="-1" aria-pressed="false">Lower</button></div>
-    <div class="label" style="margin-top:14px">By how much?</div>
-    <div class="ob-sizes" id="obSizes"></div>
-    <button class="btn primary block" id="obGo" style="margin-top:14px">Lock in my call</button>
-    <p class="hint" style="text-align:center">Scored at ${esc(new Date(Date.now() + 36e5).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }))} against the real price. It's saved to your account. Not advice.</p>`);
-  const sizesEl = $("obSizes");
+  const tm = typicalMove(sigmaD, FIRST_H), sizes = callSizes(FIRST_H), at = scoredAt();
+  let dir = 0, size = 1;
+  const price = () => p0 * Math.exp(dir * sizes[size][1] * tm);
+  frame(`<div class="ob-top"><span class="label">Your first call</span><button class="btn ghost sm" id="obSkip">Skip</button></div>
+    <h1>Where will Bitcoin be tomorrow at ${esc(at)}?</h1>
+    <p>It's <b class="num">${esc(money(p0, "CRYPTO"))}</b> now. In a day it usually moves about ${(Math.expm1(tm) * 100).toFixed(1)}%, either way.</p>
+    <div class="cdir ob-dir"><button data-dir="1" class="up" aria-pressed="false">▲ Higher</button><button data-dir="-1" class="dn" aria-pressed="false">▼ Lower</button></div>
+    <div id="obFar"></div>
+    <button class="btn primary block" id="obGo" style="margin-top:14px" disabled>Pick higher or lower</button>
+    <p class="hint" style="text-align:center">Scored tomorrow at ${esc(at)} against the real price. No money involved. Not advice.</p>`);
+  const far = $("obFar"), go = $("obGo");
   const draw = () => {
-    sizesEl.innerHTML = sizes.map(([l, k], i) => `<button class="ob-size" data-k="${i}" aria-pressed="${i === size}"><span>${l}</span><b class="num">${esc(money(price(k), "CRYPTO"))}</b></button>`).join("");
-    sizesEl.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => { size = +b.dataset.k; haptic(); draw(); }));
+    if (!dir) return;
+    far.innerHTML = `<div class="label" style="margin-top:14px">How far</div>
+      <div class="seg ob-seg" role="group" aria-label="How far">${sizes.map(([l], i) => `<button data-k="${i}" aria-pressed="${i === size}">${esc(l)}</button>`).join("")}</div>
+      <div class="pnow" style="margin-top:10px"><span>Your call</span><b class="num">${dir > 0 ? "↑" : "↓"} about ${esc(money(price(), "CRYPTO"))}</b></div>`;
+    far.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => { size = +b.dataset.k; haptic(); draw(); }));
+    go.disabled = false; go.textContent = "Lock in my call";
   };
   gate.querySelectorAll("[data-dir]").forEach((b) => (b.onclick = () => { dir = +b.dataset.dir; gate.querySelectorAll("[data-dir]").forEach((x) => x.setAttribute("aria-pressed", x === b)); haptic(); draw(); }));
-  draw();
   gate.querySelector("#obSkip").onclick = finish;
-  const go = $("obGo");
   go.onclick = async () => {
+    if (!dir) return;
     go.disabled = true; go.textContent = "Locking in…";
-    const target = price(sizes[size][1]);
-    try { await makePrediction({ sym, horizon: FIRST_H, target, p0, sigmaD }); haptic([10, 40, 16]); locked(target, p0); }
+    const target = price();
+    try { await makePrediction({ sym, horizon: FIRST_H, target, p0, sigmaD }); haptic([10, 40, 16]); locked(target, p0, at); }
     catch (e) { toast(e.message || "Couldn't save the call. Try again."); go.disabled = false; go.textContent = "Lock in my call"; }
   };
 }
+// tomorrow's time, as the first call is scored a day after it's made
+const scoredAt = () => new Date(Date.now() + HORIZONS[FIRST_H].days * 864e5).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
 function dailyVolOf(closes) { const c = closes.slice(-31); const r = c.slice(1).map((x, i) => Math.log(x / c[i])); const m = r.reduce((a, x) => a + x, 0) / r.length; return Math.sqrt(r.reduce((a, x) => a + (x - m) ** 2, 0) / (r.length - 1)); }
 
-// 4 · Locked in: the result comes in an hour; explore meanwhile
-function locked(target, p0) {
-  const at = new Date(Date.now() + HORIZONS[FIRST_H].days * 864e5);
+// 5 · Locked in: the result comes tomorrow; explore meanwhile
+function locked(target, p0, at) {
   frame(`<div class="ob-lock"><svg viewBox="0 0 80 80" aria-hidden="true" class="done-ring"><circle cx="40" cy="40" r="34"/><path d="M26 41l9 9 19-20"/></svg></div>
     <h1>Locked in</h1>
-    <p>Bitcoin at <b class="num">${esc(money(target, "CRYPTO"))}</b> in an hour, from ${esc(money(p0, "CRYPTO"))}. You'll see how it went at <b>${esc(at.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }))}</b>.</p>
-    <label class="pl-switchrow"><span><b>Tell me when it's scored</b><span class="hint">One notification, when the hour is up</span></span><span class="switch"><input type="checkbox" id="obPush"><span></span></span></label>
+    <p>Bitcoin at <b class="num">${esc(money(target, "CRYPTO"))}</b> tomorrow, from ${esc(money(p0, "CRYPTO"))}. You'll see how it went tomorrow at <b>${esc(at)}</b>.</p>
+    <label class="pl-switchrow"><span><b>Tell me when it's scored</b><span class="hint">One notification, tomorrow</span></span><span class="switch"><input type="checkbox" id="obPush"><span></span></span></label>
     <button class="btn primary block" id="obGo" style="margin-top:14px">Explore the charts while you wait</button>`);
   $("obPush").onchange = async (e) => { if (!e.target.checked) return; try { await enablePush(); toast("You'll get a notification when it's scored."); } catch (err) { e.target.checked = false; toast(err.message); } };
   $("obGo").onclick = finish;

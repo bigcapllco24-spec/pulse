@@ -10,18 +10,19 @@ import { OVERLAYS, PANELS, MAX_OVERLAYS, maxPanels, SETS, picks } from "./studie
 import { D, view, storiesFor, RANGE_LABEL, resolveInterval, dailyOf } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, haptic, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
 import { openLearn } from "./interact.js";
-import { APP, buildFeed, showTab, currentSyms, applyTheme, doRefresh } from "./app.js";
-import { openAvatarSheet, backFromProfile } from "./play.js";
+import { APP, buildFeed, showTab, currentSyms, applyTheme, doRefresh, backLabel } from "./app.js";
+import { openAvatarSheet } from "./play.js";
+import { openPage, closePage, backBtn, pageOpen } from "./nav.js";
 
 const symDoc = (r) => ({ key: r.key, t: r.t, n: r.n, m: r.m, ty: r.ty });
 
 export function initPages() {
   window.addEventListener("hashchange", () => {
     const m = location.hash.match(/^#\/join\/([a-z0-9]+)/);
-    if (m) { showTab("profile", "lists"); joinFlow(m[1]); }
+    if (m) { openProfile("lists"); joinFlow(m[1]); }
   });
   const m = location.hash.match(/^#\/join\/([a-z0-9]+)/);
-  if (m) setTimeout(() => { showTab("profile", "lists"); joinFlow(m[1]); }, 300);
+  if (m) setTimeout(() => { openProfile("lists"); joinFlow(m[1]); }, 300);
 }
 
 // ---------- add-stock sheet: search, then choose watchlists
@@ -29,7 +30,7 @@ export function openAddSheet(prefill = "") {
   const curList = store.data?.settings?.list;
   openSheet("Add a coin", "", (body) => { mountSearch(body, prefill); },
     () => { const added = APP.lastAdded; buildFeed({ keepKey: added || APP.seq[APP.active]?.sym?.key }); APP.lastAdded = null;
-      if (added && !D.series[added]) doRefresh(false).then(() => { if (APP.tab === "dash") renderDash(); }); }); // fetch prices for a newly added coin
+      if (added && !D.series[added]) doRefresh(false).then(() => { if (pageOpen("sDash")) renderDash(); }); }); // fetch prices for a newly added coin
 
   // One tap adds: a coin goes straight into the watchlist the feed is showing (or your first one), the sheet stays
   // open for the next, and closing it takes the feed to the last coin added. Tap an added coin to change its lists.
@@ -145,7 +146,7 @@ export function openSwitcher(onDone = () => buildFeed()) {
     body.querySelectorAll("[data-l]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, list: b.dataset.l } }); closeSheet(); }));
     body.querySelectorAll("[data-o]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, chart: { ...chartSettings(), order: b.dataset.o } } }); closeSheet(); }));
     body.querySelector("#nwl").onclick = async () => { const n = prompt("Name the watchlist", "Semiconductors"); if (n) { const id = await newWatchlist(n); await save({ settings: { ...store.data.settings, list: id } }); closeSheet(); openAddSheet(); } };
-    body.querySelector("#mwl").onclick = () => { closeSheet(); APP.backTo = APP.tab; showTab("profile", "lists"); };
+    body.querySelector("#mwl").onclick = () => { closeSheet(); openProfile("lists"); };
   }, onDone);
 }
 
@@ -173,9 +174,9 @@ function coinsView(el) {
       <button class="btn ghost sm" data-up="${esc(s.key)}" ${i === 0 ? "disabled" : ""} aria-label="Move ${esc(s.t)} up">↑</button><button class="btn ghost sm" data-dn="${esc(s.key)}" ${i === withData.length - 1 ? "disabled" : ""} aria-label="Move ${esc(s.t)} down">↓</button><button class="btn ghost sm danger" data-rm="${esc(s.key)}" aria-label="Remove ${esc(s.t)}">✕</button></div>`
     : `<button class="row mrow" data-open="${esc(s.key)}"><span class="main"><span class="t">${esc(s.n)}</span><span class="s">${x != null ? `<b class="${x >= 1.5 ? "warnt" : ""}">${x.toFixed(1)}× usual</b>` : ""}${r.n ? `${x != null ? ", " : ""}you ${r.ok} of ${r.n}` : waiting ? `${x != null ? ", " : ""}call waiting` : ""}</span></span>${sparkline((rv || v).win.map((b) => b.c), 64, 24, c >= 0)}<span class="r"><b>${esc(money((rv || v).lastBar.c, s.m))}</b><span class="${c >= 0 ? "up" : "down"}">${pct(c, 1)}</span></span></button>`;
   };
-  el.innerHTML = `<div class="mtop"><button class="switcher" id="dSwitch"><span>${esc(w ? w.name : "All my coins")}</span><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-      <span class="mtopb"><button class="iconbtn" id="dFeed" aria-label="Back to the chart feed"><svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 5-7 4 4"/></svg></button><button class="iconbtn ghost" id="dAdd" aria-label="Add a coin"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></span></div>
-    <h1 style="margin:18px 0 0">Your market</h1>
+  el.innerHTML = `<div class="mtop">${backBtn(esc(APP.dashBack || "Feed"), "dFeed")}<span class="mtopb"><button class="iconbtn ghost" id="dAdd" aria-label="Add a coin"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></span></div>
+    <button class="switcher" id="dSwitch" style="margin-top:12px"><span>${esc(w ? w.name : "All my coins")}</span><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
+    <h1 style="margin:10px 0 0">Your market</h1>
     <p class="hint" style="margin:6px 0 0">${withData.length ? `${moving ? `${moving} of your ${withData.length} coins ${moving === 1 ? "is" : "are"} moving more than usual today.` : `None of your ${withData.length} coins is moving more than usual today.`}${all.length ? ` You've called the direction right ${allOk} time${allOk === 1 ? "" : "s"} in ${all.length}.` : ""}` : "Prices are loading."}</p>
     ${editing ? `<p class="hint" style="margin-top:14px">Reorder or remove coins in “${esc(w.name)}”. The feed follows this order.</p>` : `<div class="opts" style="margin:16px 0 4px">${[["move", "Moving most"], ["record", "My record"], ["uncalled", "Not called yet"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-s="${k}" aria-pressed="${sort === k}">${l}</button>`).join("")}</div>`}
     ${withData.length ? `<div class="hl mlist">${withData.map(row).join("")}</div>` : ""}
@@ -185,7 +186,7 @@ function coinsView(el) {
     <p class="hint" style="margin-top:12px">Choosing a watchlist here also sets what your feed shows. Moves are facts about the past, never advice.</p>`;
   const pick = async (id) => { APP.dashEdit = false; await save({ settings: { ...store.data.settings, list: id } }); APP.needsRebuild = true; renderDash(); };
   el.querySelector("#dSwitch").onclick = () => openSwitcher(() => renderDash());
-  el.querySelector("#dFeed").onclick = () => showTab("feed");
+  el.querySelector("#dFeed").onclick = () => closePage("sDash");
   el.querySelector("#dAdd").onclick = () => openAddSheet();
   el.querySelector("#dEdit")?.addEventListener("click", () => { APP.dashEdit = true; renderDash(); });
   el.querySelector("#dDone")?.addEventListener("click", () => { APP.dashEdit = false; APP.needsRebuild = true; renderDash(); });
@@ -195,19 +196,28 @@ function coinsView(el) {
   el.querySelectorAll("[data-dn]").forEach((b) => (b.onclick = async () => { await moveInWatchlist(w.id, b.dataset.dn, 1); renderDash(); }));
   el.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => { await save({ watchlists: watchlists().map((x) => (x.id === w.id ? { ...x, syms: x.syms.filter((s) => s.key !== b.dataset.rm) } : x)) }); APP.needsRebuild = true; renderDash(); }));
   el.querySelectorAll("[data-s]").forEach((b) => (b.onclick = () => { APP.dashSort = b.dataset.s; renderDash(); }));
-  el.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { showTab("feed"); buildFeed({ keepKey: b.dataset.open }); }));
+  el.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { closePage("sDash", { silent: true }); if (APP.tab !== "feed") showTab("feed"); APP.needsRebuild = false; buildFeed({ keepKey: b.dataset.open }); }));
 }
-// ---------- settings pages, opened from Settings on the You tab (or from a coin's details, for alerts).
-// Each has a Back button to wherever it was opened from. With no page given, the avatar sheet opens instead.
+// ---------- settings pages: a page over whatever they were opened from (Settings, a coin's details, Calls, You), with a
+// back button naming where it goes. Opened from the Settings sheet, back returns to that sheet.
 const PAGES = () => ({ watchlists: pWatchlists, chart: pChart, rules: pRules, alerts: pAlerts, lists: pLists, account: pAccount, appearance: pAppearance, legal: pLegal, inbox: pInbox, learn: pLearn });
-export function renderProfile(sub, arg) {
-  const el = $("profile"), fn = PAGES()[sub];
-  if (!fn) { el.innerHTML = ""; setTimeout(() => { showTab("play"); if (sub !== "predictions") openAvatarSheet(); }, 0); return; }
+let pBackHtml = "";
+export function openProfile(sub, arg, { fromSettings = false } = {}) {
+  if (!PAGES()[sub]) return;
+  if (!pageOpen("sProfile")) {
+    pBackHtml = backBtn(esc(fromSettings ? "Settings" : backLabel()));
+    openPage("sProfile", { onClose: fromSettings ? () => setTimeout(openAvatarSheet, 0) : null });
+  }
+  renderProfile(sub, arg);
+}
+function renderProfile(sub, arg) {
+  const el = $("profile");
   APP.profileSub = sub;
-  fn(el, `<button class="btn ghost sm" id="pBack" style="padding-left:0">‹ Back</button>`, arg);
-  el.querySelector("#pBack").onclick = () => backFromProfile();
+  PAGES()[sub](el, pBackHtml, arg);
   el.parentElement.scrollTop = 0;
 }
+// every settings page draws its own back button (pages redraw themselves often); one listener serves them all
+$("profile").addEventListener("click", (e) => { if (e.target.closest("#pBack")) closePage("sProfile"); });
 const rePage = () => renderProfile(APP.profileSub);
 
 // Username sheet: live checks, a clear count of changes left, and a warning against real names.
@@ -225,7 +235,7 @@ export function openUsernameSheet(onDone, reason) {
     inp.oninput = check; check(); setTimeout(() => inp.focus(), 250);
     btn.onclick = async () => {
       btn.disabled = true; btn.textContent = "Saving…";
-      try { const n = await setUsername(inp.value); closeSheet(); toast(`You're @${n}.`); if (onDone) onDone(); else if (APP.tab === "profile") rePage(); }
+      try { const n = await setUsername(inp.value); closeSheet(); toast(`You're @${n}.`); if (onDone) onDone(); else if (pageOpen("sProfile")) rePage(); }
       catch (e) { msg.textContent = e.message || "Couldn't save. Try again."; msg.className = "hint bad"; btn.disabled = false; btn.textContent = cur ? "Change username" : "Save username"; }
     };
   });
@@ -238,7 +248,7 @@ function pWatchlists(el, back) {
       ${(w.syms || []).length ? `<div class="list" style="margin-top:8px;background:var(--surface2)">${w.syms.map((s, i) => `<div class="row"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">${esc(s.n)}</span></span>
         <button class="btn ghost sm" data-up="${esc(w.id)}|${esc(s.key)}" ${i === 0 ? "disabled" : ""} aria-label="Move up">↑</button><button class="btn ghost sm" data-dn="${esc(w.id)}|${esc(s.key)}" ${i === w.syms.length - 1 ? "disabled" : ""} aria-label="Move down">↓</button><button class="btn ghost sm" data-rm="${esc(w.id)}|${esc(s.key)}" aria-label="Remove">✕</button></div>`).join("")}</div>` : `<p class="hint">Empty.</p>`}</div>`).join("")}
     <button class="btn primary block" id="wAdd">Add coins</button><button class="btn block" id="wNew" style="margin-top:8px">New watchlist</button>`;
-  const re = () => pWatchlists(el, back) || (el.querySelector("#pBack").onclick = () => backFromProfile());
+  const re = () => pWatchlists(el, back);
   el.querySelector("#wAdd").onclick = () => openAddSheet();
   el.querySelector("#wNew").onclick = async () => { const n = prompt("Name the watchlist", "Semiconductors"); if (n) { await newWatchlist(n); re(); } };
   el.querySelectorAll("[data-ren]").forEach((b) => (b.onclick = async () => { const w = wl.find((x) => x.id === b.dataset.ren); const n = prompt("Rename", w.name); if (n) { await renameWatchlist(w.id, n); re(); } }));
@@ -271,7 +281,7 @@ function pChart(el, back) {
   el.innerHTML = `${back}<h1>Chart style</h1><p class="hint">Your default for every coin. To change one coin, tap the time chip on its card in the feed.</p>
     ${chartOptsHtml(c)}
     ${custom.length ? `<h2>Coins with their own chart</h2><p>${custom.map((k) => `<span class="pill">${esc(k.split(":")[1])}</span>`).join(" ")} <button class="btn ghost sm" id="cReset">Reset all to default</button></p>` : ""}`;
-  const re = () => { pChart(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
+  const re = () => pChart(el, back);
   const set = async ({ _pick, ...patch }) => { await save({ settings: { ...store.data.settings, ...(_pick ? { levelsPick: patch.levels } : {}), chart: { ...store.data.settings.chart, ...patch } } }); APP.needsRebuild = true; re(); };
   el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => (b.dataset.k === "levels" ? setLines(b.dataset.v).then(re) : set({ [b.dataset.k]: b.dataset.v }))));
   el.querySelector("#cReset")?.addEventListener("click", async () => { await save({ settings: { ...store.data.settings, chartBy: {} } }); APP.needsRebuild = true; re(); });
@@ -322,7 +332,7 @@ function pRules(el, back, preKey) {
       <div class="field"><label for="rNote">Note (optional)</label><input id="rNote" maxlength="80"></div><button class="btn primary block">Add rule</button></form>` : `<div class="empty">Add a coin to a watchlist to set rules.</div>`}
     <h2>Your rules</h2>${rules.length ? `<div class="list">${rules.map((r) => `<div class="row"><span class="main"><span class="t">${label(r)}</span><span class="s">${esc(r.note || "")}${r.lastFired ? ` · last met ${esc(fmtDay(r.lastFired))}` : ""}</span></span>
       <label class="switch"><input type="checkbox" data-on="${esc(r.id)}" ${r.active !== false ? "checked" : ""} aria-label="Rule on"><span></span></label><button class="btn ghost sm" data-del="${esc(r.id)}" aria-label="Delete">✕</button></div>`).join("")}</div>` : `<div class="empty">No rules yet.</div>`}`;
-  const re = () => { pRules(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
+  const re = () => pRules(el, back);
   el.querySelector("#rForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const value = parseFloat(el.querySelector("#rVal").value);
@@ -355,7 +365,7 @@ function pAlerts(el, back) {
   el.innerHTML = `${back}<h1>Alerts</h1><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn sm" id="aPush">Turn on push alerts</button>${a.some((x) => !x.read) ? `<button class="btn sm" id="aRead">Mark all read</button>` : ""}${a.length ? `<button class="btn ghost sm" id="aClear">Clear</button>` : ""}</div>
     ${a.length ? `<div class="list">${a.map((x) => `<div class="row"><span class="main"><span class="t" style="${x.read ? "font-weight:500" : ""}">${esc(x.text)}</span><span class="s">${esc(ago(x.at))}</span></span>${x.read ? "" : `<span class="pill confirmed">New</span>`}</div>`).join("")}</div>` : `<div class="empty">No alerts yet. Set a rule to get one.</div>`}
     <p class="disclaimer">Alerts state facts about your own levels. They are not signals or advice.</p>`;
-  const re = () => { pAlerts(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
+  const re = () => pAlerts(el, back);
   el.querySelector("#aRead")?.addEventListener("click", async () => { await markAlertsRead(a.filter((x) => !x.read).map((x) => x.id)); re(); });
   el.querySelector("#aClear")?.addEventListener("click", async () => { await clearAlerts(); re(); });
   el.querySelector("#aPush").onclick = async () => { try { await enablePush(); toast("Push alerts are on for this phone."); } catch (e) { toast(e.message, { ms: 5000 }); } };
@@ -370,7 +380,7 @@ function pLists(el, back) {
       <p class="hint">Members: ${esc(Object.values(l.members || {}).join(", ") || "just you")}</p><p>${(l.symbols || []).map((s) => esc(s.t)).join(", ") || `<span class="hint">Empty</span>`}</p>
       ${(l.symbols || []).length ? `<button class="btn primary sm" data-scroll="${esc(l.id)}">Scroll these in the feed</button> <button class="btn sm" data-copyto="${esc(l.id)}">Copy into a watchlist</button>` : ""}</div>`).join("")}`;
   el.querySelectorAll("[data-scroll]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, list: b.dataset.scroll } }); APP.needsRebuild = true; showTab("feed"); }));
-  const re = () => { pLists(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
+  const re = () => pLists(el, back);
   el.querySelector("#lForm").onsubmit = (e) => {
     e.preventDefault();
     const name = el.querySelector("#lName").value.trim();
@@ -403,7 +413,7 @@ function pAccount(el, back) {
     <h2>Delete</h2><button class="btn danger" id="del">Delete my account and all its data</button>
     <h2>Sign-in id</h2><p class="dline"><code class="uid">${esc(myUid() || "connecting…")}</code> <button class="btn ghost sm" id="aUid">Copy</button></p><p class="hint">Only needed if you help run the app: an admin adds it to the admins list.</p>
     <h2>App version</h2><p class="dline">${esc(CONFIG.appName)} ${esc(CONFIG.version)}</p>`;
-  const re = () => { pAccount(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); };
+  const re = () => pAccount(el, back);
   el.querySelector("#aUid").onclick = () => navigator.clipboard?.writeText(myUid() || "").then(() => toast("Copied."), () => toast("Couldn't copy."));
   el.querySelector("#aName").onclick = () => openUsernameSheet(re);
   el.querySelector("#aOut").onclick = () => { if (confirm("Sign out on this phone? Log in with your username to open the account again.")) signOutDevice(); };
@@ -426,7 +436,7 @@ function pLearn(el, back) {
 function pAppearance(el, back) {
   const t = store.data.settings?.theme || "dark";
   el.innerHTML = `${back}<h1>Appearance</h1><div class="opts">${[["dark", "Dark"], ["light", "Light"], ["auto", "Match phone"]].map(([k, l]) => `<button class="opt" data-t="${k}" aria-pressed="${t === k}">${l}</button>`).join("")}</div>`;
-  el.querySelectorAll("[data-t]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, theme: b.dataset.t } }); applyTheme(); pAppearance(el, back); el.querySelector("#pBack").onclick = () => backFromProfile(); }));
+  el.querySelectorAll("[data-t]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, theme: b.dataset.t } }); applyTheme(); pAppearance(el, back); }));
 }
 function pLegal(el, back) {
   el.innerHTML = `${back}<h1>Legal and disclaimer</h1>
@@ -559,12 +569,11 @@ function pInbox(el, back) {
           <p>${esc(x.text)}</p>${x.note ? `<p class="hint">Note: ${esc(x.note)}</p>` : ""}
           <div class="fbact">${(x.status || "open") === "open" ? `<button class="btn sm" data-fset="done">Done</button><button class="btn ghost sm" data-fset="declined">Decline</button>` : `<span class="pill ${x.status === "done" ? "confirmed" : "single"}">${esc(x.status)}</span><button class="btn ghost sm" data-fset="open">Reopen</button>`}</div>
         </article>`).join("")}</div>` : `<div class="empty">Nothing here.</div>`}`;
-    el.querySelector("#pBack").onclick = () => backFromProfile();
     el.querySelectorAll("[data-fs]").forEach((b) => (b.onclick = () => { APP.inboxFilter = b.dataset.fs; pInbox(el, back); }));
     el.querySelectorAll("[data-fset]").forEach((b) => (b.onclick = async () => { await setFeedbackStatus(b.closest("[data-id]").dataset.id, b.dataset.fset); pInbox(el, back); }));
     el.querySelector("#fbCopy")?.addEventListener("click", () => {
       const text = shown.map((x, i) => `${i + 1}. [${x.screen}${x.coin ? " · " + x.coin : ""}] ${x.where}\n   "${x.text}" (id ${x.id})`).join("\n");
       navigator.clipboard?.writeText(`Pulse feedback, ${shown.length} open notes:\n${text}`).then(() => toast("Copied. Paste it into Claude."), () => toast("Couldn't copy."));
     });
-  }).catch(() => { el.innerHTML = `${back}<h1>Feedback inbox</h1><div class="empty">Couldn't load feedback. Only admins can see it.</div>`; el.querySelector("#pBack").onclick = () => backFromProfile(); });
+  }).catch(() => { el.innerHTML = `${back}<h1>Feedback inbox</h1><div class="empty">Couldn't load feedback. Only admins can see it.</div>`; });
 }

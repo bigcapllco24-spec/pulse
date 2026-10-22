@@ -4,6 +4,7 @@
 import { CONFIG } from "../config.js";
 import { store, ls, save } from "./store.js";
 import { esc, haptic } from "./ui.js";
+import { addLayer, dropLayer } from "./nav.js";
 
 const SEEN = "pl.guideSeen";
 export const guideSeen = () => !!ls.get(SEEN) || !!store.data?.guideSeen;
@@ -30,7 +31,9 @@ export function openGuide({ first = false } = {}) {
   el = document.createElement("div");
   el.id = "guide"; el.className = "guide"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", `How ${CONFIG.appName} works`);
   document.body.appendChild(el); document.body.classList.add("guided");
+  const layer = addLayer(() => close()); // the phone's back closes it
   const close = () => {
+    dropLayer(layer);
     ls.set(SEEN, 1);
     if (store.data?.username && !store.data.guideSeen) save({ guideSeen: 1 }).catch(() => {});
     el.remove(); el = null; document.body.classList.remove("guided");
