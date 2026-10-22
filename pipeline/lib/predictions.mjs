@@ -53,8 +53,10 @@ export async function settlePredictions(db, accounts, { now = Date.now(), fetchR
     if (!results.length) continue;
     const ps = scoreRecord(results, { now });
     if (!ps) continue;
-    if (a.pscore?.v !== 2 && a.pscore) ps.was = { score: a.pscore.score ?? null, v: a.pscore.v || 1 }; // for the one-time note in the app
-    if (a.pscore?.v === 2 && a.pscore.was && !ps.was) ps.was = a.pscore.was;
+    // the quick run only knows the account's id: read its current score, so the old one is never lost
+    const cur = "pscore" in a ? a.pscore : (db.get ? (await db.get(`accounts/${a.id}`))?.pscore : null);
+    if (cur && cur.v !== 2) ps.was = { score: cur.score ?? null, v: cur.v || 1 }; // the score before v2, for the one-time note
+    else if (cur?.was) ps.was = cur.was;
     a.pscore = ps; // the player cards use it next
     await db.set(`accounts/${a.id}`, { pscore: ps });
     tally.profiles++;

@@ -50,6 +50,7 @@ const r6 = await settle({ coin: "CRYPTO:BTC", t: "BTC", horizon: "30m", target: 
 // 7. the data job against an in-memory Firestore
 const store = new Map();
 const db = {
+  async get(path) { return store.has(path) ? { id: path.split("/").pop(), path, ...store.get(path) } : null; },
   async group(id) { return [...store].filter(([k]) => k.split("/").at(-2) === id).map(([k, v]) => ({ id: k.split("/").pop(), path: k, ...v })); },
   async list(coll) { const pre = coll + "/"; return [...store].filter(([k]) => k.startsWith(pre) && !k.slice(pre.length).includes("/")).map(([k, v]) => ({ id: k.slice(pre.length), path: k, ...v })); },
   async set(path, data) { store.set(path, { ...(store.get(path) || {}), ...data }); },
@@ -61,9 +62,14 @@ store.set("accounts/u1/predictions/BTC_1d", { coin: "CRYPTO:BTC", t: "BTC", hori
 store.set("accounts/u2", {});
 calls.length = 0;
 const tally = await settlePredictions(db, await db.list("accounts"), { now: NOW, fetchRows: fakeRows(NOW), log: () => {} });
-const res = await db.list("accounts/u1/results"), openLeft = await db.list("accounts/u1/predictions");
+const run1Calls = [...calls], res = await db.list("accounts/u1/results"), openLeft = await db.list("accounts/u1/predictions");
 // the 15-minute run: one query finds open predictions; with nothing newly due, it only touches the open account
 const quick = await settleOpen(db, { now: NOW + 60e3, fetchRows: fakeRows(NOW), log: () => {} });
+// an account with a score from the old method: the quick run rescores it after a call and keeps the old number
+store.set("accounts/u3", { pscore: { score: 640, band: "Good", n: 12 } });
+store.set("accounts/u3/predictions/BTC_1h", { coin: "CRYPTO:BTC", t: "BTC", horizon: "1h", target, createdAt: iso(made) });
+await settleOpen(db, { now: NOW + 120e3, fetchRows: fakeRows(NOW), log: () => {} });
+const u3 = store.get("accounts/u3").pscore;
 
 const checks = [
   ["candle sizes: 1 minute for the last 12 hours, then 15 minutes, hourly, 4-hourly, daily", intervalFor(NOW - 11 * 3600e3, NOW) === 1 && intervalFor(NOW - 2 * DAY, NOW) === 15 && intervalFor(NOW - 20 * DAY, NOW) === 60 && intervalFor(NOW - 100 * DAY, NOW) === 240 && intervalFor(NOW - 300 * DAY, NOW) === 1440 && intervalFor(NOW - 800 * DAY, NOW) === null],
@@ -80,7 +86,8 @@ const checks = [
   ["data job: the due call moves to results, the other stays open with its start price locked", res.length === 1 && res[0].status === "scored" && openLeft.length === 1 && openLeft[0].id === "BTC_1d" && near(openLeft[0].p0, priceOf(made2))],
   ["data job: the score (v2) is written to the account, and only for accounts with results", store.get("accounts/u1").pscore?.v === 2 && store.get("accounts/u1").pscore?.score >= 550 && store.get("accounts/u1").pscore?.score < 650 && store.get("accounts/u1").pscore?.flag === null && store.get("accounts/u1").pscore?.n === 1 && store.get("accounts/u1").pscore?.provisional === true && !store.get("accounts/u2").pscore],
   ["15-minute run: finds the still-open call through one query and leaves it open, scoring nothing twice", quick.scored === 0 && quick.void === 0 && (await db.list("accounts/u1/predictions")).length === 1 && (await db.list("accounts/u1/results")).length === 1],
-  ["data job: each coin and candle size is fetched once per run", new Set(calls).size === calls.length && tally.scored === 1 && tally.locked === 2],
+  ["switching to v2: an account's old score is kept (for the one-time note) when the quick run rescores it", u3?.v === 2 && u3.was?.score === 640 && u3.was.v === 1],
+  ["data job: each coin and candle size is fetched once per run", new Set(run1Calls).size === run1Calls.length && tally.scored === 1 && tally.locked === 2],
 ];
 let ok = 0; for (const [n, pass] of checks) { if (pass) ok++; else console.log("FAIL predict: " + n); }
 if (process.argv.includes("-v")) for (const [n, pass] of checks) console.log(`${pass ? "ok  " : "FAIL"} ${n}`);
