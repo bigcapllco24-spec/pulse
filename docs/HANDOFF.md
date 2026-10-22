@@ -1,6 +1,6 @@
 # Pulse: handoff for a new chat
 
-**Last updated: 23 Oct 2026, 02:39 IST**
+**Last updated: 23 Oct 2026, 02:53 IST**
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open. Read `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`; also the project's
@@ -337,8 +337,11 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
   result from `actions/workflows/tests.yml/runs?branch=<branch>` (annotations show the failing checks).
 - **A manual or scheduled deploy (`deploy.yml` by hand, or the 2-hourly run) publishes `main` without running the
   tests.** Only move `main` to code whose branch tests passed.
-- The live tests' `playwright install --with-deps … webkit` step sometimes stalls on GitHub's runner. Since 23 Oct
-  each try is cut at 5 minutes, up to 3 tries; if all three stall, dispatch again.
+- The browser install for the tests sometimes stalled on GitHub's runner (3 of 6 runs on 22–23 Oct; cause unknown,
+  the job logs can't be read from Claude's sessions). Since 23 Oct `scripts/install-browsers.sh` installs in two
+  phases (system packages, browser download), each with 4 minutes and 3 tries, and the browsers are cached; a stall
+  shows as a "browsers: …" warning on the run. Runners are pinned to `ubuntu-24.04` (Playwright 1.56's packages).
+  First run after the change passed; not yet proven over many runs.
 - **From 17 to 22 Oct no scheduled or manual deploy published** (the publish job needed the build, whose tests are
   skipped on those runs, so it was skipped too): the data jobs wrote to Firestore, but the site stayed on the 18 Oct
   build with 18 Oct prices and news. Fixed 23 Oct (`if: always()` on the deploy job). After a deploy, check its
