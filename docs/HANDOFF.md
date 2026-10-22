@@ -140,7 +140,7 @@ pipeline/               Node 22, run by GitHub Actions
                         public board, most-followed board, public calls), habit, google (Firestore REST + FCM)
 .github/workflows/
   deploy.yml            push to main → tests (tests.yml) → publish only if they pass (~1 min after tests; reuses live data)
-                        every 2 h / manual → data job (~2 min) → rules → minify → publish
+                        every 2 h / manual → data job (~2 min) → minify → publish (rules only on a push)
   tests.yml             scripts/check.sh, then tests/live.py against the Firebase emulators; runs on every branch push too
   settle.yml            every 15 min → pipeline/settle.mjs
 firestore.rules         source of truth for rules; published by the deploy
@@ -337,8 +337,12 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
   result from `actions/workflows/tests.yml/runs?branch=<branch>` (annotations show the failing checks).
 - **A manual or scheduled deploy (`deploy.yml` by hand, or the 2-hourly run) publishes `main` without running the
   tests.** Only move `main` to code whose branch tests passed.
-- The live tests' `playwright install --with-deps … webkit` step sometimes hangs until the 30-minute timeout on
-  GitHub's runner ("cancelled"); dispatch again.
+- The live tests' `playwright install --with-deps … webkit` step sometimes stalls on GitHub's runner. Since 23 Oct
+  each try is cut at 5 minutes, up to 3 tries; if all three stall, dispatch again.
+- **From 17 to 22 Oct no scheduled or manual deploy published** (the publish job needed the build, whose tests are
+  skipped on those runs, so it was skipped too): the data jobs wrote to Firestore, but the site stayed on the 18 Oct
+  build with 18 Oct prices and news. Fixed 23 Oct (`if: always()` on the deploy job). After a deploy, check its
+  `deploy` job says success, not skipped.
 - The session's GitHub proxy blocks the Actions secrets and logs endpoints, and deleting branches. Read job logs in
   Chrome instead.
 - `gh workflow run` fails. Trigger a job with

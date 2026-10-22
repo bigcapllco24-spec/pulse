@@ -1,7 +1,7 @@
 name: Data and deploy
 # Two paths:
 # - A code push publishes the app straight away (about a minute), reusing the prices and news already live.
-# - Every 2 hours (or when run by hand) the data job refreshes coin candles and news, checks rules, then publishes.
+# - Every 2 hours (or when run by hand) the data job refreshes coin candles and news, then publishes (no tests, no rules).
 on:
   push:
     branches: [main]
