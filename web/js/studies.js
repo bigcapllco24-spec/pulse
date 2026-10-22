@@ -67,10 +67,14 @@ export function studyWindow(bars, ov, from, end, codes) {
 
 // The current picks, from settings, with older settings carried over (moving averages and the old panel string).
 const MA_OLD = { sma20: "MA20", sma50: "MA50", sma200: "MA200", ema20: "EMA20", ema50: "EMA50" };
+// feed (1.3.2): the panels also shown on feed cards, at most FEED_MAX, always among those shown in full screen. Accounts
+// from before 1.3.2 have no feed setting and keep the panels their cards showed; new accounts start with none.
+export const FEED_MAX = 2;
 export function picks(chart) {
   const over = chart?.over || (chart?.mas || []).map((k) => MA_OLD[k]).filter(Boolean);
   const lower = String(chart?.lower ?? "RSI,MACD").split(",").filter((k) => PANELS[k]);
-  return { over: over.filter((k) => OVERLAYS[k]), lower };
+  const feed = chart?.feed == null ? lower.slice(0, FEED_MAX) : String(chart.feed).split(",").filter((k) => lower.includes(k)).slice(0, FEED_MAX);
+  return { over: over.filter((k) => OVERLAYS[k]), lower, feed };
 }
 
 // Ready-made ways to look at a chart. Learning sets, not strategies: each groups indicators that answer one question.

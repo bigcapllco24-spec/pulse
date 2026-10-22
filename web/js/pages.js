@@ -6,11 +6,11 @@ import { leaveAllGroups, deleteMySocial } from "./social.js";
 import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
-import { OVERLAYS, PANELS, MAX_OVERLAYS, maxPanels, SETS, picks } from "./studies.js";
+import { OVERLAYS, PANELS, MAX_OVERLAYS, maxPanels, SETS, picks, FEED_MAX } from "./studies.js";
 import { D, view, storiesFor, RANGE_LABEL, resolveInterval, dailyOf } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, haptic, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
 import { openLearn } from "./interact.js";
-import { APP, buildFeed, showTab, currentSyms, applyTheme, doRefresh, backLabel } from "./app.js";
+import { APP, buildFeed, showTab, currentSyms, listName, applyTheme, doRefresh, backLabel, openDash } from "./app.js";
 import { openAvatarSheet } from "./play.js";
 import { openPage, closePage, backBtn, pageOpen } from "./nav.js";
 
@@ -135,19 +135,22 @@ export function openListsFor(sym) {
   }, () => buildFeed({ keepKey: sym.key }));
 }
 
-// Switch between "All my coins" and one watchlist
-export function openSwitcher(onDone = () => buildFeed()) {
+// Coins in your feed (1.3.2): "All my coins" at the top of the feed opens this sheet, not a new screen (designer's
+// feedback: it looked like a drop-down but swapped the whole page). Pick which list the feed scrolls, its order, or go on
+// to the list view and to editing lists.
+export function openSwitcher() {
   const cur = store.data?.settings?.list || "all";
-  const all = allSyms().length;
-  openSheet("Show in your feed", `<p class="hint" style="margin:0 0 8px">Pick a watchlist. The feed and Your market follow it.</p>${[["all", "All my coins", all, ""], ...watchlists().map((w) => [w.id, w.name, (w.syms || []).length, ""]), ...[...store.lists.values()].map((l) => [l.id, l.name, (l.symbols || []).length, "Shared"])].map(([id, name, n, tag]) =>
-    `<button class="row" data-l="${esc(id)}"><span class="main"><span class="t">${esc(name)}${tag ? ` <span class="pill">${tag}</span>` : ""}</span><span class="s">${n} coin${n === 1 ? "" : "s"}</span></span>${id === cur ? `<span style="color:var(--accent);font-weight:800">✓</span>` : ""}</button>`).join("")}
-    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn sm" id="nwl">New watchlist</button><button class="btn sm" id="mwl">Share a list</button></div>
-    <div class="label" style="margin:18px 0 8px">Order</div><div class="opts">${[["watchlist", "Watchlist order"], ["move", "Biggest move"], ["news", "Most news"], ["rsi", "Lowest RSI"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-o="${k}" aria-pressed="${chartSettings().order === k}">${l}</button>`).join("")}</div>`, (body) => {
-    body.querySelectorAll("[data-l]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, list: b.dataset.l } }); closeSheet(); }));
-    body.querySelectorAll("[data-o]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, chart: { ...chartSettings(), order: b.dataset.o } } }); closeSheet(); }));
-    body.querySelector("#nwl").onclick = async () => { const n = prompt("Name the watchlist", "Semiconductors"); if (n) { const id = await newWatchlist(n); await save({ settings: { ...store.data.settings, list: id } }); closeSheet(); openAddSheet(); } };
-    body.querySelector("#mwl").onclick = () => { closeSheet(); openProfile("lists"); };
-  }, onDone);
+  const rows = [["all", "All my coins", allSyms().length, ""], ...watchlists().map((w) => [w.id, w.name, (w.syms || []).length, ""]), ...[...store.lists.values()].map((l) => [l.id, l.name, (l.symbols || []).length, "Shared list · "])];
+  openSheet("Coins in your feed", `<div class="hl">${rows.map(([id, name, n, tag]) =>
+    `<button class="row" data-l="${esc(id)}" aria-pressed="${id === cur}"><span class="main"><span class="t">${esc(name)}</span><span class="s">${tag}${n} coin${n === 1 ? "" : "s"}</span></span>${id === cur ? `<span class="tick" aria-label="Showing">✓</span>` : ""}</button>`).join("")}</div>
+    <div class="hl" style="margin-top:12px"><button class="row" id="swList"><span class="main"><span class="t">See them as a list</span></span><span class="chev">›</span></button><button class="row" id="swEdit"><span class="main"><span class="t">Edit lists and coins</span></span><span class="chev">›</span></button></div>
+    <div class="label" style="margin:18px 0 8px">Order in the feed</div><div class="opts">${[["watchlist", "List order"], ["move", "Biggest move"], ["news", "Most news"], ["rsi", "Lowest RSI"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-o="${k}" aria-pressed="${chartSettings().order === k}">${l}</button>`).join("")}</div>`, (body) => {
+    const done = () => { closeSheet(); buildFeed(); if (pageOpen("sDash")) renderDash(); };
+    body.querySelectorAll("[data-l]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, list: b.dataset.l } }); done(); }));
+    body.querySelectorAll("[data-o]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, chart: { ...chartSettings(), order: b.dataset.o } } }); done(); }));
+    body.querySelector("#swList").onclick = () => { closeSheet(); openDash(); };
+    body.querySelector("#swEdit").onclick = () => { closeSheet(); openProfile("watchlists"); };
+  });
 }
 
 // ---------- Your market (1.2.0): the feed as a list. Each coin shows today's move against its usual move, any call
@@ -175,17 +178,15 @@ function coinsView(el) {
     : `<button class="row mrow" data-open="${esc(s.key)}"><span class="main"><span class="t">${esc(s.n)}</span><span class="s">${x != null ? `<b class="${x >= 1.5 ? "warnt" : ""}">${x.toFixed(1)}× usual</b>` : ""}${r.n ? `${x != null ? ", " : ""}you ${r.ok} of ${r.n}` : waiting ? `${x != null ? ", " : ""}call waiting` : ""}</span></span>${sparkline((rv || v).win.map((b) => b.c), 64, 24, c >= 0)}<span class="r"><b>${esc(money((rv || v).lastBar.c, s.m))}</b><span class="${c >= 0 ? "up" : "down"}">${pct(c, 1)}</span></span></button>`;
   };
   el.innerHTML = `<div class="mtop">${backBtn(esc(APP.dashBack || "Feed"), "dFeed")}<span class="mtopb"><button class="iconbtn ghost" id="dAdd" aria-label="Add a coin"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></span></div>
-    <button class="switcher" id="dSwitch" style="margin-top:12px"><span>${esc(w ? w.name : "All my coins")}</span><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-    <h1 style="margin:10px 0 0">Your market</h1>
+    <h1 style="margin:6px 0 0">${esc(listName())}</h1>
     <p class="hint" style="margin:6px 0 0">${withData.length ? `${moving ? `${moving} of your ${withData.length} coins ${moving === 1 ? "is" : "are"} moving more than usual today.` : `None of your ${withData.length} coins is moving more than usual today.`}${all.length ? ` You've called the direction right ${allOk} time${allOk === 1 ? "" : "s"} in ${all.length}.` : ""}` : "Prices are loading."}</p>
     ${editing ? `<p class="hint" style="margin-top:14px">Reorder or remove coins in “${esc(w.name)}”. The feed follows this order.</p>` : `<div class="opts" style="margin:16px 0 4px">${[["move", "Moving most"], ["record", "My record"], ["uncalled", "Not called yet"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-s="${k}" aria-pressed="${sort === k}">${l}</button>`).join("")}</div>`}
     ${withData.length ? `<div class="hl mlist">${withData.map(row).join("")}</div>` : ""}
     ${noData.length ? `<p class="hint">Waiting for prices: ${noData.map((s) => esc(s.t)).join(", ")}.</p>` : ""}
     ${!syms.length ? `<div class="empty">Nothing in this watchlist yet.</div>` : ""}
     <div style="display:flex;gap:8px;margin-top:16px">${w ? (editing ? `<button class="btn ghost sm" id="dRen">Rename</button><button class="btn ghost sm danger" id="dDel">Delete</button><button class="btn sm" id="dDone">Done</button>` : `<button class="btn ghost sm" id="dEdit">Edit this watchlist</button>`) : ""}</div>
-    <p class="hint" style="margin-top:12px">Choosing a watchlist here also sets what your feed shows. Moves are facts about the past, never advice.</p>`;
+    <p class="hint" style="margin-top:12px">Moves are facts about the past, never advice.</p>`;
   const pick = async (id) => { APP.dashEdit = false; await save({ settings: { ...store.data.settings, list: id } }); APP.needsRebuild = true; renderDash(); };
-  el.querySelector("#dSwitch").onclick = () => openSwitcher(() => renderDash());
   el.querySelector("#dFeed").onclick = () => closePage("sDash");
   el.querySelector("#dAdd").onclick = () => openAddSheet();
   el.querySelector("#dEdit")?.addEventListener("click", () => { APP.dashEdit = true; renderDash(); });
@@ -451,50 +452,57 @@ function pLegal(el, back) {
     <p class="hint">Summary only. Full terms and privacy notice to be reviewed by a lawyer before public launch.</p>`;
 }
 
-// ---------- indicators: add or remove from the feed card's ƒx button. One shared choice for every coin.
-// The ƒx sheet, built to scan fast: what's on now (tap ✕ to remove), one row of quick sets, then one list at a
-// time (lines on the price chart, or panels below it) as compact rows grouped by what they measure.
+// ---------- indicators (1.3.2): the ƒx button in the full-screen chart. One shared choice for every coin. Panels under
+// the chart show in full screen; up to FEED_MAX of them can also go on feed cards (+ Feed). Lines on the price chart
+// are full screen only. Tap a name for its guide.
 let fxTab = "lower";
 export function openIndicatorsSheet(onChange) {
   const pk = picks(store.data?.settings?.chart);
-  let swap = null; // full up: the indicator waiting to replace one already on
+  let swap = null; // full screen full: the panel or line waiting to replace one already on
   const persist = () => {
     const ch = store.data?.settings?.chart || {};
-    save({ settings: { ...store.data.settings, chart: { ...ch, over: [...pk.over], lower: pk.lower.join(",") || "none", mas: [] } } }).catch(() => {});
+    pk.feed = pk.feed.filter((k) => pk.lower.includes(k));
+    save({ settings: { ...store.data.settings, chart: { ...ch, over: [...pk.over], lower: pk.lower.join(",") || "none", feed: pk.feed.join(","), mas: [] } } }).catch(() => {});
     APP.needsRebuild = true; onChange?.();
   };
   const reg = () => (fxTab === "over" ? OVERLAYS : PANELS), mine = () => (fxTab === "over" ? pk.over : pk.lower);
-  const cap = () => (fxTab === "over" ? MAX_OVERLAYS : maxPanels());
   const nameOf = (c) => (OVERLAYS[c] || PANELS[c]).name.replace(/ \(.*\)$/, "");
-  const chips = () => [...pk.over, ...pk.lower].map((c) => `<span class="fxon">${esc(nameOf(c))}<button data-stog="${c}" aria-label="Remove ${esc(nameOf(c))}">✕</button></span>`).join("") || `<span class="hint">Nothing yet: just the price.</span>`;
+  const feedFull = () => pk.feed.length >= FEED_MAX;
   const list = () => {
     const groups = {};
     for (const [code, x] of Object.entries(reg())) (groups[x.group] ||= []).push([code, x]);
     return Object.entries(groups).map(([g, items]) => `<div class="fxgrp"><div class="sgroup">${esc(g)}</div>${items.map(([code, x]) => {
-      const on = mine().includes(code);
+      const on = mine().includes(code), onFeed = pk.feed.includes(code);
+      const feedBtn = fxTab === "lower" && on ? `<button class="fxfeed" data-sfeed="${code}" aria-pressed="${onFeed}" ${!onFeed && feedFull() ? "disabled" : ""}>${onFeed ? "✓ On feed" : "+ Feed"}</button>` : "";
       return `<div class="fxrow${on ? " on" : ""}"><button class="fxname" data-sguide="${code}"><b>${esc(x.name)}</b><span>${esc(x.short)}</span></button>
-        <button class="fxtog" data-stog="${code}" aria-pressed="${on}" aria-label="${on ? "Remove" : "Add"} ${esc(x.name)}">${on ? "✓" : "+"}</button></div>`;
+        ${feedBtn}<span class="switch"><input type="checkbox" data-stog="${code}" ${on ? "checked" : ""} aria-label="Show ${esc(x.name)}"><span></span></span></div>`;
     }).join("")}</div>`).join("");
   };
   const swapBox = () => {
     if (!swap) return "";
     const isOver = !!OVERLAYS[swap], l = isOver ? pk.over : pk.lower, max = isOver ? MAX_OVERLAYS : maxPanels();
-    return `<div class="fxswap" role="alert"><b>${isOver ? `Up to ${max} on the price chart` : `Your screen fits ${max} panels`}. Swap one for ${esc(nameOf(swap))}?</b>
+    return `<div class="fxswap" role="alert"><b>${isOver ? `Up to ${max} lines on the price chart` : `Your screen fits ${max} panels`}. Swap one for ${esc(nameOf(swap))}?</b>
       <div class="fxchips">${l.map((c) => `<button class="opt" data-swap="${c}">${esc(nameOf(c))}</button>`).join("")}<button class="opt" data-swap="">Cancel</button></div></div>`;
   };
-  const body = () => `${swapBox()}<div class="fxnow"><div class="cap">On your charts · ${pk.over.length + pk.lower.length}</div><div class="fxchips">${chips()}</div></div>
+  const body = () => `${swapBox()}
     <div class="fxsets">${SETS.map((x) => `<button class="opt" data-sset="${x.id}" aria-pressed="${x.over.join() === pk.over.join() && x.lower.slice(0, maxPanels()).join() === pk.lower.join()}">${esc(x.name)}</button>`).join("")}<button class="opt" data-sset="none">Clear</button></div>
-    <div class="seg fxseg" role="tablist">${[["lower", "Panels below", pk.lower.length, maxPanels()], ["over", "On the price", pk.over.length, MAX_OVERLAYS]].map(([k, l, n, m]) => `<button data-fxtab="${k}" aria-pressed="${fxTab === k}">${l} <small>${n}/${m}</small></button>`).join("")}</div>
+    <div class="seg fxseg" role="tablist">${[["lower", "Panels under the chart", pk.lower.length, maxPanels()], ["over", "Lines on the price", pk.over.length, MAX_OVERLAYS]].map(([k, l, n, m]) => `<button data-fxtab="${k}" aria-pressed="${fxTab === k}">${l} <small>${n}/${m}</small></button>`).join("")}</div>
+    <p class="hint fxcap">${fxTab === "lower" ? (feedFull() ? `On your feed: ${FEED_MAX} of ${FEED_MAX}. Turn one off to add another.` : `On your feed: ${pk.feed.length} of ${FEED_MAX}. Tap + Feed to see a panel on every coin as you scroll.`) : "Lines show in the full-screen chart only."}</p>
     ${list()}
     <p class="disclaimer">Indicators are arithmetic on past prices and volume. They describe what happened, not what will happen. Tap a name for its guide.</p>`;
   const wire = (root) => {
     const redo = () => { const top = root.scrollTop; root.innerHTML = body(); wire(root); root.scrollTop = top; };
-    root.querySelectorAll("[data-stog]").forEach((b) => (b.onclick = () => {
+    root.querySelectorAll("[data-stog]").forEach((b) => (b.onchange = () => {
       const code = b.dataset.stog, isOver = !!OVERLAYS[code], l = isOver ? pk.over : pk.lower, i = l.indexOf(code), max = isOver ? MAX_OVERLAYS : maxPanels();
-      if (i >= 0) l.splice(i, 1);
+      if (i >= 0) l.splice(i, 1); // turning a panel off also takes it off the feed
       else if (l.length >= max) { swap = code; root.innerHTML = body(); wire(root); root.scrollTop = 0; return; } // full: ask which one it replaces
       else l.push(code);
       swap = null; persist(); redo();
+    }));
+    root.querySelectorAll("[data-sfeed]").forEach((b) => (b.onclick = () => {
+      const code = b.dataset.sfeed, i = pk.feed.indexOf(code);
+      if (i >= 0) pk.feed.splice(i, 1); else if (!feedFull()) pk.feed.push(code); else return;
+      haptic(); persist(); redo();
     }));
     root.querySelectorAll("[data-swap]").forEach((b) => (b.onclick = () => {
       if (b.dataset.swap) { const l = OVERLAYS[swap] ? pk.over : pk.lower; l.splice(l.indexOf(b.dataset.swap), 1, swap); persist(); haptic(); }
@@ -507,35 +515,7 @@ export function openIndicatorsSheet(onChange) {
   openSheet("Indicators", body(), wire);
 }
 
-// More panels saved than this screen fits (a smaller phone, or picks from before the limit): ask once which to keep,
-// rather than quietly dropping the last ones added.
-const askedFit = new Set();
-export function checkPanelFit(onDone) {
-  const pk = picks(store.data?.settings?.chart), max = maxPanels(), sig = `${pk.lower.join()}|${max}`;
-  if (pk.lower.length <= max || askedFit.has(sig) || !$("sheet").hidden || document.getElementById("gate")) return;
-  askedFit.add(sig);
-  let keep = pk.lower.slice(-max); // the most recently added, which are the ones that were being cut
-  openSheet(`Pick ${max} panels`, "", (body) => {
-    const draw = () => {
-      body.innerHTML = `<p class="hint">You've chosen ${pk.lower.length} panels, and this screen fits ${max} under the price. Which ${max} should show? The others come off (add them back any time with ƒx).</p>
-        <div class="choices">${pk.lower.map((k) => `<button class="choice" data-keep="${k}" aria-pressed="${keep.includes(k)}"><b>${esc(PANELS[k].name)}</b><span>${esc(PANELS[k].short)}</span></button>`).join("")}</div>
-        <p style="margin-top:12px"><button class="btn primary block" id="kGo" ${keep.length ? "" : "disabled"}>Show ${keep.length === 1 ? "this one" : `these ${keep.length}`}</button></p>`;
-      body.querySelectorAll("[data-keep]").forEach((b) => (b.onclick = () => {
-        const k = b.dataset.keep, i = keep.indexOf(k);
-        if (i >= 0) keep.splice(i, 1); else { if (keep.length >= max) keep.shift(); keep.push(k); }
-        haptic(); draw();
-      }));
-      body.querySelector("#kGo").onclick = async () => {
-        const order = pk.lower.filter((k) => keep.includes(k)), ch = store.data?.settings?.chart || {};
-        closeSheet(); await save({ settings: { ...store.data.settings, chart: { ...ch, lower: order.join(",") || "none" } } }).catch(() => {});
-        APP.needsRebuild = true; onDone?.();
-      };
-    };
-    draw();
-  });
-}
-
-// ---------- lines on the chart (S/R button on every card): one choice for every coin
+// ---------- lines on the chart (S/R in the full-screen chart): one choice for every coin
 export async function setLines(mode) {
   const st = store.data.settings, by = { ...(st.chartBy || {}) };
   for (const k of Object.keys(by)) { const o = { ...by[k] }; delete o.levels; if (Object.keys(o).length) by[k] = o; else delete by[k]; }

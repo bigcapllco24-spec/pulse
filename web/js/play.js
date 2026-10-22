@@ -12,7 +12,7 @@ import { $, esc, money, pct, toast, haptic, openSheet, setSheetBody, closeSheet,
 import { APP, showTab, backLabel } from "./app.js";
 import { renderYou, openRecord, renderRecord, openMyCard } from "./you.js";
 import { addLayer, dropLayer, openPage, closePage, backBtn, pageOpen } from "./nav.js";
-import { openProfile } from "./pages.js";
+import { openProfile, openAddSheet } from "./pages.js";
 import { setFeedbackMode } from "./feedback.js";
 import { svgIcon, BAND_CLASS, SHORT } from "./card.js";
 import { mixOf, streakOf, streakBadges, istDay, dailyCoin, msUntilNextDay, whatHappened } from "./habit.js";
@@ -84,14 +84,56 @@ export function badge() {
 }
 const groupsNeedYou = () => waitingForMe().length + unseenResults().length + S.invites.length > 0;
 
-// Calls: a search bar in the header, your progress, today's coin, friends, calls waiting and calls scored.
+// Calls (1.3.2): what a call is in one line, Make a call, your record, today's coin, calls waiting, friends, calls scored.
+// Everything that can be tapped has a chevron or a button (designer's feedback, 22 Oct).
 export function renderPlay() {
   const el = $("play");
-  el.innerHTML = `<div class="pl-top2"><h1>Calls</h1><button class="searchbar" id="plFind" aria-label="Find players"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><span>Know how others are doing</span></button></div>
+  el.innerHTML = `<div class="pl-top2"><h1>Calls</h1><button class="iconbtn round" id="plFind" aria-label="Find players">${ICON.search}</button></div>
+    <p class="hint pl-what">Say where a price will be. ${esc(CONFIG.appName)} scores how close you got. <button class="linkbtn" id="plAbout">About your score</button></p>
+    <button class="btn primary block pl-make" id="plMake">${ICON.plus}Make a call</button>
     <div class="pl-view" data-view="calls"></div>`;
   callsView(el.querySelector(".pl-view"));
   el.querySelector("#plFind").onclick = () => openSearch();
+  el.querySelector("#plAbout").onclick = () => openAboutScore();
+  el.querySelector("#plMake").onclick = () => openCoinPicker();
   wirePicks(el);
+}
+const ICON = {
+  search: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>`,
+  plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`,
+  up: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>`,
+  down: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>`,
+  flat: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h14M5 15h14"/></svg>`,
+  clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>`,
+  group: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="9" r="3.2"/><circle cx="16.5" cy="10" r="2.6"/><path d="M3.5 19c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5M14.5 15c2.3-.3 4.6.8 5.5 4"/></svg>`,
+  list: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>`,
+  target: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></svg>`,
+  bars: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h4V10H4zM10 18h4V6h-4zM16 18h4V13h-4z"/></svg>`,
+};
+const CHEV = `<span class="chev" aria-hidden="true">›</span>`;
+const dirOf = (p) => (p.target === p.clientP0 ? 0 : (p.target > (p.clientP0 ?? p.p0) ? 1 : -1));
+const badgeOf = (d) => `<span class="dbadge ${d > 0 ? "up" : d < 0 ? "dn" : "flat"}">${d > 0 ? ICON.up : d < 0 ? ICON.down : ICON.flat}</span>`;
+const callLine = (p) => { const d = dirOf(p); return d ? `${d > 0 ? "Higher" : "Lower"}, about ${num(esc(m$(p.target)))}` : `No change, about ${num(esc(m$(p.target)))}`; };
+const coinName = (key, t) => symOf(key).n || t;
+// About your score (exact copy, 22 Oct): the three things that matter, never how it's worked out.
+export function openAboutScore() {
+  openSheet("About your score", `<div class="about">
+      <p>${ICON.up}<span>Calling the right direction matters.</span></p>
+      <p>${ICON.target}<span>Getting close to the real price matters too.</span></p>
+      <p>${ICON.bars}<span>One call can be luck. Your record shows skill over many calls, so give it about 30.</span></p>
+    </div>
+    <p class="about-note"><b>Every call builds your record.</b> The more you call, the sooner your skill shows, and the more your score says about you.</p>
+    <button class="btn primary block" id="abMake">Make a call</button>`, (body) => { body.querySelector("#abMake").onclick = () => openCoinPicker(); });
+}
+// Make a call from Calls: pick one of your coins (the feed's list), then the usual Call it.
+export function openCoinPicker() {
+  const syms = allSyms().filter((x) => lastPrice(x.key));
+  openSheet("Make a call", syms.length ? `<p class="hint" style="margin:0 0 10px">Pick a coin. Prices are the latest the app has.</p><div class="hl">${syms.map((x, i) => { const open = store.preds.filter((p) => p.coin === x.key).length;
+      return `<button class="row" data-cp="${i}"><span class="main"><span class="t">${esc(x.n || x.t)} <span class="hint">${esc(x.t)}</span></span><span class="s">${num(esc(money(lastPrice(x.key), x.m)))}${open ? ` · ${open} waiting` : ""}</span></span>${CHEV}</button>`; }).join("")}</div>
+    <button class="btn block" id="cpAdd" style="margin-top:12px">Add a coin</button>` : `<p class="hint">Prices are still loading. Try again in a moment.</p>`, (body) => {
+    body.querySelectorAll("[data-cp]").forEach((b) => (b.onclick = () => openPredictSheet(syms[+b.dataset.cp], () => APP.tab === "play" && rerender())));
+    body.querySelector("#cpAdd")?.addEventListener("click", () => { closeSheet(); openAddSheet(); });
+  });
 }
 function wirePicks(root) {
   root.querySelectorAll("[data-pick]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const [g, c] = b.dataset.pick.split("|"), ch = challengesOf(g).find((x) => x.id === c); if (ch) openPickSheet(g, ch); }));
@@ -105,7 +147,7 @@ export function verdictOf(sc) {
   return sc.score >= 600 ? { text: "Reading it well", key: "well", n } : { text: "Still learning", key: "learning", n };
 }
 
-// ---------- Calls: progress, today, with friends, waiting, scored
+// ---------- Calls: your record, today, waiting, with friends, scored
 function callsView(el) {
   // waiting: your predictions, plus group picks that don't count to your score (those that do are predictions too)
   // a call scored on this phone the moment it was due moves straight to Scored (marked "confirming" until the server's copy lands)
@@ -113,35 +155,50 @@ function callsView(el) {
   const open = [...store.preds.filter((p) => !isHere(p)).map((p) => ({ ...p, kind: "pred" })), ...S.picks.filter((p) => !p.counts && p.status !== "scored" && p.status !== "void").map((p) => ({ ...p, kind: "pick" }))]
     .sort((a, b) => Date.parse(dueAt(a)) - Date.parse(dueAt(b)));
   const done = [...here, ...store.results].sort((a, b) => Date.parse(b.resolvedAt || 0) - Date.parse(a.resolvedAt || 0));
-  const sc = myScore(), v = verdictOf(sc), st = myStreak(), n = sc?.n || 0;
-  const callRow = (p) => {
+  const sc = myScore(), v = verdictOf(sc), st = myStreak(), n = sc?.n || done.filter((r) => r.status === "scored").length;
+  const callRow = (p, i) => {
     const due = dueAt(p), grp = p.g ? ` · ${esc(groupName(p.g))}` : "";
-    return `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">Called ${num(esc(m$(p.target)))}${grp}${p.kind === "pick" ? " · group only" : ""}</span></span><b class="num">${esc(Date.now() >= Date.parse(due) ? "scoring…" : leftText(due, p.horizon))}</b></div>`;
+    return `<button class="row crow" data-open="${i}">${badgeOf(dirOf(p))}<span class="main"><span class="t">${esc(coinName(p.coin, p.t))} · ${SHORT[p.horizon]}</span><span class="s">${callLine(p)}${grp}${p.kind === "pick" ? " · group only" : ""}</span></span><span class="when">${ICON.clock}${esc(Date.now() >= Date.parse(due) ? "scoring" : until(due))}</span>${CHEV}</button>`;
   };
-  const bits = [n < VERDICT_AT ? `${n} of about ${VERDICT_AT} calls` : `${n} calls scored`, st.n ? `${st.n}-day streak` : "", levelText()].filter(Boolean).join(" · ");
+  const bits = [n < VERDICT_AT ? `${n} of about ${VERDICT_AT} scored calls` : `${n} scored calls`, st.n ? `${st.n}-day streak` : "", levelText()].filter(Boolean).join(" · ");
   const waits = waitingForMe(), groups = myGroups(), lists = [...store.lists.values()];
   const friendRows = [
-    ...waits.slice(0, 2).map((ch) => `<button class="row" data-pick="${esc(ch.g)}|${esc(ch.id)}"><span class="main"><span class="t">${esc(groupName(ch.g))}</span><span class="s">Group, needs your pick, ${esc(until(ch.joinUntil))} left</span></span><span class="linkbtn">Pick</span></button>`),
-    ...groups.filter((g) => !waits.some((w) => w.g === g.id)).slice(0, 2).map((g) => `<button class="row" data-g="${esc(g.id)}"><span class="main"><span class="t">${esc(g.name)}</span><span class="s">Group · ${Object.keys(g.members || {}).length} players</span></span><span class="chev">›</span></button>`),
-    ...lists.slice(0, 2).map((l) => `<button class="row" data-list="${esc(l.id)}"><span class="main"><span class="t">${esc(l.name)}</span><span class="s">Shared list · ${(l.symbols || []).length} coins · ${Object.keys(l.members || {}).length} members</span></span><span class="chev">›</span></button>`),
+    ...waits.slice(0, 2).map((ch) => `<div class="row"><span class="gicon">${ICON.group}</span><span class="main"><span class="t">${esc(groupName(ch.g))}</span><span class="s warnt">Needs your pick · ${esc(until(ch.joinUntil))} left</span></span><button class="btn primary sm" data-pick="${esc(ch.g)}|${esc(ch.id)}">Pick</button></div>`),
+    ...groups.filter((g) => !waits.some((w) => w.g === g.id)).slice(0, 2).map((g) => `<button class="row" data-g="${esc(g.id)}"><span class="gicon">${ICON.group}</span><span class="main"><span class="t">${esc(g.name)}</span><span class="s">Group · ${Object.keys(g.members || {}).length} players</span></span>${CHEV}</button>`),
+    ...lists.slice(0, 2).map((l) => `<button class="row" data-list="${esc(l.id)}"><span class="gicon">${ICON.list}</span><span class="main"><span class="t">${esc(l.name)}</span><span class="s">Shared list · ${(l.symbols || []).length} coins · ${Object.keys(l.members || {}).length} members</span></span>${CHEV}</button>`),
   ];
-  el.innerHTML = `<button class="progcard" id="plProg"><span class="pc-top"><b>${esc(v.text)}</b><span class="chev">›</span></span><span class="pl-prog" aria-hidden="true"><i style="width:${Math.min(100, (n / VERDICT_AT) * 100)}%"></i></span><span class="hint">${esc(bits)}</span></button>
+  const link = (id, text) => `<button class="linkbtn more" id="${id}">${text}<span aria-hidden="true"> ›</span></button>`;
+  el.innerHTML = `<button class="progcard" id="plProg"><span class="pc-top"><span><span class="label">Your record</span><b>${esc(v.text)}</b></span><span class="linkbtn more">Open<span aria-hidden="true"> ›</span></span></span><span class="pl-prog" aria-hidden="true"><i style="width:${Math.min(100, (n / VERDICT_AT) * 100)}%"></i></span><span class="hint">${esc(bits)}</span></button>
     <div class="secrow"><span class="label">Today</span></div>
     ${dailyBox(here)}
-    <div class="secrow"><span class="label">With friends</span><button class="linkbtn" id="plFriends">All groups and lists${groupsNeedYou() ? ' <span class="dot" aria-label="needs you"></span>' : ""}</button></div>
-    ${friendRows.length ? `<div class="hl">${friendRows.join("")}</div>` : `<p class="hint pl-empty">Start a group, or join one from a friend's link, to call the same coins together.</p>`}
     <div class="secrow"><span class="label">Waiting${open.length ? ` · ${open.length}` : ""}</span></div>
-    ${open.length ? `<div class="hl">${open.map(callRow).join("")}</div>` : `<p class="hint pl-empty">Nothing waiting. Tap Call it on any chart in the feed.</p>`}
-    <div class="secrow"><span class="label">Scored</span>${done.length > 3 ? `<button class="linkbtn" id="plAll">See all ${done.length}</button>` : ""}</div>
+    ${open.length ? `<div class="hl">${open.map(callRow).join("")}</div>` : `<p class="hint pl-empty">Nothing waiting. Make a call above, or tap Call it on any chart in the feed.</p>`}
+    <div class="secrow"><span class="label">With friends</span>${link("plFriends", `All groups${groupsNeedYou() ? ' <span class="dot" aria-label="needs you"></span>' : ""}`)}</div>
+    ${friendRows.length ? `<div class="hl">${friendRows.join("")}</div>` : `<p class="hint pl-empty">Start a group, or join one from a friend's link, to call the same coins together.</p>`}
+    <div class="secrow"><span class="label">Scored</span>${done.length > 3 ? link("plAll", `See all ${done.length}`) : ""}</div>
     ${done.length ? `<div class="hl pl-scored">${done.slice(0, 3).map(resultRow).join("")}</div>` : `<p class="hint pl-empty">Scored calls show here, with how close each one was.</p>`}`;
   el.querySelector("#plProg").onclick = () => openRecord();
   el.querySelector("#plFriends").onclick = () => openFriends();
-  el.querySelector("[data-daily]")?.addEventListener("click", () => { const { dc, mine, blocked } = dailyState(here); if (!mine && !blocked) openPredictSheet(dc, () => APP.tab === "play" && renderPlay(), "1d"); });
+  el.querySelector("[data-daily]")?.addEventListener("click", () => { const { dc, mine, blocked } = dailyState(here); if (!mine && !blocked) openPredictSheet(dc, () => APP.tab === "play" && renderPlay(), "1d"); else if (mine) openWaiting(mine); });
   el.querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openGroup(b.dataset.g)));
   el.querySelectorAll("[data-list]").forEach((b) => (b.onclick = () => openListPage(b.dataset.list)));
+  el.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => openWaiting(open[+b.dataset.open])));
   const wireRes = (root) => root.querySelectorAll("[data-res]").forEach((b) => (b.onclick = () => openResult(done[+b.dataset.res])));
   wireRes(el);
   el.querySelector("#plAll")?.addEventListener("click", () => openSheet("Scored calls", `<div class="hl">${done.map(resultRow).join("")}</div>`, wireRes));
+}
+// A call that's waiting: what was called, from where, where the price is now, and when it's scored. Facts only.
+function openWaiting(p) {
+  if (!p) return;
+  const now = lastPrice(p.coin), from = p.p0 ?? p.clientP0, d = dirOf(p), due = dueAt(p);
+  openSheet(`${esc(coinName(p.coin, p.t))} · ${SHORT[p.horizon]}`, `<div class="pc2-row" style="margin-bottom:10px">${badgeOf(d)}<span style="flex:1;font-weight:700">${callLine(p)}</span></div>
+    <div class="hl">
+      <div class="row"><span class="main"><span class="t">Price when you called</span><span class="s">${esc(when(p.createdAt, p.horizon))}</span></span><b class="num">${from != null ? esc(m$(from)) : "–"}</b></div>
+      <div class="row"><span class="main"><span class="t">Your call</span></span><b class="num">${esc(m$(p.target))}</b></div>
+      <div class="row"><span class="main"><span class="t">Price now</span><span class="s">${now != null && from ? `${pct((now / from - 1) * 100, 1)} since you called` : ""}</span></span><b class="num">${now != null ? esc(m$(now)) : "–"}</b></div>
+      <div class="row"><span class="main"><span class="t">Scored</span></span><b>${esc(when(due, p.horizon))}</b></div>
+    </div>
+    <p class="hint">A call can't be changed or taken back once it's locked in.${p.g ? ` Posted to ${esc(groupName(p.g))}.` : ""} Not advice.</p>`);
 }
 // ---------- the daily coin: one coin a day for everyone (habit.js); yesterday's crowd shows once it's scored
 function dailyState(here = pendingHere()) {
@@ -153,8 +210,8 @@ function dailyState(here = pendingHere()) {
 // today's coin as a row: everyone calls the same coin today; it's a 1-day call like any other
 function dailyBox(here) {
   const { dc, mine, blocked, left } = dailyState(here);
-  const right = mine ? `<span class="lab good">You're in</span>` : blocked ? `<span class="hint">1-day call open</span>` : `<span class="linkbtn">Call</span>`;
-  return `<div class="hl"><button class="row" data-daily><span class="main"><span class="t">Today's coin: ${esc(dc.n)}</span><span class="s">${mine ? `Called ${esc(m$(mine.target))}, scored ${esc(when(dueAt(mine), "1d"))}` : `Everyone calls it, ${esc(left)} left`}</span></span>${right}</button></div>`;
+  const right = mine ? `<span class="chip good">You're in</span>${CHEV}` : blocked ? `<span class="hint">1-day call open</span>` : `<span class="btn primary sm" aria-hidden="true">Call</span>`;
+  return `<div class="hl"><button class="row" data-daily><span class="gicon">${ICON.target}</span><span class="main"><span class="t">Today's coin: ${esc(dc.n)}</span><span class="s">${mine ? `Called ${esc(m$(mine.target))}, scored ${esc(when(dueAt(mine), "1d"))}` : `Everyone calls it, ${esc(left)} left`}</span></span>${right}</button></div>`;
 }
 // Level up (1.2.0): shown once when the level rises, with what it opens. Remembered on this phone.
 const LS_LEVEL = "pl.level";
@@ -191,7 +248,7 @@ function renderFriends() {
 // a shared list's page lives with the settings pages for now (Sharing › Shared lists)
 const openListPage = (id) => openProfile("lists", id);
 // ---------- the replay (1.2.0): one scored call, played back on a small chart, with what happened over its period
-function openResult(r) {
+export function openResult(r) {
   if (!r || r.status !== "scored") return;
   const wh = whatHappened(r, D.news?.stories || []), up = r.target > r.p0, went = r.actual === r.p0 ? null : r.actual > r.p0, wrong = wrongWay(r);
   const missPct = Math.abs(r.actual / r.target - 1) * 100;
@@ -227,10 +284,10 @@ async function drawReplay(el, r) {
     <text x="${W - R + 8}" y="${(Y(r.actual) + (Math.abs(Y(r.actual) - Y(r.target)) < 12 ? (Y(r.actual) > Y(r.target) ? 14 : -8) : 4)).toFixed(1)}" font-size="10" font-weight="700" fill="${upc}">end ${esc(m$(r.actual).replace("$", ""))}</text>
   </svg><div class="pc2-row hint"><span>${esc(when(r.createdAt, r.horizon))}</span><span>${esc(when(dueAt(r), r.horizon))}</span></div>`;
 }
-function resultRow(p, i) {
+export function resultRow(p, i) {
   return p.status === "scored"
-    ? `<button class="row" data-res="${i}"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s">${num(esc(closenessText(p).split(" · ")[0]))} · ${num(esc(m$(p.target)))} called, it was ${num(esc(m$(p.actual)))}${p.g ? ` · ${esc(groupName(p.g))}` : ""}${p.here ? " · confirming" : ""}</span></span><span class="lab ${LABEL_CLASS[shownLabel(p)] || ""}">${esc(shownLabel(p))}</span></button>`
-    : `<div class="row"><span class="main"><span class="t">${esc(p.t)} · ${SHORT[p.horizon]}</span><span class="s" style="white-space:normal">${esc(p.voidReason || "Not counted.")}</span></span><span class="lab low">Not counted</span></div>`;
+    ? `<button class="row" data-res="${i}"><span class="main"><span class="t">${esc(coinName(p.coin, p.t))} · ${SHORT[p.horizon]}</span><span class="s">${esc(ago(p.resolvedAt))}${p.g ? ` · ${esc(groupName(p.g))}` : ""}${p.here ? " · confirming" : ""}</span></span><span class="chip ${LABEL_CLASS[shownLabel(p)] || ""}">${esc(shownLabel(p))}</span>${CHEV}</button>`
+    : `<div class="row"><span class="main"><span class="t">${esc(coinName(p.coin, p.t))} · ${SHORT[p.horizon]}</span><span class="s" style="white-space:normal">${esc(p.voidReason || "Not counted.")}</span></span><span class="chip low">Not counted</span></div>`;
 }
 
 // ---------- Groups

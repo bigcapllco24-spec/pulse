@@ -9,8 +9,8 @@ import { loadSymbols, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { describe } from "./describe.js";
 import { mainChart, lowerChart } from "./chart.js";
-import { levelsFor, swingLevels } from "./levels.js";
-import { picks, studyWindow, maxPanels, OVERLAYS, PANELS } from "./studies.js";
+import { swingLevels } from "./levels.js";
+import { picks, studyWindow, OVERLAYS, PANELS } from "./studies.js";
 import { openPanels, withExpand } from "./panels.js";
 import { openFull, closeFull } from "./full.js";
 import { openPage, closeAllPages, topPage, pageOpen } from "./nav.js";
@@ -19,7 +19,7 @@ import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz, cancelPendin
 import { dueAt, HORIZONS, dailyVol, typicalMove } from "./score.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, INTRA, intraState, dailyOf, RANGE_LABEL } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, toast, haptic, openSheet, DISCLAIMER } from "./ui.js";
-import { initPages, renderDash, openProfile, openAddSheet, openChartSheet, openIndicatorsSheet, openLinesSheet, demoRules, checkPanelFit } from "./pages.js";
+import { initPages, renderDash, openProfile, openSwitcher, openAddSheet, openChartSheet, demoRules } from "./pages.js";
 import { startOnboarding, onboarding, needsOnboarding } from "./onboard.js";
 import { openGuide, guideSeen } from "./guide.js";
 import { initYou, renderYou } from "./you.js";
@@ -169,7 +169,6 @@ export function buildFeed({ keepKey } = {}) {
   setActive(target);
   syncCards();
   APP.built = true;
-  setTimeout(() => APP.tab === "feed" && checkPanelFit(() => buildFeed({ keepKey: APP.seq[APP.active]?.sym?.key })), 700);
 }
 function pushRound(round) {
   if (!APP.syms.length) { APP.seq.push({ type: "empty" }); return; }
@@ -216,9 +215,11 @@ function syncCards() {
   const it = APP.seq[i];
   if (i >= APP.seq.length - 3) appendRound();
 }
+// Where you are in the list (1.3.2): a thin rail on the right edge, the current coin a longer bar. It replaced story-style
+// bars at the top, which read as "tap to go on" (designer's feedback); the feed is swiped, never tapped through.
 function progress() {
-  const it = APP.seq[APP.active], n = APP.syms.length, el = $("progress");
-  if (!n || n > 40) { el.innerHTML = ""; return; }
+  const it = APP.seq[APP.active], n = APP.syms.length, el = $("rail");
+  if (n < 2 || n > 40) { el.innerHTML = ""; return; }
   const pos = it?.type === "sym" ? it.j : it?.type === "done" ? n : -1;
   el.innerHTML = APP.syms.map((_, k) => `<i class="${k === pos ? "on" : k < pos ? "seen" : ""}"></i>`).join("");
 }
@@ -246,19 +247,17 @@ function renderMain(c, it) {
     const chg = v.windowChange; // the move over the time range on screen (1D: the last 24 hours), not the calendar day
     // The chip at the top right says what the chart covers and opens the chart settings for this coin.
     const own = !!store.data?.settings?.chartBy?.[s.key];
-    const lvMode = cs.levels || "off";
-    // indicators are one shared choice (the ƒx button); cards show as many panels as the screen fits
-    const pk = picks(store.data?.settings?.chart), shown = pk.lower.slice(0, maxPanels()), ov = studyWindow(v.bars, v.ov, v.bars.length - v.win.length, v.bars.length, [...pk.over, ...shown]);
-    c._v = Object.assign(Object.create(v), { ov, picks: { over: pk.over, lower: shown } }); // what hold-to-read and the panel guides read from (a copy would work out the readings)
-    // 1.2.0: name, price and move, then a small Call it under the price with your open call; one quiet row for the time
-    // range, indicators and lines; the chart (full screen from its corner); panels stacked below.
+    // 1.3.2: the card keeps to the candles, your open calls and up to two panels you chose for the feed. Indicators,
+    // lines and support/resistance live in the full-screen chart (its expand button), where there's room to read them.
+    const pk = picks(store.data?.settings?.chart), shown = pk.feed, ov = studyWindow(v.bars, v.ov, v.bars.length - v.win.length, v.bars.length, shown);
+    c._v = Object.assign(Object.create(v), { ov, picks: { over: [], lower: shown } }); // what hold-to-read and the panel guides read from (a copy would work out the readings)
     const calls = callLevels(s, v);
     main.innerHTML = `<div class="head2"><div class="tkrow"><span class="tk">${esc(s.n || s.t)}</span><span class="tks">${esc(s.t)}</span></div>
       <div class="pxrow"><span class="price">${esc(money(v.lastBar.c, s.m))}</span><span class="chg ${chg >= 0 ? "up" : "down"}" title="Change over ${esc(RANGE_LABEL[v.range] || v.range)}">${pct(chg, 1)}<small>${esc(v.range === "1D" ? "today" : v.range)}</small></span></div>
       ${predChip(s)}</div>
       <div class="rangerow"><div class="seg" role="group" aria-label="Time range">${["1D", "1W", "1M", "1Y"].map((r) => `<button data-range="${r}" aria-pressed="${v.range === r}">${r}</button>`).join("")}</div>
-        <div class="hr2"><button class="lvbtn fxchip" data-fx aria-label="Indicators: ${pk.over.length + pk.lower.length} on"><i>ƒx</i>${pk.over.length + pk.lower.length || "Add"}</button><button class="lvbtn" data-lv aria-pressed="${lvMode !== "off"}" aria-label="Support and resistance lines"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h14M1 11h14"/></svg>${lvMode === "pivots" ? "Pivots" : "S/R"}</button></div></div>
-      <div class="chartbox"><button class="fxbtn cfull" data-full aria-label="Open ${esc(s.t)} full screen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: pk.over, interval: v.interval, days: RANGES[v.range], levels: [...levelsFor(v, lvMode), ...calls] })}</div>
+        <button class="cfull" data-full aria-label="Open ${esc(s.t)} full screen, with indicators and lines"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></button></div>
+      <div class="chartbox">${mainChart(v.win, ov, { type: cs.type, closeOnly: v.closeOnly, over: [], interval: v.interval, days: RANGES[v.range], levels: calls })}</div>
       ${shown.length ? `<div class="lowers">${withExpand(shown.map((k) => lowerChart(v.win, ov, k)).join(""), shown.length)}</div>` : ""}`;
   } else {
     c._v = null;
@@ -362,7 +361,7 @@ const HOW = {
   perf: "Price change over each period up to the latest candle. Comparing short and long periods shows whether a move is recent or part of a longer run. Past performance doesn't tell you future returns.",
   trend: "A moving average is the average closing price over the last 20, 50 or 200 days, which smooths out daily noise. Price above an average means it is higher than its recent typical level. Many people watch the 50- and 200-day lines, so they're useful context, not signals.",
   vol: "The typical daily move is the 14-day Average True Range: how far the price usually travels in a day. Bigger numbers mean bigger swings, so the same news can move the price more. Comparing today's move with it shows whether today was unusual.",
-  readings: "One reading for each indicator on your chart, worked out on daily candles, with what the number means in plain words. The chart on the card can use shorter candles (15-minute on 1D), so its values can differ. Add or remove indicators with the ƒx button on any card. Tap a reading for its guide.",
+  readings: "One reading for each indicator you chose, worked out on daily candles, with what the number means in plain words. The chart on the card can use shorter candles (15-minute on 1D), so its values can differ. Add or remove indicators with ƒx in the full-screen chart. Tap a reading for its guide.",
   ranges: "Where today's price sits between the lowest and highest prices of the period. The nearest support and resistance are prices where the chart turned more than once before. They describe the past, not where the price will go.",
   alerts: "Get told when a price or reading crosses a level you choose. Quickest way: hold the chart, slide to a price and tap the alert button.",
 };
@@ -430,7 +429,7 @@ function renderDetails(c, it) {
         g = `<span class="gauge" aria-hidden="true">${r1 != null ? `<i style="left:${at(r1)}%;width:${at(r2) - at(r1)}%"></i>` : ""}<b style="left:${at(x)}%"></b></span>`;
       }
       return `<button class="ind" data-ind="${esc(i.id)}"><span class="ik">${esc(meta.label)}</span><span class="iv${!g && x != null && st?.zero ? (x >= 0 ? " up" : " down") : ""}">${fmt(x, meta.digits)}${meta.unit && x != null ? esc(meta.unit) : ""}</span>${g}<span class="idesc">${esc(describe(m, d, v.daily.prev))}</span></button>`;
-    }).join("")}</div>` : `<p class="hint">No indicators on your chart. Tap ƒx on any card to add some.</p>`);
+    }).join("")}</div>` : `<p class="hint">No indicators chosen. Open the full-screen chart and tap ƒx to add some.</p>`);
     // 7. ranges and the nearest past turning points
     const lv = swingLevels({ bars: all, win: all.slice(-Math.min(182, all.length)), interval: "1D" }, { perSide: 1 });
     const r1 = lv.find((l) => l.kind === "R"), s1 = lv.find((l) => l.kind === "S");
@@ -542,11 +541,7 @@ function wire(c, it) {
   const justScrubbed = () => Date.now() - (APP.scrubEndAt || 0) < 400;
   c.querySelectorAll("[data-learn]").forEach((p) => p.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) openLearn(p.dataset.learn, c._v); }));
   c.querySelector("[data-pexp]")?.addEventListener("click", (e) => { e.stopPropagation(); openPanels(c._v, it.sym, RANGES[c._v?.range]); });
-  // ƒx chip: add or remove indicators. S/R chip: pick the lines on the chart. Both apply to every coin, so every
-  // card on screen redraws at once.
-  c.querySelector("[data-fx]")?.addEventListener("click", (e) => { e.stopPropagation(); openIndicatorsSheet(() => redrawCards()); });
   c.querySelectorAll("[data-range]").forEach((b) => b.addEventListener("click", async (e) => { e.stopPropagation(); if (b.getAttribute("aria-pressed") === "true") return; const by = { ...(store.data.settings.chartBy || {}) }; if (by[it.sym.key]) { const { range, ...rest } = by[it.sym.key]; by[it.sym.key] = rest; } await save({ settings: { ...store.data.settings, chartBy: by, chart: { ...store.data.settings.chart, range: b.dataset.range } } }); redrawCards(); }));
-  c.querySelector("[data-lv]")?.addEventListener("click", (e) => { e.stopPropagation(); openLinesSheet(() => redrawCards()); });
   c.querySelector(".chartbox:not(.nodata)")?.addEventListener("click", () => { if (!justScrubbed()) chartTapHint(); });
   // two fingers on a card's chart: open it full screen, where pinching zooms the chart
   c.querySelector(".chartbox")?.addEventListener("touchstart", (e) => { if (e.touches.length === 2) { cancelPendingHold(); openFull(it.sym); } }, { passive: true });
@@ -589,9 +584,6 @@ let dashT = 0;
 document.addEventListener("pulse-intra", (e) => { redrawCards(e.detail); if (onScreen("dash") || onScreen("play")) { clearTimeout(dashT); dashT = setTimeout(() => keepScroll(onScreen("dash") ? "dash" : "play"), 300); } });
 // redraw a screen in place, keeping where it was scrolled to
 export const keepScroll = (name) => { const el = $(name), pg = el.parentElement, y = pg.scrollTop; ({ dash: renderDash, you: renderYou, play: renderPlay }[name] || (() => rerenderPages(name)))(); pg.scrollTop = y; };
-// turning the phone changes how many panels fit, so cards redraw once the rotation settles
-let rzT = 0, lastFit = maxPanels();
-addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { if (maxPanels() !== lastFit) { lastFit = maxPanels(); redrawCards(); checkPanelFit(() => redrawCards()); } }, 250); });
 
 // ---------- tabs and refresh
 // Tabs: Feed, Calls ("play") and You. Everything else is a page sliding in over the tab it was opened from (nav.js):
@@ -618,7 +610,7 @@ export function openDash() {
 }
 document.querySelectorAll(".tabbar button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 $("addBtn").onclick = () => openAddSheet();
-$("switcher").onclick = () => openDash();
+$("switcher").onclick = () => openSwitcher();
 $("status").onclick = () => doRefresh(true);
 
 function setStatus() {

@@ -18,7 +18,7 @@ export { ls };
 export const STARTER = [{ key: "CRYPTO:BTC", t: "BTC", n: "Bitcoin", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:ETH", t: "ETH", n: "Ethereum", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:BNB", t: "BNB", n: "BNB", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:XRP", t: "XRP", n: "XRP", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:SOL", t: "SOL", n: "Solana", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:TRX", t: "TRX", n: "TRON", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:ZEC", t: "ZEC", n: "Zcash", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:HYPE", t: "HYPE", n: "Hyperliquid", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:DOGE", t: "DOGE", n: "Dogecoin", m: "CRYPTO", ty: "C" }, { key: "CRYPTO:LINK", t: "LINK", n: "Chainlink", m: "CRYPTO", ty: "C" }];
 // Chart settings for one coin: the person's defaults, then anything they set for that coin from its card.
 export const chartSettings = (key) => ({ ...DEFAULT_CHART, ...(store.data?.settings?.chart || {}), ...((key && store.data?.settings?.chartBy?.[key]) || {}) });
-export const DEFAULT_CHART = { range: "1D", v6: 1, interval: "auto", type: "candles", mas: [], lower: "RSI,MACD", levels: "off", order: "watchlist" };
+export const DEFAULT_CHART = { range: "1D", v6: 1, interval: "auto", type: "candles", mas: [], lower: "RSI,MACD", feed: "", levels: "off", order: "watchlist" };
 export const DEFAULT_ACCOUNT = () => ({
   v: 2, createdAt: new Date().toISOString(),
   watchlists: [{ id: "w1", name: "My watchlist", syms: STARTER.slice() }],

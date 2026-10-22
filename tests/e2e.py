@@ -154,8 +154,10 @@ def feed_test(b):
     c = ".card.active"
     head = p.inner_text(f"{c} .head2")
     check("feed: the card shows the coin's name and ticker, the price and the move, with Call it under them", "Bitcoin" in head and "BTC" in head and "$" in head and "%" in head and p.is_visible(f"{c} .callit"), head.replace("\n", " "))
-    check("feed: one quiet row holds the time range (1D 1W 1M 1Y), ƒx and S/R; full screen sits on the chart", p.inner_text(f"{c} .seg").split() == ["1D", "1W", "1M", "1Y"] and p.is_visible(f"{c} [data-fx]") and p.is_visible(f"{c} [data-lv]") and p.is_visible(f"{c} .chartbox .cfull"))
-    check("feed: indicator panels are stacked under the chart, never side by side; no pager dots", p.locator(f"{c} .lowers .lower").count() == 2 and not p.locator(f"{c} .lowers.g2").count() and not p.locator(f"{c} .dots").count())
+    check("feed: one quiet row holds the time range (1D 1W 1M 1Y) and a visible full-screen button; no ƒx or S/R on the card", p.inner_text(f"{c} .seg").split() == ["1D", "1W", "1M", "1Y"] and p.is_visible(f"{c} .rangerow .cfull") and not p.locator(f"{c} [data-fx]").count() and not p.locator(f"{c} [data-lv]").count())
+    check("feed: a new player's cards show no indicator panels and no story bars; no pager dots", p.locator(f"{c} .lowers .lower").count() == 0 and not p.locator("#progress").count() and not p.locator(f"{c} .dots").count())
+    rail = p.evaluate("[...document.querySelectorAll('#rail i')].map(i=>i.className)")
+    check("feed: where you are in the list shows as a thin rail on the right, the current coin longer", len(rail) == 10 and rail[0] == "on" and rail.count("on") == 1, str(rail))
     p.click(f"{c} [data-range='1W']"); p.wait_for_timeout(900)
     check("feed: tapping 1W changes every card's range (one shared choice)", p.get_attribute(f"{c} [data-range='1W']", "aria-pressed") == "true" and p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount')).settings.chart.range") == "1W")
     p.click(f"{c} [data-range='1D']"); p.wait_for_timeout(900)
@@ -190,10 +192,13 @@ def feed_test(b):
     p.evaluate("document.querySelector('.card.active')._go(0)"); p.wait_for_timeout(600); p.evaluate("document.querySelector('.card.active')._go(0)"); p.wait_for_timeout(800)
     n = p.inner_text(f"{c} .pane.news")
     check("news: the pane marks where your call was made", "Since your call" in n, n[:120].replace("\n", " "))
-    # Your market
-    p.click("#switcher"); p.wait_for_timeout(900)
+    # All my coins: a sheet, then the list view as a page
+    p.click("#switcher"); p.wait_for_timeout(700)
+    sw = sheet_text(p)
+    check("coins: All my coins opens a sheet: each list with counts, a tick on the current one, See them as a list, Edit lists and coins", "Coins in your feed" in sw and "All my coins" in sw and "10 coins" in sw and p.locator("#sheet .tick").count() == 1 and p.is_visible("#swList") and p.is_visible("#swEdit") and p.is_visible("#sFeed"), sw[:200].replace("\n", " "))
+    p.click("#swList"); p.wait_for_timeout(900)
     m = p.inner_text("#dash")
-    check("your market: the feed as a list, with how much each coin is moving against usual, sorts, and the watchlist chooser", "Your market" in m and p.locator("#dash .mrow").count() == 10 and "× usual" in m and "Moving most" in m and p.is_visible("#dSwitch"), m[:160].replace("\n", " "))
+    check("your market: the list is a page with ‹ Feed and the list's name, how much each coin moves against usual, and sorts", p.is_visible("#sDash") and p.inner_text("#dash #dFeed").strip() == "Feed" and "All my coins" in p.inner_text("#dash h1") and p.locator("#dash .mrow").count() == 10 and "× usual" in m and "Moving most" in m, m[:160].replace("\n", " "))
     want = p.inner_text("#dash .mrow >> nth=3 >> .t")
     p.click("#dash .mrow >> nth=3"); p.wait_for_timeout(1000)
     check("your market: tapping a coin opens it in the feed", not p.is_visible("#sDash") and p.inner_text(".card.active .tk") == want, f"{want} vs {p.inner_text('.card.active .tk')}")
@@ -210,7 +215,16 @@ def calls_test(b):
     set_results(p, rs); p.reload(); p.wait_for_timeout(3000)
     p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(800)
     t = p.inner_text("#play"); tl = t.lower()
-    check("calls: the header has the search bar in place of the streak; the page has the progress card, today, with friends, waiting and scored", p.is_visible("#plFind") and "know how others are doing" in tl and "too early to tell" in tl and "2 of about 30 calls" in tl and "today's coin" in tl and "with friends" in tl and "waiting" in tl and "scored" in tl, t[:200].replace("\n", " "))
+    check("calls: the header has a search button and one line on what a call is; Make a call; your record card; today, waiting, with friends and scored", p.is_visible("#plFind") and "say where a price will be" in tl and p.is_visible("#plAbout") and p.is_visible("#plMake") and "your record" in tl and "too early to tell" in tl and "2 of about 30 scored calls" in tl and "today's coin" in tl and "with friends" in tl and "waiting" in tl and "scored" in tl, t[:200].replace("\n", " "))
+    check("calls: everything tappable has a chevron or a button: scored rows end in a chevron, the record card says Open", p.locator("#play [data-res] .chev").count() == 2 and "Open" in p.inner_text("#plProg"))
+    p.click("#plAbout"); p.wait_for_timeout(600)
+    ab = sheet_text(p)
+    check("calls: About your score says the three points, the note, and offers Make a call, nothing about how it's worked out", all(x in ab for x in ["Calling the right direction matters.", "Getting close to the real price matters too.", "One call can be luck. Your record shows skill over many calls, so give it about 30.", "Every call builds your record.", "The more you call, the sooner your skill shows, and the more your score says about you."]) and p.is_visible("#abMake") and "refin" not in ab.lower() and "typical" not in ab.lower(), ab[:300].replace("\n", " "))
+    p.click("#abMake"); p.wait_for_timeout(600)
+    pk = sheet_text(p)
+    p.click("#sheet [data-cp='0']"); p.wait_for_timeout(600)
+    check("calls: Make a call lists your coins; picking one opens Call it for that coin", "Make a call" in pk and p.locator("#sheet [data-dir]").count() == 2 and "Call " in p.inner_text("#shTitle"), pk[:120].replace("\n", " "))
+    close_sheet(p)
     check("calls: a call that went the wrong way is labelled Wrong way", "Wrong way" in t)
     p.click("#play [data-res='0']"); p.wait_for_timeout(1500)
     s = sheet_text(p)
@@ -305,7 +319,37 @@ def people_test(b):
     check("people: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
-# ---------- 6. back everywhere (1.3.0): the phone's back closes the top sheet or page and never leaves the app from one
+# ---------- 6. indicators (1.3.2): ƒx and S/R in full screen; up to 2 panels on the feed, chosen there
+def charts_test(b):
+    ctx, p, errs = new_ctx(b)
+    onboard(p); p.wait_for_timeout(800)
+    acct = lambda: p.evaluate("JSON.parse(localStorage.getItem('pl.demoAccount')).settings.chart")
+    p.click(".card.active [data-full]"); p.wait_for_timeout(1200)
+    check("full screen: ƒx and S/R are here, with the panels chosen (none on the feed yet)", p.is_visible("#full [data-ffx]") and p.is_visible("#full [data-flv]") and p.locator("#full .flowers .lower").count() == 2 and not p.locator("#full .onfeed").count())
+    p.click("#full [data-ffx]"); p.wait_for_timeout(600)
+    s0 = sheet_text(p)
+    p.click("#sheet [data-sfeed='RSI']"); p.wait_for_timeout(300)
+    s1 = sheet_text(p)
+    check("indicators: each shown panel has + Feed; tapping it puts the panel on the feed (1 of 2)", "+ Feed" in s0 and "On your feed: 0 of 2" in s0 and p.get_attribute("#sheet [data-sfeed='RSI']", "aria-pressed") == "true" and "On your feed: 1 of 2" in s1, s1[:200].replace("\n", " "))
+    p.check("#sheet [data-stog='VOL']"); p.wait_for_timeout(300); p.click("#sheet [data-sfeed='MACD']"); p.wait_for_timeout(300)
+    s2 = sheet_text(p)
+    check("indicators: with 2 on the feed, the other + Feed buttons go grey and the sheet says to turn one off", "On your feed: 2 of 2. Turn one off to add another." in s2 and p.is_disabled("#sheet [data-sfeed='VOL']"), s2[:200].replace("\n", " "))
+    p.uncheck("#sheet [data-stog='RSI']"); p.wait_for_timeout(300)
+    ch = acct()
+    check("indicators: turning a panel off also takes it off the feed; the choice is saved on the account", "On your feed: 1 of 2" in sheet_text(p) and ch.get("feed") == "MACD" and "RSI" not in ch.get("lower", ""), json.dumps(ch)[:200])
+    close_sheet(p); p.wait_for_timeout(500)
+    check("full screen: a panel that's also on the feed is tagged On feed", p.locator("#full .onfeed").count() == 1)
+    p.click("#full [data-fclose]"); p.wait_for_timeout(1000)
+    check("feed: the card shows the one panel chosen for the feed", p.locator(".card.active .lowers .lower").count() == 1 and p.get_attribute(".card.active .lowers .lower", "data-learn") == "MACD")
+    # someone from before 1.3.2 keeps the panels their cards showed
+    p.evaluate("(()=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.settings.chart.lower='RSI,MACD,VOL'; delete a.settings.chart.feed; localStorage.setItem('pl.demoAccount', JSON.stringify(a))})()")
+    p.reload(); p.wait_for_timeout(3000)
+    kinds = p.evaluate("[...document.querySelectorAll('.card.active .lowers .lower')].map(x=>x.dataset.learn)")
+    check("feed: an existing player keeps their panels on the feed (up to 2) without being asked", kinds == ["RSI", "MACD"], str(kinds))
+    check("charts: no JavaScript errors", not errs, " | ".join(errs[:3]))
+    ctx.close()
+
+# ---------- 7. back everywhere (1.3.0): the phone's back closes the top sheet or page and never leaves the app from one
 def nav_test(b):
     ctx, p, errs = new_ctx(b)
     onboard(p); p.wait_for_timeout(500)
@@ -320,7 +364,7 @@ def nav_test(b):
     p.click(".card.active .callit"); p.wait_for_timeout(600)
     phone_back()
     check("back: the phone's back closes a sheet and stays in the app", not p.is_visible("#sheet") and here() == start and p.is_visible("#sFeed"))
-    p.click("#switcher"); p.wait_for_timeout(700)
+    p.click("#switcher"); p.wait_for_timeout(600); p.click("#swList"); p.wait_for_timeout(700)
     open_ok = p.is_visible("#sDash") and "Feed" in p.inner_text("#dash #dFeed")
     phone_back()
     check("back: the coins list slides in with ‹ Feed, and the phone's back closes it", open_ok and not p.is_visible("#sDash") and p.is_visible("#sFeed") and here() == start)
@@ -359,7 +403,7 @@ def nav_test(b):
     check("back: no JavaScript errors", not errs, " | ".join(errs[:3]))
     ctx.close()
 
-# ---------- 7. every screen at common phone sizes, sideways, desktop and the light theme: nothing wider than the screen
+# ---------- 8. every screen at common phone sizes, sideways, desktop and the light theme: nothing wider than the screen
 def screens_test(b):
     sizes = [(320, 640, False, "dark"), (360, 780, False, "dark"), (390, 844, False, "light"), (430, 932, False, "dark"), (844, 390, False, "dark"), (1280, 800, True, "light")]
     over = """((sel)=>{const W=innerWidth, bad=[]; const root=document.querySelector(sel); if(!root) return ['missing '+sel];
@@ -387,7 +431,7 @@ def screens_test(b):
         bad["feed card"] = p.evaluate(over, ".card.active")
         p.click(".card.active .callit"); p.wait_for_timeout(600); bad["call it"] = p.evaluate(over, "#sheet"); close_sheet(p)
         p.evaluate("document.querySelector('.card.active')._go(2)"); p.wait_for_timeout(600); bad["details"] = p.evaluate(over, ".card.active .pane.details")
-        p.click("#switcher"); p.wait_for_timeout(700); bad["your market"] = p.evaluate(over, "#dash")
+        p.click("#switcher"); p.wait_for_timeout(600); bad["coins sheet"] = p.evaluate(over, "#sheet"); p.click("#swList"); p.wait_for_timeout(700); bad["your market"] = p.evaluate(over, "#dash")
         p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(600); bad["calls"] = p.evaluate(over, "#play")
         p.click("#play [data-res='0']"); p.wait_for_timeout(1200); bad["replay"] = p.evaluate(over, "#sheet"); close_sheet(p)
         p.click("#plFind"); p.wait_for_timeout(800); bad["find players"] = p.evaluate(over, "#sheet"); close_sheet(p)
@@ -420,7 +464,7 @@ if __name__ == "__main__":
     with sync_playwright() as pw:
         b = pw.chromium.launch(**({"executable_path": CHROME} if CHROME else {}))
         only = set(filter(None, __import__("os").environ.get("ONLY", "").split(",")))  # e.g. ONLY=nav,calls while working on them
-        for name, fn in [("start", onboarding_test), ("feed", feed_test), ("calls", calls_test), ("you", you_test), ("people", people_test), ("nav", nav_test), ("screens", screens_test), ("iOS Home Screen", ios_homescreen_test)]:
+        for name, fn in [("start", onboarding_test), ("feed", feed_test), ("calls", calls_test), ("you", you_test), ("people", people_test), ("charts", charts_test), ("nav", nav_test), ("screens", screens_test), ("iOS Home Screen", ios_homescreen_test)]:
             if only and name not in only: continue
             try: fn(b)
             except Exception as e: check(f"{name}: suite ran to the end", False, repr(e)[:300])

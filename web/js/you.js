@@ -5,7 +5,7 @@ import { store, myScore, pendingHere } from "./store.js";
 import { CHANCE, SCORE_MIN, SCORE_MAX, PROVISIONAL_UNDER, HORIZONS } from "./score.js";
 import { $, esc, openSheet } from "./ui.js";
 import { myName, myCard } from "./social.js";
-import { verdictOf, VERDICT_AT, myLevel, ranksView, openAvatarSheet, myFullCard, levelAvatar, SURE, BASIS } from "./play.js";
+import { verdictOf, VERDICT_AT, myLevel, ranksView, openAvatarSheet, myFullCard, levelAvatar, SURE, BASIS, resultRow, openResult } from "./play.js";
 import { backLabel } from "./app.js";
 import { openPage, closePage, backBtn } from "./nav.js";
 import { openProfile } from "./pages.js";
@@ -51,8 +51,14 @@ export function openRecord() {
 }
 export function renderRecord(back = $("record").dataset.back) {
   const el = $("record"); el.dataset.back = back;
-  el.innerHTML = `${backBtn(esc(back))}${recordHtml()}<p class="hint" style="margin-top:18px">The same record lives in the You tab.</p>`;
+  const done = [...pendingHere(), ...store.results].sort((a, b) => Date.parse(b.resolvedAt || 0) - Date.parse(a.resolvedAt || 0));
+  el.innerHTML = `${backBtn(esc(back))}<h1 style="margin:6px 0 0">Your record</h1>${recordHtml()}
+    ${done.length ? `<h2 class="you-h2">Scored calls</h2><div class="hl">${done.slice(0, 8).map(resultRow).join("")}</div>${done.length > 8 ? `<button class="linkbtn more" id="rcAll">See all ${done.length}<span aria-hidden="true"> ›</span></button>` : ""}` : ""}
+    <p class="hint" style="margin-top:18px">The same record lives in the You tab.</p>`;
   el.querySelector("#pBack").onclick = () => closePage("sRecord");
+  const wire = (root) => root.querySelectorAll("[data-res]").forEach((b) => (b.onclick = () => openResult(done[+b.dataset.res])));
+  wire(el);
+  el.querySelector("#rcAll")?.addEventListener("click", () => openSheet("Scored calls", `<div class="hl">${done.map(resultRow).join("")}</div>`, wire));
 }
 // The record: where you stand, your score, your tiles and (from level 3) the breakdowns.
 function recordHtml() {

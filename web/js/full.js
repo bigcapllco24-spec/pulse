@@ -121,7 +121,7 @@ function draw() {
   if (s.lvKey !== lk && !s.moving) { s.lvKey = lk; s.lv = levelsFor(v, s.levels); }
   const geo = { count: v.count, shift: v.shift, days: spanDays, full: true };
   box.innerHTML = mainChart(v.win, v.ov, { type: s.type, interval: v.interval, levels: s.levels === "off" ? [] : s.lv || [], over: s.over, ...geo });
-  el.querySelector(".flowers").innerHTML = withExpand(s.lower.map((k) => lowerChart(v.win, v.ov, k, geo)).join(""), s.lower.length);
+  el.querySelector(".flowers").innerHTML = withExpand(s.lower.map((k) => lowerChart(v.win, v.ov, k, { ...geo, onFeed: s.feed.includes(k) })).join(""), s.lower.length);
   const pe = el.querySelector("[data-pexp]"); if (pe) pe.onclick = (e) => { e.stopPropagation(); openPanels({ ...v, ivLabel: IVLABEL[s.iv], picks: { lower: s.lower } }, s.sym, spanDays); };
   const chg = ((v.win[v.win.length - 1].c - v.win[0].o) / v.win[0].o) * 100, older = Math.floor(s.end - s.count);
   const when = (t) => (t.length > 10 ? fmtDay(t) : new Date(t + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }));
@@ -209,7 +209,7 @@ function wireGestures(root) {
 function shell(body) {
   const { sym, range, levels } = st, bars = st.bars, n = st.over.length + st.lower.length;
   const last = bars?.[bars.length - 1]?.c ?? D.series[sym.key]?.bars?.at(-1)?.c;
-  // the same three buttons as on a feed card: time range, indicators (ƒx) and lines (S/R)
+  // time range, indicators (ƒx) and lines (S/R): since 1.3.2 the only place for ƒx and S/R
   return `<div class="fbar"><button class="fclose" data-fclose aria-label="Close full-screen chart">✕</button>
       <div class="fhead"><span class="row1"><span class="tk">${esc(sym.t)}</span><span class="chg"></span></span>
         <span class="price">${last != null ? esc(money(last, sym.m)) : ""}</span></div>
@@ -228,12 +228,12 @@ function openRanges() {
 function wireBar() {
   el.querySelector("[data-fclose]").onclick = closeFull;
   el.querySelector("[data-frange]").onclick = openRanges;
-  el.querySelector("[data-ffx]").onclick = () => openIndicatorsSheet(() => { // the same sheet as the feed; one choice for every coin
-    if (!st) return; const pk = picks(store.data?.settings?.chart); st.over = pk.over; st.lower = pk.lower.slice(0, maxPanels()); st.changed = true;
+  el.querySelector("[data-ffx]").onclick = () => openIndicatorsSheet(() => { // one choice for every coin
+    if (!st) return; const pk = picks(store.data?.settings?.chart); st.over = pk.over; st.lower = pk.lower.slice(0, maxPanels()); st.feed = pk.feed; st.changed = true;
     const b = el.querySelector("[data-ffx]"), n = st.over.length + st.lower.length; b.innerHTML = `<i>ƒx</i>${n || "Add"}`; b.setAttribute("aria-label", `Indicators: ${n} on`);
     if (st.bars) redraw();
   });
-  el.querySelector("[data-flv]").onclick = () => openLinesSheet(() => { // the same lines as the feed, for every coin
+  el.querySelector("[data-flv]").onclick = () => openLinesSheet(() => { // one choice for every coin
     if (!st) return; st.levels = store.data?.settings?.chart?.levels || "off"; st.lvKey = null; st.changed = true;
     const b = el.querySelector("[data-flv]"); b.setAttribute("aria-pressed", st.levels !== "off"); b.lastChild.textContent = st.levels === "pivots" ? "Pivots" : "S/R";
     if (st.bars) redraw();
@@ -251,7 +251,8 @@ function toggleStudy(code) {
 function saveStudies() {
   st.changed = true; haptic();
   const ch = store.data?.settings?.chart || {};
-  save({ settings: { ...store.data.settings, chart: { ...ch, over: [...st.over], lower: st.lower.join(",") || "none", mas: [] } } }).catch(() => {});
+  st.feed = st.feed.filter((k) => st.lower.includes(k)); // a panel taken off full screen comes off the feed too
+  save({ settings: { ...store.data.settings, chart: { ...ch, over: [...st.over], lower: st.lower.join(",") || "none", feed: st.feed.join(","), mas: [] } } }).catch(() => {});
   APP.needsRebuild = true;
   if (st.bars) redraw();
 }

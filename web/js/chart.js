@@ -181,6 +181,7 @@ export function lowerChart(win, s, kind, opts = {}) {
   }
   if (sh || opts.count) body = `<clipPath id="lclip"><rect x="0" y="0" width="${pw}" height="${LHf}"/></clipPath><g clip-path="url(#lclip)">${body}</g>`;
   const fact = full ? panelFact(kind, s, win) : "";
+  if (opts.onFeed) label += ` <span class="onfeed">On feed</span>`; // full screen: this panel also shows on feed cards
   return `<div class="lower${full ? " lfull" : ""}" data-learn="${kind}" role="button" aria-label="What ${esc(P.name)} shows"><span class="lower-label">${label}</span><div class="lplot">${axes}<svg class="chart" viewBox="0 0 ${W} ${LHf}" preserveAspectRatio="none" aria-hidden="true">${body}</svg></div>${fact ? `<p class="lfact">${esc(fact)}</p>` : ""}${full ? rm(kind) : ""}</div>`;
 }
 const nf = (x) => (Math.abs(x) >= 1000 ? f(x) : Math.abs(x) >= 10 ? x.toFixed(1) : Math.abs(x) >= 0.1 ? x.toFixed(2) : x.toPrecision(2));
