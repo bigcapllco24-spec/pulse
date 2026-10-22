@@ -237,7 +237,7 @@ def run(pw, base):
     make_call(other, "1h")
     check(f"android 2: a call on {coin} from the second phone is saved to ana's account", eventually(lambda: doc(f"accounts/{ana}/predictions/{coin}_1h")), coin)
     iphone.click(".tabbar [data-tab=play]")
-    check("iphone: the call made on the other phone appears on the iPhone without reopening the app", eventually(lambda: f"{cname} · 1h" in iphone.inner_text("#play"), 15), iphone.inner_text("#play")[:200])
+    check("iphone: the call made on the other phone appears on the iPhone without reopening the app", eventually(lambda: f"{cname} · 1 hour" in iphone.inner_text("#play"), 15), iphone.inner_text("#play")[:200])
     no_errors(other, "second phone")
 
     # ---- 5. the rules: what strangers and other players can't do
