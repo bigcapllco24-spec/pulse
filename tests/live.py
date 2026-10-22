@@ -233,11 +233,11 @@ def run(pw, base):
     check("android 2: logging in to ana's account from a second phone works", not err and not other.locator("#gate").count(), err)
     check("android 2: the second phone shows ana's 2 open calls", eventually(lambda: "2 calls waiting" in other.inner_text(".card.active"), 20))
     other.evaluate("document.querySelector('.card.active')"); other.mouse.wheel(0, 900); other.wait_for_timeout(1500)  # next coin
-    coin = other.inner_text(".card.active .tks")
+    coin, cname = other.inner_text(".card.active .tks"), other.inner_text(".card.active .tk")
     make_call(other, "1h")
     check(f"android 2: a call on {coin} from the second phone is saved to ana's account", eventually(lambda: doc(f"accounts/{ana}/predictions/{coin}_1h")), coin)
     iphone.click(".tabbar [data-tab=play]")
-    check("iphone: the call made on the other phone appears on the iPhone without reopening the app", eventually(lambda: coin in iphone.inner_text("#play"), 15), iphone.inner_text("#play")[:200])
+    check("iphone: the call made on the other phone appears on the iPhone without reopening the app", eventually(lambda: f"{cname} · 1h" in iphone.inner_text("#play"), 15), iphone.inner_text("#play")[:200])
     no_errors(other, "second phone")
 
     # ---- 5. the rules: what strangers and other players can't do
