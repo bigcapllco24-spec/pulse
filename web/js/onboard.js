@@ -7,6 +7,7 @@ import { HORIZONS, typicalMove, callSizes } from "./score.js";
 import { D } from "./data.js";
 import { $, esc, money, toast, haptic } from "./ui.js";
 import { openGuide, guideSeen } from "./guide.js";
+import { addLayer, dropLayer } from "./nav.js";
 
 const FIRST_COIN = "CRYPTO:BTC", FIRST_H = "1d";
 const SEEN = "pl.firstCall"; // the first-call step has been shown (made or skipped) on this phone
@@ -31,9 +32,15 @@ function frame(html, { back = null } = {}) {
   gate.innerHTML = `<div class="gatein ob">${back ? `<button class="btn ghost sm ob-back" id="obBack" aria-label="Back">‹ Back</button>` : ""}${html}<p class="hint" style="text-align:center;margin-top:28px;opacity:.6">${esc(CONFIG.appName)} ${esc(CONFIG.version)}</p></div>`;
   gate.scrollTop = 0;
   if (back) gate.querySelector("#obBack").onclick = () => show(back);
+  // the phone's back on a step with a ‹ Back goes to the step before (nav.js); on the others it does what phones do
+  obBack = back;
+  if (back && !obLayer) obLayer = addLayer(() => { const l = obLayer, to = obBack; obLayer = null; dropLayer(l); if (to) show(to); });
+  if (!back && obLayer) { const l = obLayer; obLayer = null; dropLayer(l); }
   return gate;
 }
+let obLayer = null, obBack = null;
 function finish() {
+  if (obLayer) { const l = obLayer; obLayer = null; dropLayer(l); }
   if (gate) { gate.remove(); gate = null; }
   document.body.classList.remove("gated");
   if (isNew && !guideSeen()) { isNew = false; openGuide({ first: true }); }

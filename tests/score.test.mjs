@@ -1,6 +1,6 @@
 // The rules every call follows and what a scored call shows, on made-up calls with known answers. (The score itself is
 // tested in tests/score2.test.mjs.)
-import { scorePrediction, relabel, closenessText, checkPrediction, canPredict, callSizes, callDir, isRight, dailyVol, typicalMove, bandOf, HORIZONS, MAX_MOVE } from "../web/js/score.js";
+import { scorePrediction, relabel, closenessText, checkPrediction, canPredict, callSizes, callDir, isRight, dailyVol, typicalMove, bandOf, HORIZONS, MAX_MOVE, PICK_MIN_MOVE } from "../web/js/score.js";
 
 const near = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol;
 const m1d = typicalMove(0.025, "1d"), at = (k) => 100 * Math.exp(k * m1d); // a price k typical moves from 100
@@ -25,6 +25,7 @@ const checks = [
   ["right direction: up and up, down and down, No change and close", isRight(call(at(1), at(0.5))) && isRight(call(at(-1), at(-2))) && !isRight(call(at(1), at(-0.5))) && isRight(call(100, at(-0.1))) && !isRight(call(100, at(1))) && !isRight({ ...call(at(1), at(1)), status: "void" })],
   ["a call can be any size above zero, up to six typical moves", checkPrediction({ horizon: "1d", p0: 100, target: at(0.01), sigmaD: 0.025 }).ok && checkPrediction({ horizon: "1d", p0: 100, target: at(MAX_MOVE - 0.01), sigmaD: 0.025 }).ok && !checkPrediction({ horizon: "1d", p0: 100, target: at(MAX_MOVE + 0.01), sigmaD: 0.025 }).ok],
   ["today's price itself only as No change", !checkPrediction({ horizon: "1d", p0: 100, target: 100, sigmaD: 0.025 }).ok && checkPrediction({ horizon: "1d", p0: 100, target: 100, sigmaD: 0.025, flat: true }).ok && !checkPrediction({ horizon: "1d", p0: 100, target: 101, sigmaD: 0.025, flat: true }).ok],
+  ["a group pick (no price-shown on record) keeps the quarter-move minimum; a call doesn't", !checkPrediction({ horizon: "1d", p0: 100, target: at(0.2), sigmaD: 0.025, minMove: PICK_MIN_MOVE }).ok && checkPrediction({ horizon: "1d", p0: 100, target: at(0.25), sigmaD: 0.025, minMove: PICK_MIN_MOVE }).ok && checkPrediction({ horizon: "1d", p0: 100, target: at(0.2), sigmaD: 0.025 }).ok],
   ["unknown periods and bad prices are refused", !checkPrediction({ horizon: "2d", p0: 100, target: 101, sigmaD: 0.025 }).ok && !checkPrediction({ horizon: "1d", p0: 0, target: 101, sigmaD: 0.025 }).ok],
   ["one open call per coin and period", !canPredict([{ coin: "CRYPTO:BTC", horizon: "1d" }], "CRYPTO:BTC", "1d") && canPredict([{ coin: "CRYPTO:BTC", horizon: "1d", actual: 1 }], "CRYPTO:BTC", "1d") && canPredict([{ coin: "CRYPTO:BTC", horizon: "1h" }], "CRYPTO:BTC", "1d")],
   ["the sizes offered: a touch, a little and a usual move for the period", JSON.stringify(callSizes("1d")) === JSON.stringify([["A touch", 0.25], ["A little", 0.5], ["A usual day", 1]]) && callSizes("1y")[2][0] === "A usual year"],

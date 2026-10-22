@@ -6,7 +6,7 @@
 // player's own picks until the data job scores them; groups only ever see who picked, then how close each was.
 import { levelAt } from "./progress.js";
 import { store, save, ls, randomId, fbx, connected, isoDates, myScore, makePrediction } from "./store.js";
-import { HORIZONS, bandOf, checkPrediction, canPredict, challengeResults, addPoints } from "./score.js";
+import { HORIZONS, bandOf, PICK_MIN_MOVE, checkPrediction, canPredict, challengeResults, addPoints } from "./score.js";
 import { settle, rowCache, SETTLE_DELAY } from "./predict.js";
 
 export const GROUP_MAX = 20, GROUPS_MAX = 10, FOLLOW_MAX = 200, RANK_MIN = 10;
@@ -275,7 +275,7 @@ export const canCount = (coin, horizon) => canPredict(store.preds, coin, horizon
 
 function pickDoc({ g, c, sym, horizon, target, counts, endAt }) { return { g, c, coin: sym.key, t: sym.t, horizon, target, counts: !!counts, endAt }; }
 function checkCall({ horizon, target, p0, sigmaD }) {
-  const chk = checkPrediction({ horizon, p0, target, sigmaD });
+  const chk = checkPrediction({ horizon, p0, target, sigmaD, minMove: PICK_MIN_MOVE });
   if (!chk.ok) throw new Error(chk.error);
 }
 // Start a challenge in a group: starting it is making the first pick.

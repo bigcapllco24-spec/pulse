@@ -4,7 +4,7 @@
 import { CONFIG } from "../config.js";
 import { store, ls, save, allSyms, makePrediction, addCallDetails, myScore, enablePush, isAdmin, pendingHere, settleHere, nextDue } from "./store.js";
 import { openGuide } from "./guide.js";
-import { HORIZONS, PROVISIONAL_UNDER, CHANCE, callSizes, checkPrediction, canPredict, dailyVol, dueAt, closenessText, typicalMove, isRight, callDir, BANDS } from "./score.js";
+import { HORIZONS, PROVISIONAL_UNDER, CHANCE, callSizes, checkPrediction, canPredict, dailyVol, dueAt, closenessText, typicalMove, isRight, callDir, BANDS, PICK_MIN_MOVE } from "./score.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { krakenBars } from "./data.js";
 import { D } from "./data.js";
@@ -180,7 +180,7 @@ function callsView(el) {
     ${done.length ? `<div class="hl pl-scored">${done.slice(0, 3).map(resultRow).join("")}</div>` : `<p class="hint pl-empty">Scored calls show here, with how close each one was.</p>`}`;
   el.querySelector("#plProg").onclick = () => openRecord();
   el.querySelector("#plFriends").onclick = () => openFriends();
-  el.querySelector("[data-daily]")?.addEventListener("click", () => { const { dc, mine, blocked } = dailyState(here); if (!mine && !blocked) openPredictSheet(dc, () => APP.tab === "play" && renderPlay(), "1d"); else if (mine) openWaiting(mine); });
+  el.querySelector("[data-daily]")?.addEventListener("click", () => { const { dc, mine, blocked } = dailyState(here); if (!mine && !blocked) openPredictSheet(dc, () => APP.tab === "play" && renderPlay(), "1d"); else if (mine) (mine.status === "scored" ? openResult(mine) : mine.actual == null ? openWaiting(mine) : null); });
   el.querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openGroup(b.dataset.g)));
   el.querySelectorAll("[data-list]").forEach((b) => (b.onclick = () => openListPage(b.dataset.list)));
   el.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => openWaiting(open[+b.dataset.open])));
@@ -657,7 +657,7 @@ function watchPrice(body, id, sym, horizon, onValid) {
   const val = () => parseFloat(inp.value.replace(/[^0-9.]/g, ""));
   const check = () => {
     if (!inp.value.trim()) { msg.className = "hint"; msg.textContent = priceHint(sym); onValid(false); return; }
-    const c = checkPrediction({ horizon, p0, target: val(), sigmaD });
+    const c = checkPrediction({ horizon, p0, target: val(), sigmaD, minMove: PICK_MIN_MOVE });
     msg.className = "hint " + (c.ok ? "good" : "bad");
     msg.textContent = c.ok ? `${pct(((val() - p0) / p0) * 100, 1)} from now · a call ${val() > p0 ? "up" : "down"}` : c.error;
     onValid(c.ok);

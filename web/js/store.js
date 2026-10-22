@@ -2,7 +2,7 @@
 // Firestore document is accounts/{uid}, readable and writable only by that sign-in.
 // Without a Firebase config the app runs in demo mode and keeps everything in this browser.
 import { CONFIG } from "../config.js";
-import { HORIZONS, checkPrediction, canPredict, dueAt, relabel } from "./score.js";
+import { HORIZONS, checkPrediction, canPredict, dueAt, relabel, bandOf } from "./score.js";
 import { settle, rowCache, SETTLE_DELAY } from "./predict.js";
 
 const FB = "https://www.gstatic.com/firebasejs/10.14.1/";
@@ -517,6 +517,7 @@ export const nextDue = () => Math.min(Infinity, ...store.preds.map((p) => Date.p
 // 15 minutes). In demo mode there's no job, so there's a score only if one was put on the demo account.
 export function myScore() {
   const ps = store.data?.pscore || null;
+  if (ps && ps.v !== 2) return { ...ps, band: bandOf(ps.score), updating: true }; // from before 1.4.0, until the job's next run
   return ps && pendingHere().some((r) => r.status === "scored") ? { ...ps, confirming: true } : ps;
 }
 

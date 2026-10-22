@@ -98,6 +98,11 @@ def onboarding_test(b):
     h = p.inner_text("#gate")
     check("how it works: before any question, one screen says what a call is (coin and time, where the price will be, scored against the real price)", "You make calls" in h and "keeps score" in h and p.locator("#gate .ob-step").count() == 3 and "That's a call" in h and "Very close" in h and "about 30" in h and "not advice" in h and p.is_visible("#obBack"), h[:200].replace("\n", " "))
     p.click("#obGo"); p.wait_for_timeout(300)
+    try: p.go_back(timeout=2500)
+    except Exception: pass
+    p.wait_for_timeout(400)
+    check("onboarding: the phone's back steps back to How Pulse works, not out of the app", p.locator("#gate .ob-step").count() == 3)
+    p.click("#obGo"); p.wait_for_timeout(300)
     check("account: only a username is asked for (no password field)", p.locator("#gate input").count() == 1 and not p.locator("#gate input[type=password]").count())
     typein(p, "#obU", "ab"); p.wait_for_timeout(450)
     check("account: a short username is refused before anything is sent", p.is_disabled("#obGo") and "3 to 20" in p.inner_text("#obUMsg"), p.inner_text("#obUMsg"))

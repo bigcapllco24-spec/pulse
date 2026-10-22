@@ -5,7 +5,7 @@
 // open of the first full candle after the call was made (at most a minute later normally, a price nobody could see
 // when calling). The end price is taken at the exact target time: 1-minute candles when they still exist (Kraken keeps
 // the last 12 hours), otherwise the finest candles that still cover that moment.
-import { HORIZONS, MAX_MOVE, typicalMove, dueAt, dailyVol, scorePrediction, callDir } from "./score.js";
+import { HORIZONS, MAX_MOVE, PICK_MIN_MOVE, typicalMove, dueAt, dailyVol, scorePrediction, callDir } from "./score.js";
 
 export const KRAKEN_PAIR = { BTC: "XBTUSD", DOGE: "XDGUSD", RNDR: "RENDERUSD" };
 export const krakenPair = (t) => KRAKEN_PAIR[t] || t + "USD";
@@ -15,7 +15,7 @@ const KEEP = 720;
 const MIN = 60e3, DAY = 864e5;
 // A price that moved between seeing it and the lock is fine (the call keeps its direction); only a call clearly outside
 // what the coin can do is voided.
-export const LOCK_TOLERANCE = { max: MAX_MOVE * 1.5 };
+export const LOCK_TOLERANCE = { max: MAX_MOVE * 1.5, pickMin: PICK_MIN_MOVE * 0.5 };
 export const SETTLE_DELAY = MIN; // wait a minute after the target time so its candle exists
 export const GIVE_UP_AFTER = 7 * DAY; // a price still missing a week later voids the prediction
 
@@ -80,6 +80,7 @@ export async function settle(p, { now = Date.now(), rows }) {
     cur = { ...cur, p0, sigmaD };
     const moves = Math.abs(Math.log(cur.target / p0)) / typicalMove(sigmaD, cur.horizon);
     if (callDir(cur) !== 0 && moves > LOCK_TOLERANCE.max) return voided("The call was far outside how much this coin moves in that time.");
+    if (cur.clientP0 == null && moves < LOCK_TOLERANCE.pickMin) return voided("The price moved before it was locked in, so the pick ended up too close to it."); // group picks only
   }
   // 2. resolve once the target time has passed
   const due = Date.parse(dueAt(cur));

@@ -76,7 +76,7 @@ export async function publishCalls(db, scored, log = console.log) {
     const old = new Map((await db.list(`players/${acct}/calls`)).map((c) => [c.id, c]));
     const keep = new Set();
     for (const r of pub) {
-      const id = r.id || `${r.t}_${r.horizon}_${r.resolvedAt}`, doc = { coin: r.coin, t: r.t, horizon: r.horizon, target: r.target, p0: r.p0, actual: r.actual, label: r.label, pctOff: r.pctOff ?? null, createdAt: r.createdAt, resolvedAt: r.resolvedAt, sure: r.sure || null, basis: r.basis || null };
+      const id = r.id || `${r.t}_${r.horizon}_${r.resolvedAt}`, doc = { coin: r.coin, t: r.t, horizon: r.horizon, target: r.target, p0: r.p0, clientP0: r.clientP0 ?? null, sigmaD: r.sigmaD ?? null, actual: r.actual, label: r.label, pctOff: r.pctOff ?? null, createdAt: r.createdAt, resolvedAt: r.resolvedAt, sure: r.sure || null, basis: r.basis || null };
       keep.add(id);
       if (old.has(id) && same(Object.fromEntries(Object.keys(doc).map((k) => [k, old.get(id)[k] ?? null])), Object.fromEntries(Object.entries(doc).map(([k, v]) => [k, v ?? null])))) continue;
       await db.set(`players/${acct}/calls/${id}`, doc); wrote++;

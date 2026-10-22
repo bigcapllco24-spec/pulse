@@ -30,6 +30,12 @@ export const runRows = (fetchRows = politeKraken(), log = console.log) =>
 export async function settlePredictions(db, accounts, { now = Date.now(), fetchRows, log = console.log, rows = runRows(fetchRows, log) } = {}) {
   const tally = { locked: 0, scored: 0, void: 0, profiles: 0, context: 0 }, scoredBy = new Map(), openBy = new Map();
   for (const a of accounts) {
+    try { await settleAccount(a); } catch (e) { log(`predictions: account ${a.id} skipped this run: ${e.message}`); } // one account's error never stops the rest
+  }
+  log(`predictions: ${tally.locked} locked, ${tally.scored} scored, ${tally.void} voided, ${tally.profiles} scores${tally.context ? `, ${tally.context} results given market context` : ""}`);
+  return { ...tally, results: scoredBy, open: openBy };
+
+  async function settleAccount(a) {
     const open = a.open || await db.list(`accounts/${a.id}/predictions`);
     let resolved = 0; const still = []; openBy.set(a.id, still);
     for (const p of open) {
@@ -37,7 +43,13 @@ export async function settlePredictions(db, accounts, { now = Date.now(), fetchR
       let res;
       try { res = await settle(doc, { now, rows }); } catch (e) { log(`predictions: ${a.id}/${id} skipped: ${e.message}`); continue; }
       if (res.patch.p0 != null) tally.locked++;
-      if (res.status === "open") { still.push({ ...doc, ...res.patch }); if (Object.keys(res.patch).length) await db.set(`accounts/${a.id}/predictions/${id}`, res.patch); continue; }
+      if (res.status === "open") {
+        still.push({ ...doc, ...res.patch });
+        // only onto the prediction as it was read: if the other job scored and deleted it meanwhile, a patch would
+        // bring back a broken half of it
+        if (Object.keys(res.patch).length) { try { await db.set(`accounts/${a.id}/predictions/${id}`, res.patch, { ifUnchanged: p }); } catch (e) { log(`predictions: ${a.id}/${id} changed while settling, left for the next run (${e.status || e.message})`); } }
+        continue;
+      }
       // scored or voided: move it to results (a fresh id, as the same coin and period can be predicted again)
       const rid = `${id}_${Date.parse(doc.createdAt)}`;
       await db.set(`accounts/${a.id}/results/${rid}`, { ...doc, ...res.patch });
@@ -46,13 +58,13 @@ export async function settlePredictions(db, accounts, { now = Date.now(), fetchR
     }
     // The quick run updates only scores that changed; the full run also rescores everyone with a score from an older
     // method (pscore.v below 2), so switching methods recalculates every account from all its calls.
-    if (a.open ? !resolved : !open.length && !a.pscore) continue;
+    if (a.open ? !resolved : !open.length && !a.pscore) return;
     const all = await db.list(`accounts/${a.id}/results`), results = all.filter((r) => r.status === "scored").map(relabel); // labels under today's rule
     tally.context += await backfillContext(db, a.id, results, rows, log);
     scoredBy.set(a.id, results);
-    if (!results.length) continue;
+    if (!results.length) return;
     const ps = scoreRecord(results, { now });
-    if (!ps) continue;
+    if (!ps) return;
     // the quick run only knows the account's id: read its current score, so the old one is never lost
     const cur = "pscore" in a ? a.pscore : (db.get ? (await db.get(`accounts/${a.id}`))?.pscore : null);
     if (cur && cur.v !== 2) ps.was = { score: cur.score ?? null, v: cur.v || 1 }; // the score before v2, for the one-time note
@@ -61,8 +73,6 @@ export async function settlePredictions(db, accounts, { now = Date.now(), fetchR
     await db.set(`accounts/${a.id}`, { pscore: ps });
     tally.profiles++;
   }
-  log(`predictions: ${tally.locked} locked, ${tally.scored} scored, ${tally.void} voided, ${tally.profiles} scores${tally.context ? `, ${tally.context} results given market context` : ""}`);
-  return { ...tally, results: scoredBy, open: openBy };
 }
 
 // Results scored before 1.4.0 have no market context (prev, tr90): worked out once from Kraken's daily candles (720 days
@@ -71,8 +81,9 @@ async function backfillContext(db, acct, results, rows, log) {
   let n = 0;
   for (const r of results) {
     if ("prev" in r && "tr90" in r) continue;
-    let ctx; try { ctx = contextAt(await rows(r.t, 1440), r.createdAt); } catch { continue; }
-    if (ctx.prev == null && ctx.tr90 == null) continue;
+    let daily, ctx; try { daily = await rows(r.t, 1440); ctx = contextAt(daily, r.createdAt); } catch { continue; }
+    if (!daily.length) continue; // no candles this run (Kraken down, or a coin it doesn't list): try again next run
+    // with candles but no context (too early in the coin's history): saved as unknown, so it isn't looked up again
     Object.assign(r, ctx);
     try { await db.set(`accounts/${acct}/results/${r.id}`, ctx); n++; } catch (e) { log(`predictions: context for ${acct}/${r.id} not saved: ${e.message}`); }
   }

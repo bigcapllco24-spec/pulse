@@ -15,6 +15,9 @@ export const HORIZONS = {
 export const MAX_MOVE = 6; // a call can be any size up to six typical moves, which keeps typos like "$1" out
 export const VOL_FLOOR = 0.002; // daily volatility is never treated as lower than 0.2%
 export const FLAT_BAND = 0.25; // "No change" is right when the price ends within a quarter of a typical move
+// Group picks don't store the price shown, so their direction comes from the locked start price: they keep the old
+// minimum of a quarter of a typical move, so a small lock-time move can't turn a pick around.
+export const PICK_MIN_MOVE = 0.25;
 export const PROVISIONAL_UNDER = 10; // "Provisional" until this many calls have been scored
 export const SCORE_MIN = 300, SCORE_MAX = 900;
 export const CHANCE = 550; // where everyone starts: about what guessing scores
@@ -46,12 +49,13 @@ export const dueAt = (p) => (p.endAt ? new Date(Date.parse(p.endAt)).toISOString
 export const callDir = (p) => (p.target === p.clientP0 ? 0 : Math.sign(p.target - (pos(p.clientP0) ? p.clientP0 : p.p0)));
 // Checks a new call before it's saved: a known period, real prices, and any size up to MAX_MOVE. The price shown itself
 // is only allowed as "No change" (flat), so a typed price can't land on it by accident.
-export function checkPrediction({ horizon, p0, target, sigmaD, flat = false }) {
+export function checkPrediction({ horizon, p0, target, sigmaD, flat = false, minMove = 0 }) {
   if (!HORIZONS[horizon]) return { ok: false, error: "Pick 30 minutes, 1 hour, 1 day or 1 year." };
   if (!pos(p0) || !pos(target)) return { ok: false, error: "Enter a price above zero." };
   if (flat) return target === p0 ? { ok: true, moves: 0 } : { ok: false, error: "No change is the price shown now." };
   const moves = Math.abs(Math.log(target / p0)) / typicalMove(sigmaD, horizon);
   if (moves === 0) return { ok: false, moves, error: "That's today's price. Tap No change to call that." };
+  if (moves < minMove - 1e-9) return { ok: false, moves, error: "That's too close to today's price for a group pick. Call a move up or down." };
   if (moves > MAX_MOVE) return { ok: false, moves, error: "That's far outside how much this coin moves in that time. Check the price." };
   return { ok: true, moves };
 }

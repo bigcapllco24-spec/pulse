@@ -74,7 +74,8 @@ function scoreNotes(sc) {
   const out = [], last = ls.get(LAST);
   if (!last || last.n !== sc.n || last.score !== sc.score) ls.set(LAST, { n: sc.n, score: sc.score, delta: last && sc.n > last.n ? sc.score - last.score : last?.n === sc.n ? last.delta ?? null : null });
   const d = ls.get(LAST)?.delta;
-  if (sc.confirming) out.push("Your newest call is confirming. The score updates within 15 minutes.");
+  if (sc.updating) out.push("Your score is being updated from all your calls. It's back within a couple of hours.");
+  else if (sc.confirming) out.push("Your newest call is confirming. The score updates within 15 minutes.");
   else if (d != null) out.push(d ? `Score ${d > 0 ? "+" : "−"}${Math.abs(d)} after your last call.` : "Your last call didn't move the score.");
   if (sc.provisional) out.push(`Provisional until ${PROVISIONAL_UNDER} calls are scored.`);
   if (sc.held) out.push("Some of your progress is held until your record is longer.");
