@@ -1,6 +1,6 @@
 # Pulse: handoff for a new chat
 
-**Last updated: 23 Oct 2026, 01:00 IST**
+**Last updated: 23 Oct 2026, 02:39 IST**
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open. Read `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`; also the project's
@@ -413,6 +413,9 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 ## 10. Open items
 
 See `claude/pulse-backlog.md` for the prioritised list. The big ones:
+- **Live: 1.4.0** (commit 0599fb2, published 23 Oct 02:32 IST by a tested push, then by a manual run with fresh
+  prices and news). Scores were recalculated by the data job on 1.4.0 at 02:16 IST. Not yet checked: the live site
+  in a browser, and the recalculated `pscore` values in Firestore (section 8).
 - **Check what shipped on 22–23 Oct on a real phone** (Veer): back everywhere, onboarding, feed, indicators, Calls,
   You. Everything automated passed (unit suites, demo-mode e2e 120+ checks, real-database tests 49/49 on GitHub), but
   nothing was tried on a real phone and nothing checks the live site after a deploy.
@@ -424,8 +427,8 @@ See `claude/pulse-backlog.md` for the prioritised list. The big ones:
 - **The score's code is public** (`pipeline/lib/score2.mjs`); Veer: private later.
 - **The 20 Oct review's recommendations** wait on Veer: freeze new features, take 30-minute and 1-hour calls out of
   the score, credit Binance, news as headline and link, a 30–100 person pilot, lawyer before launch.
-- **Deploy safety:** a manual or scheduled deploy publishes `main` untested; pushes from Claude's sessions start
-  workflows late or not at all (section 7).
+- **Deploy safety:** a manual or scheduled deploy publishes `main` untested; pushes from Claude's sessions sometimes
+  start workflows late (section 7). From 17 to 22 Oct those runs didn't publish at all (fixed 23 Oct, section 7).
 - **Compliance review, trust and safety, real sign-in, test gaps, live checks owed, iOS haptics:** as in the backlog.
 
 ## 11. A good first message for a new chat

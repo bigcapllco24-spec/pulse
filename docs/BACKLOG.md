@@ -1,6 +1,6 @@
 # Pulse backlog
 
-**Last updated: 23 Oct 2026, 01:00 IST** (live: see the handoff, section 10)
+**Last updated: 23 Oct 2026, 02:39 IST** (live: 1.4.0)
 
 How Pulse works and where everything is: `claude/pulse-handoff.md` (repo: `docs/HANDOFF.md`). How to work:
 `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`). Ordered by the priority in the expectations: trust
@@ -54,7 +54,9 @@ first, then "works on a real phone", then simplicity, then new features.
 - **Two-account live test before CUG:** create a group, join by link, start a challenge, pick, invite, search,
   follow, reveal after the job runs.
 - **Deploy safety:** a manual or scheduled deploy publishes `main` without tests; only move `main` to tested code.
-  Consider making the 2-hourly run skip publishing when the last push's tests failed.
+  Consider making the 2-hourly run skip publishing when the last push's tests failed. From 17 to 22 Oct those runs
+  published nothing (site stuck on 18 Oct; fixed 23 Oct). Runners pinned to Ubuntu 24.04 for Playwright 1.56; move
+  to Ubuntu 26 together with a Playwright upgrade.
 - Feedback note "formatting issue for bottom bar" (13 Oct, tab bar, 390×797): waiting for a screenshot.
 
 ## Waiting on Veer
