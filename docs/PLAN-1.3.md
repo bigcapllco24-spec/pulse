@@ -1,6 +1,8 @@
 # Pulse 1.3: plan (from the designer's feedback, 22 Oct)
 
-**Last updated: 22 Oct 2026, 19:40 IST** (nothing built yet; live is 1.2.9)
+**Last updated: 23 Oct 2026, 01:30 IST** (done: shipped as 1.3.0 and 1.3.1 on 23 Oct; the open decisions at the end
+went with Claude's recommendations. One change from the plan: the full-screen button sits at the right of the range row,
+above the chart, because on the chart's corner it covered the top price label.)
 
 Project copy: `claude/pulse-1.3-plan.md`. Repo copy: `docs/PLAN-1.3.md`. Keep them equal.
 

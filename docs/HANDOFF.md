@@ -409,30 +409,22 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 ## 10. Open items
 
 See `claude/pulse-backlog.md` for the prioritised list. The big ones:
-- **1.3:** plan ready, nothing built. Open decisions (one release or three steps, swipe hint, "Make a call" button,
-  S/R and lines on the feed, score method publishing, whether the takeover fix and real legal text join 1.3.0) are
-  listed at the end of `claude/pulse-1.3-plan.md`.
-- **The score's code is public.** The repo is public and the phone scores calls itself. To keep v2 private: make the
-  repo private (check GitHub Pages' terms first, or move hosting), score only on the server, keep the v2 simulation
-  code out of the repo. Veer's go first.
-- **The 20 Oct review's recommendations** wait on Veer: freeze new features, fix the takeover hole and placeholder
-  legal text, hide or label the v1 score, take 30-minute and 1-hour calls out of the score, credit Binance, news as
-  headline and link, a 30–100 person pilot, lawyer before launch.
-- **The score isn't a credential yet** (score review, 18 Oct). Score v2 designed and simulated (private doc); next is
-  a replay on ~2 years of real Kraken prices (save the simulation code first, privately). Build "market" into it from
-  the start (section 1).
-- **Real sign-in** before real users (anyone who knows a username can open the account; Safari data clearing loses
-  the phone's sign-in).
-- **Test gaps:** a live-site check after each deploy; shared lists, alerts, push, username change and account deletion
-  in the real-database tests.
-- **Compliance review** of the game wording, leaderboard, groups, public calls, Learn, "your calls tend to…" and
-  Community before a wide launch; plus the multi-market questions and the trust-and-safety plan (section 1).
-- **Live checks still owed:** first morning push, daily.json crowd, Community feeds from GitHub Actions,
-  `boards/followed` and `players/*/calls` after the 2-hour job, the share menu on real phones.
-- **iOS:** no vibration API (haptics Android only). Home Screen strip: `--gapb` stays 0; status-bar style `black`;
-  existing installs must be removed and re-added once.
+- **Check what shipped on 22–23 Oct on a real phone** (Veer): back everywhere, onboarding, feed, indicators, Calls,
+  You. Everything automated passed (unit suites, demo-mode e2e 120+ checks, real-database tests 49/49 on GitHub), but
+  nothing was tried on a real phone and nothing checks the live site after a deploy.
+- **Score v2 is live but unproven:** no real-price replay yet (it was the planned gate; Veer chose to switch straight
+  away), and no real players to show that this month's score predicts next month's results. Check the recalculated
+  scores (anyone who moved > ~100 points) after the first full job.
+- **The account-takeover hole is still open** (anyone who types a username can open that account) and the legal text
+  is still a placeholder. Fix before anyone outside uses the app.
+- **The score's code is public** (`pipeline/lib/score2.mjs`); Veer: private later.
+- **The 20 Oct review's recommendations** wait on Veer: freeze new features, take 30-minute and 1-hour calls out of
+  the score, credit Binance, news as headline and link, a 30–100 person pilot, lawyer before launch.
+- **Deploy safety:** a manual or scheduled deploy publishes `main` untested; pushes from Claude's sessions start
+  workflows late or not at all (section 7).
+- **Compliance review, trust and safety, real sign-in, test gaps, live checks owed, iOS haptics:** as in the backlog.
 
 ## 11. A good first message for a new chat
 
-> Read claude/pulse-handoff.md, claude/pulse-backlog.md and claude/pulse-1.3-plan.md (or docs/ in
-> bigcapllco24-spec/pulse), then build 1.3.0 (navigation). Follow the working agreement in section 7.
+> Read claude/pulse-handoff.md and claude/pulse-backlog.md (or docs/ in bigcapllco24-spec/pulse). Then check the
+> score v2 recalculation on the live database and fix the account-takeover hole (recovery code). Follow section 7.
