@@ -1,19 +1,20 @@
 # Pulse: handoff for a new chat
 
-**Last updated: 22 Oct 2026, 19:50 IST**
+**Last updated: 23 Oct 2026, 01:00 IST**
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open. Read `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`; also the project's
 custom instructions) for how Veer wants you to work, and `claude/pulse-backlog.md` (repo: `docs/BACKLOG.md`) for
 what's next.
 
-Live: **version 1.2.9**, service worker `pulse-shell-v62`. Version lives in `web/config.js` and shows on the welcome
-screens and Settings → Account and Legal. The database rules are published by every deploy (section 6).
+Live: **version 1.4.0**, service worker `pulse-shell-v65` (see section 10 for what's confirmed live). Version lives in
+`web/config.js` and shows on the welcome screens and Settings → Account and Legal. The database rules are published by
+every deploy (section 6); 1.3 and 1.4 needed no rules change.
 
-**Next: version 1.3** (decided 22 Oct, nothing built): navigation with back everywhere, onboarding that explains a
-call, no story bars, "All my coins" as a sheet, ƒx and S/R moved to the full-screen chart with RSI/MACD optional on
-the feed, and a clearer Calls tab. Full plan, exact copy and open decisions: `claude/pulse-1.3-plan.md` (repo:
-`docs/PLAN-1.3.md`). Mockups: "Pulse feedback mockups", https://claude.ai/artifact/8FkebwoHzHg1BadkGw2bLB.
+**Shipped 22–23 Oct (one session):** 1.3.0 (back everywhere, pages slide in, onboarding explains a call), 1.3.1 (feed
+rail, coins sheet, indicators in full screen with up to 2 panels on the feed, a clearer Calls tab), 1.4.0 (score v2 is
+the score, "No change" and any call size, every account recalculated). The 1.3 plan, `claude/pulse-1.3-plan.md`
+(repo: `docs/PLAN-1.3.md`), is done; its open decisions went with Claude's recommendations (Veer, 22 Oct).
 
 ## 1. What Pulse is
 
@@ -23,15 +24,15 @@ record of judgment is the moat. Never claim readiness, returns or advice.
 
 **Where it's going:** a score that means something to others, like a credential ("my Pulse score is 780"), earned by
 skill and not by luck or gaming. India-first, built to scale. The score review (18 Oct,
-`claude/pulse-score-review-2026-10-18.md`) found the score isn't there yet; score v2 is designed and tested in
-simulation (`claude/pulse-score-v2-factors.md`, deck "Pulse Score v2"), nothing built yet.
+`claude/pulse-score-review-2026-10-18.md`) found v1 wasn't there; score v2 (designed and simulated 18–20 Oct) is live
+from 1.4.0. It is still unproven on real players and real prices (section 10).
 
-**The scoring method is proprietary (Veer, 22 Oct).** The app explains the score only in general terms (the "About
-your score" sheet in the 1.3 plan) and never says it is being refined. Score v2's constants and details live only
-in the private project doc `claude/pulse-score-v2-factors.md`: **never copy them into the repo**, which is public.
-This reverses the earlier "method published" line (score v2, scholarship plan); Claude advised publishing the factors
-at a general level, as credit scores do, and keeping the formula private. Veer's final word is pending (1.3 plan).
-Today's live scoring code is public (repo and the phone's own scoring): see section 10.
+**The scoring method is proprietary (Veer, 22 Oct), but its code is public for now (Veer, 22 Oct night: "keep it public
+for now, we can make it private later").** Score v2 is `pipeline/lib/score2.mjs` in the public repo; it runs in the
+data jobs only, never on the phone. The app explains the score only in general terms ("About your score") and never
+says it is being refined; repo docs describe it in general terms only (`docs/prediction-score.md`). Making it private
+(a private `pulse-score` repo the jobs check out, plan in `claude/pulse-score-v2-build.md` D1) is in the backlog.
+Background and evidence stay in the private `claude/pulse-score-v2-factors.md`.
 
 **Outside view (20 Oct):** `claude/pulse-review-2026-10-20.md` is a hard review of the idea and the app: too much
 built before any outside user; an account-takeover hole and placeholder legal text live now; the live score is the
@@ -78,9 +79,9 @@ position is clear. What follows from that, as agreed on 18 Oct:
 | Live app | https://bigcapllco24-spec.github.io/pulse/ |
 | Code | GitHub `bigcapllco24-spec/pulse`, **public**, single branch `main` |
 | Firebase | Project `pulseapp-e536f` (console name "pulseapp"), Spark (free) plan, Firestore `(default)` in asia-south1 |
-| Project docs (claude.ai project "Pulse", private) | `claude/pulse-expectations.md`, `claude/pulse-handoff.md` (this file), `claude/pulse-backlog.md`, `claude/pulse-1.3-plan.md`, `claude/pulse-rca-2026-10-17.md`, `claude/pulse-score-review-2026-10-18.md`, `claude/pulse-score-v2-factors.md` (private only), `claude/pulse-review-2026-10-20.md`, `claude/pulse-scholarship-plan.md` |
-| Same docs in the repo (public) | `docs/HANDOFF.md`, `docs/BACKLOG.md`, `docs/EXPECTATIONS.md`, `docs/PLAN-1.3.md` (keep them equal to the project docs; never put score v2 details in them) |
-| Prediction scoring spec | `docs/prediction-score.md` (today's score, already public); v2 only in the private project doc |
+| Project docs (claude.ai project "Pulse", private) | `claude/pulse-expectations.md`, `claude/pulse-handoff.md` (this file), `claude/pulse-backlog.md`, `claude/pulse-1.3-plan.md` (done), `claude/pulse-score-v2-build.md` (built as 1.4.0), `claude/pulse-score-v2-simulation-code.md`, `claude/pulse-rca-2026-10-17.md`, `claude/pulse-score-review-2026-10-18.md`, `claude/pulse-score-v2-factors.md` (private only), `claude/pulse-review-2026-10-20.md`, `claude/pulse-scholarship-plan.md` |
+| Same docs in the repo (public) | `docs/HANDOFF.md`, `docs/BACKLOG.md`, `docs/EXPECTATIONS.md`, `docs/PLAN-1.3.md` (keep them equal to the project docs; never copy the v2 factors doc, build doc or simulation code into them) |
+| Prediction scoring | `docs/prediction-score.md` (rules, labels, the score in general terms); code `web/js/score.js` (rules and labels, shared) and `pipeline/lib/score2.mjs` (the score, jobs only) |
 | Designs | 1.3 mockups ("Pulse feedback mockups") at https://claude.ai/artifact/8FkebwoHzHg1BadkGw2bLB; 1.2.0 mockups and the cofounder review deck in the claude.ai project; 1.1.0 colour explorations at https://claude.ai/artifact/J9GbykhVNMbWf442SYA3yg; score v2 deck at https://claude.ai/artifact/EuLb82vmbxEVYGTHVMvHsw |
 
 **Secrets in GitHub** (Settings → Secrets and variables → Actions):
@@ -97,27 +98,34 @@ web/                    the app (served by GitHub Pages; the deploy minifies JS 
   config.js             version, Firebase web config (public by design), VAPID key; CONFIG.emulator only in tests
   styles.css            all styles; type scale tokens --t-xs/s/m/l/xl/xxl in :root; landscape block at the end
   data/                 candles.json + news.json + daily.json (written by the data job), indicators.json (guides), symbols.json
-  js/app.js             feed: cards, swipes, details pane ("Before you call"), news pane, tabs (showTab), story bars
-                        (progress()), redrawCards()
-  js/onboard.js         first run: welcome → create account (username) → first call → locked in; "I already have an account"
+  js/app.js             feed: cards, swipes, details pane ("Before you call"), news pane, tabs (showTab: Feed, Calls, You),
+                        the position rail (progress()), the one-time swipe hint, openDash (the coins list page), redrawCards()
+  js/nav.js             back everywhere (1.3.0): one history guard entry while any sheet or page is open, so the phone's
+                        back closes the top layer; openPage/closePage (pages slide in over the tab), backBtn("‹ Calls")
+  js/onboard.js         first run: welcome → how Pulse works (what a call is) → username → first call (Bitcoin, 1 day,
+                        nothing picked for you; Higher, Lower or No change) → locked in; "I already have an account"
   js/guide.js           How Pulse works: five cards, once per account and from Settings (1.2.9)
-  js/play.js            Calls tab (renderPlay), Call it sheet (openPredictSheet, three steps), replay of a scored call,
-                        With friends hub, groups (the only page with history/back handling today), challenges and picks,
-                        player cards, find players, leaderboard, settings
-  js/you.js             You tab: level, verdict, score with likely range, tiles, breakdowns, Learn, where you rank
+  js/play.js            Calls tab (renderPlay), About your score, Make a call (coin picker), waiting-call details, Call it
+                        sheet (openPredictSheet, three steps), replay of a scored call, With friends page, group page,
+                        challenges and picks, player cards, find players, leaderboard, the Settings sheet
+  js/you.js             You tab and the Your record page (same record): verdict, score with its quiet lines (change after
+                        the last call, held progress, a named pattern, the one-time v2 note), tiles, breakdowns, Learn, ranks
   js/progress.js        levels (effort, not skill), shared with the job
-  js/pages.js           Your market (list view of the feed, renderDash), alerts and rules, settings pages, shared lists,
-                        panel-fit chooser (checkPanelFit), sheets (range chip, ƒx indicators, S/R), feedback inbox, legal text
+  js/pages.js           Coins in your feed sheet (openSwitcher), the coins list page (renderDash), settings pages
+                        (openProfile), alerts and rules, shared lists, sheets (range, ƒx indicators with + Feed, S/R lines),
+                        feedback inbox, legal text
   js/social.js          data for groups, challenges, picks, invites, following, player cards and boards (Firestore or demo)
   js/store.js           account (Firebase or demo): sign-in, username, log-in, saves, alerts, lists, predictions, feedback
   js/data.js            prices: cache, Kraken daily (since=, laid over cached history), intraday, lazy view(), dailyOf()
   js/indicators.js      indicator maths (shared with the pipeline); studies.js what can be drawn (11 lines, 18 panels,
-                        SETS, picks() from settings.chart, maxPanels())
+                        SETS, picks() from settings.chart: over, lower (full screen) and feed (at most 2), maxPanels())
   js/chart.js           SVG main chart + lower panels; levels.js support/resistance + pivots
   js/interact.js        hold-to-read card, the one guide template (openLearn), quiz
-  js/full.js            full-screen chart: pan/fling/pinch, 1D–Max, ~4 years of daily history (Binance)
+  js/full.js            full-screen chart: pan/fling/pinch, 1D–Max, ~4 years of daily history (Binance); the only place
+                        for ƒx and S/R since 1.3.1
   js/describe.js        plain-language meaning of each reading
-  js/score.js, predict.js  prediction game (shared with the pipeline)
+  js/score.js           the rules a call follows and what a scored call shows (labels, callDir, isRight, bands); shared
+  js/predict.js         settling a call: start-price lock, end price, market context (prev, tr90); shared
   js/habit.js           streaks, daily coin, crowd, what happened, tendency, weekly recap, morning summary (IST days)
   js/card.js, share.js  player card markup; share your card as an image (Story / Square)
   js/feedback.js        press-and-hold (3 s) → note about the tapped part
@@ -127,131 +135,109 @@ pipeline/               Node 22, run by GitHub Actions
                         → tidy groups → daily.json → morning results push (7–9:30 AM IST run, once a day)
   settle.mjs            quick job: score due predictions and group picks; reveal finished challenges and push members
   deploy-rules.mjs      publishes firestore.rules when they differ from the live ones; rules that don't compile stop the deploy
-  lib/                  crypto, news (GDELT + RSS + official + community), community (Snapshot + forums), predictions,
-                        challenges, players (cards, public board, most-followed board, public calls), habit, google (Firestore REST + FCM)
+  lib/                  crypto, news (GDELT + RSS + official + community), community (Snapshot + forums), predictions
+                        (settling, context backfill, writes pscore), score2 (the score, v2), challenges, players (cards,
+                        public board, most-followed board, public calls), habit, google (Firestore REST + FCM)
 .github/workflows/
   deploy.yml            push to main → tests (tests.yml) → publish only if they pass (~1 min after tests; reuses live data)
                         every 2 h / manual → data job (~2 min) → rules → minify → publish
   tests.yml             scripts/check.sh, then tests/live.py against the Firebase emulators; runs on every branch push too
   settle.yml            every 15 min → pipeline/settle.mjs
 firestore.rules         source of truth for rules; published by the deploy
-scripts/check.sh        quick checks + Node tests + tests/e2e.py (demo mode, Playwright) + static lint (tests/lint.mjs)
+scripts/check.sh        quick checks + Node tests (score, score2, predict, social, habit, …) + tests/e2e.py (demo mode,
+                        Playwright; ONLY=nav,calls runs some suites) + static lint (tests/lint.mjs)
 tests/live.py           real-database tests: app + jobs against the emulators, WebKit (iPhone) and Chromium (slow
                         Android), typing key by key (43 checks)
-docs/                   HANDOFF, BACKLOG, EXPECTATIONS, PLAN-1.3 (copies of the project docs), prediction-score (v1 spec)
+docs/                   HANDOFF, BACKLOG, EXPECTATIONS, PLAN-1.3 (copies of the project docs), prediction-score (general)
 ```
 
-## 4. Features as of 1.2.9 (17 Oct 2026)
-
-What 1.3 changes is in the plan (`claude/pulse-1.3-plan.md`); this section describes what's live.
+## 4. Features as of 1.4.0 (23 Oct 2026)
 
 **Tabs: Feed · Calls · You** (Feed on the left). Settings sit behind the gear on You.
 
-- **First run (`onboard.js`):** welcome → create account (username only, live availability check) → first call
-  (Bitcoin in an hour: higher or lower, three sizes) → locked in (with the notify toggle) → How Pulse works (five
-  cards, `guide.js`; existing accounts see it once on their next open; also in Settings). "I already have an account"
-  = type the username.
-- **Feed card:** coin name, price and the move over the range on screen; a small **Call it** under the price with
-  "n calls waiting, time left"; one quiet row with the range (1D/1W/1M/1Y, one shared choice), ƒx and S/R; full
-  screen on the chart's corner. Candles with S/R (labelled S and R) or pivots. Indicator panels stacked under the
-  chart (up to 4 from 390 px wide, else 2; `checkPanelFit` asks which to keep). Your open calls are drawn on the chart
-  (far-away ones as an edge marker). Hold the chart to read a candle, let go to set an alert there; two fingers open
-  full screen; tap any panel or line for its guide. Story-style bars at the top mark which coin of the list you're on.
-- **Call it sheet (`openPredictSheet`, 1.2.8), three steps, one decision per screen:** which way (Higher/Lower), how
-  far (½, 1 or 2 typical moves, or your own as one field: a price, or a % with "%"), Lock in. Then optional extras:
-  **how sure** (hunch / fairly / very) and **based on** (chart / indicators / news / gut), which rules let the owner
-  add within 15 minutes of the call. Public-once-scored and posting to a group sit in one quiet line. Saved as
-  `sure`, `basis`, `pub`.
-- **Details pane = "Before you call"** (swipe left): how much the coin usually moves (30 min / 1 h / 1 d / 1 y typical
-  moves), Right now, Your <coin> calls, Price alerts, then the older sections folded under "More about the price".
-- **News pane** (swipe right): Confirmed (2+ outlets), Official sources, Also reported, Community (Snapshot votes and
-  projects' own forum topics; price talk dropped; never Reddit or X), and price events from candles, so it's never
-  empty. A "Since your call" marker.
-- **Indicators:** one shared pick for every coin (`accounts/{acct}.settings.chart`); 11 price-chart lines, 18
-  panels; quick sets Trend, Momentum, Volatility, Volume. Every guide uses one template: Right now, In this view,
-  What it shows, How to read it, How it's worked out, Usual settings, Keep in mind, Alert me.
-- **Full-screen chart:** range chip (1D–Max), ƒx, S/R; smooth pan, fling, pinch; ~4 years of daily candles;
-  side-by-side in landscape.
-- **Your market:** a list view of the feed, opened from the feed's "All my coins" button (was the Coins tab); a
-  chart-icon button leads back.
-- **Calls tab (`renderPlay`):** search "Know how others are doing" in the header; progress card (verdict + n of ~30 +
-  streak + level, → switches to the You tab); Today's coin row; With friends (groups needing a pick, groups, shared
-  lists; the hub has Start a group, Join with a link, New shared list); Waiting; Scored (last 3 + See all).
-  **Replay:** a scored call opens with its label, direction line, a small price-path chart, the three prices and what
-  happened. **"Wrong way"** is shown (not stored) for any call that went the other way.
-- **You tab (`you.js`):** level avatar + followers; verdict in plain words (Make your first call → Too early to tell
-  (< 30 scored) → Still learning / Reading it well (≥ 600)); score with a likely range (±190/√n); right-direction and
-  close-or-better tiles; breakdowns from level 3 (does being sure help, what works for you, by period); "What your
-  score doesn't show" + **Learn** (6 short reads); Where you rank.
-- **Levels (`progress.js`):** effort, not skill. Scored calls count 1, 30-minute calls ½, max 5 a day (IST), voided 0,
-  never down. Thresholds 1, 10, 30, 60, 100, 150, 210, 280, 360, 450, then +100. Ring colours change at levels 2, 4,
-  6, 9, 12, 16, 20, 25. Never used for ranking.
-- **People:** Find players opens with the most followed (`boards/followed`). Player card: level, followers, rank,
-  verdict, score range, tiles, their public scored calls, Follow, Invite. New players can be followed before the job
-  makes their card. **Public scored calls:** the job copies `pub: true` results to `players/{acct}/calls` (newest
-  100); only the owner and their followers can read them. Open calls are never shown to anyone. Default in Settings
-  ("My scored calls are public", `callsPublic`), plus a per-call switch.
-- **Habit loop:** streaks (IST days with a 1-day call), the daily coin (rotates BTC, ETH, SOL, XRP, BNB, DOGE, LINK,
-  TRX; crowd result in `data/daily.json`, label counts only), what happened after a scored call, morning results push.
-  The daily popup, daily recap card, welcome card and the old tours are gone (1.2.0).
-- **Alerts and rules** with push notifications once enabled; **shared lists**; **share your card** as an image.
-- **Feedback:** hold anything still for 3 s → note about that part, saved to Firestore `feedback`. Admins have the
-  Feedback inbox with "Copy all open notes for Claude".
-- **Sheets** close by swiping down; text boxes are 16 px+ so iPhones don't zoom; light and dark themes (the original
-  Midnight + light palette); landscape layouts.
-- **Navigation today:** only the group page adds a history entry; the phone's back button leaves Pulse from every
-  other page and sheet (fixed in 1.3.0).
+- **Navigation (1.3.0, `nav.js`):** every sheet and page is a layer; the phone's back (Android button, iPhone edge
+  swipe) closes the top one and never leaves Pulse from a page or sheet; back on a tab's own screen leaves as usual.
+  Pages (the coins list, With friends, Your record, settings pages) slide in over the tab they came from, with a back
+  button naming where it goes ("‹ Calls", "‹ Feed", "‹ Settings"); the tab bar keeps that tab lit. Tapping content
+  never switches tab. A tab tap closes any page. The group page, the full-screen chart (✕ top-left) and the guide close
+  with the phone's back too. A settings page opened from the Settings sheet goes back to the sheet.
+- **First run (`onboard.js`):** welcome → **How Pulse works** ("You make calls. Pulse keeps score.", three steps) →
+  create account (username only, live availability check) → **first call: Bitcoin, 1 day, nothing picked**: Higher,
+  Lower or No change; "How far" (A touch / A little / A usual day) and "Your call: ↑ about $…" appear after a direction;
+  Lock in stays grey until then → locked in (with the notify toggle) → the five-card guide (`guide.js`; once per
+  account; also in Settings). Then, once per phone, a hint on the first coin that news and "Before you call" are a
+  swipe away. "I already have an account" = type the username.
+- **Feed card (1.3.1):** coin name, price and the move over the range on screen; Call it with "n calls waiting, time
+  left"; one row with the range (1D/1W/1M/1Y, one shared choice) and a visible **expand button** to full screen. The
+  card shows candles, your open calls (far-away ones as an edge marker) and up to **2 panels you chose for the feed**
+  (none for new players; accounts from before 1.3.1 keep the panels their cards showed). No ƒx, S/R or price lines on
+  the card. Hold the chart to read a candle, let go to set an alert there; two fingers open full screen; tap a panel for
+  its guide. A thin **rail on the right edge** shows where you are in the list (current coin longer; hidden above 40).
+- **All my coins (1.3.1):** opens the sheet "Coins in your feed": each list (watchlists and shared lists, with counts,
+  a tick on the current one), "See them as a list ›" (the coins list page: "‹ Feed", the list's name, moves against
+  usual, sorts, edit), "Edit lists and coins ›", and the feed order.
+- **Full-screen chart:** close button, range chip (1D–Max), **ƒx** (count of what's on) and **S/R**; pan, fling,
+  pinch; ~4 years of daily candles; side-by-side in landscape. Panels also on the feed are tagged "On feed".
+- **Indicators sheet (ƒx in full screen):** quick sets; "Panels under the chart" with a Show switch each and, once
+  shown, "+ Feed" / "✓ On feed" (at most 2: "On your feed: 2 of 2. Turn one off to add another."); turning a panel off
+  takes it off the feed. "Lines on the price" are full screen only. Stored in `accounts/{acct}.settings.chart`
+  (`over`, `lower`, `feed`); no rules change needed.
+- **Call it sheet (`openPredictSheet`), three steps:** (1) the period and **Higher / Lower / No change** (nothing
+  picked); (2) for Higher/Lower, how far: **A touch (¼ typical move), A little (½), A usual day/hour/year (1)**, or
+  "Type my own price" (a price or a %, any size above zero up to 6 typical moves); No change goes straight to "Lock in
+  No change"; Lock in; (3) locked in, with optional "how sure" and "based on" (never used in the score). Public-once-
+  scored and posting to a group sit in one quiet line (not for No change: group picks are always a price).
+- **Details pane = "Before you call"** (swipe left): how much the coin usually moves, Right now, Your <coin> calls
+  (opens a sheet with that coin's waiting and scored calls), Price alerts, then "More about the price" folded.
+- **News pane** (swipe right): Confirmed, Official sources, Also reported, Community, price events; "Since your call".
+- **Calls tab (1.3.1):** "Calls" with a round search button (Find players); "Say where a price will be. Pulse scores
+  how close you got. **About your score**" (sheet with the agreed copy and Make a call); **Make a call** (coin picker →
+  Call it); **Your record** card (verdict, progress, "n of about 30 scored calls · streak · level", Open ›) → the
+  **Your record** page over Calls; Today's coin; Waiting rows (direction badge, "Higher, about $…", time left,
+  chevron → the call's details); With friends (group icon, amber "Needs your pick", Pick button; "All groups ›" → the
+  With friends page); Scored rows (coin · period, when, result chip, chevron → replay). "Wrong way" for any up/down
+  call that went the other way (No change calls show "Off" instead).
+- **You tab and Your record:** verdict (Make your first call → Too early to tell under 30 scored → Still learning /
+  Reading it well from **Proven, 650**); the score (from the server) with its band and quiet lines: "Score +2 after your
+  last call", "Provisional until 10 calls are scored", "Some of your progress is held until your record is longer.", a
+  pattern in plain words from 10 calls ("Most of your calls are up."), "confirming" while the job catches up, and a
+  one-time note that the score was worked out again (with the old number). Tiles (right direction, close or better),
+  breakdowns from level 3, "What your score doesn't show" + Learn, Where you rank.
+- **Levels (`progress.js`):** effort, not skill (unchanged).
+- **People, habit loop, alerts, shared lists, share card, feedback, sheets, themes:** as in 1.2.9. The player card's
+  "How it works" opens About your score.
 
 ## 5. The prediction game
 
 The game turns the app from something people read into something they play, and the score is meant to become the
 credential (section 1). It's a learning game: no money, no prizes, nothing to buy; the legal page says it isn't advice.
 
-**Timelines (`HORIZONS` in `web/js/score.js`):**
+**Periods:** 30 minutes, 1 hour, 1 day, 1 year (`HORIZONS` in `web/js/score.js`). All four still count to the score
+(the 20 Oct review's advice to take 30-minute and 1-hour calls out is still open).
 
-| Period | Why it's there | Weight in the score | Fades to half after |
-|---|---|---|---|
-| 30 minutes | quick feedback, the "one more go" loop | 10% | 90 days |
-| 1 hour | same session, still fast | 15% | 90 days |
-| 1 day | come back tomorrow, a daily habit | 30% | 90 days |
-| 1 year | real skill, counts most | 45% | 1 year |
+**Rules:** one open call per coin and period; Higher or Lower any size above zero up to 6 typical moves; **No change**
+is the price shown, exactly; can't be edited or cancelled (only `sure` and `basis` within 15 minutes). The server locks
+the start price at the **open of the first full candle after the call** (a price nobody could see); a call keeps the
+direction chosen even if the price passed it before the lock (the old "too close" void is gone); a call over 9 typical
+moves is voided. The lock also stores `prev` and `tr90` (the last day's move and the 90-day trend, −1/0/1); results
+from before 1.4.0 get them once from Kraken's daily candles in the job.
 
-**Rules that keep it fair:**
-- One open prediction per coin and period; a new one once the last is scored.
-- A call must be at least a quarter of a typical move from today's price and at most six typical moves.
-- A prediction can't be edited or cancelled (only `sure` and `basis` can be added within 15 minutes).
-- The server locks the start price (open of the 1-minute candle the call falls in). If the price had already moved
-  onto the call before the lock, it's voided ("Not counted").
+**Labels** (`scorePrediction`): by miss in typical moves (Spot on < ¼, Very close < ½, Close < 1, Off < 2, Far off);
+a wrong-way call is never better than Off; No change is Spot on within ¼ of a typical move, otherwise never better than
+Off. `isRight` is the one right-direction rule everywhere (No change: within ¼).
 
-**Scoring (live, v1; already public in `docs/prediction-score.md` and the code):**
-1. **Typical move** = daily volatility (30-day standard deviation of log returns) × √days in the period. Every miss is
-   measured in typical moves.
-2. **Labels** by miss size: under 0.25 Spot on; 0.25–0.5 Very close; 0.5–1 Close; 1–2 Off; 2+ Far off. A call that
-   went the wrong way is never better than "Off" (`relabel`), and the app shows it as **"Wrong way"**.
-3. **Trade score (internal, 0–100):** closeness e^(−miss), plus direction, plus skill (beat "no change").
-4. **Profile score (300–900):** closeness 45%, consistency 25%, direction 15%, skill 10%, breadth 5%. Each period
-   counts by its share × confidence (results ÷ (results + k)). Results fade from when they're scored. Everyone starts
-   at 550, pulled towards it with few results; the app shows 0 until the first call is scored. Bands: Exceptional
-   800–900, Very good 700–799, Good 600–699, Fair 550–599, Building 300–549 (the You tab shows the verdict and a
-   likely range instead of the band). Calibrated: perfect ≈ 850, sees 70% of the move ≈ 691, random = 550, always
-   wrong ≈ 417.
-5. **Known weaknesses (score review, 18 Oct):** 550 isn't really chance; gaming beats honesty; real skill barely
-   shows; quiet hours inflate scores; market direction counts as skill; correlated calls count as separate evidence;
-   the start price can be up to a minute old.
-6. **Score v2 (designed and simulated, not built):** everything about it (status, factors, settings, experiments) is
-   in the private project doc `claude/pulse-score-v2-factors.md` only. The current app code (1–4) is unchanged until
-   v2 is agreed and built. Building it also changes the Call it sheet (free call sizes; "how sure" out of scoring),
-   and should move scoring to the server only, so the method stays private (section 1).
+**The score (v2, `pipeline/lib/score2.mjs`, `scoreRecord`):** worked out by the data jobs only from all of an
+account's scored results and written to `accounts/{acct}.pscore` = `{ score, band, n, provisional, at, v: 2, market:
+"CRYPTO", flag, held, was? }`. Algorithm and settings: `claude/pulse-score-v2-build.md` (sections 3–4), with two
+changes made in the build (23 Oct): never below 550 while provisional (under 10 calls), and a pattern is named only
+from 10 calls. Bands: Below guessing (301–549), Building (550–649), Proven (650+). The phone never computes a score;
+calls it scored itself show "confirming" until the job's copy lands. Port check: the module gives the simulation's
+exact scores on 240 simulated players (factors doc, Experiment 8 settings). Tests: `tests/score2.test.mjs` (22).
 
-**Running it:**
-- Open predictions: `accounts/{uid}/predictions/{TICKER}_{period}`; finished: `accounts/{uid}/results`. The score is
-  written to `accounts/{uid}.pscore` by the server only.
-- `settle.yml` scores due predictions every 15 minutes; the 2-hour job refreshes scores as results fade.
-- The phone also scores a call the moment it's due (same `settle()` and Kraken prices, marked "confirming") and drops
-  its copy once the server's arrives (matched properly since 1.2.7). Group challenges score on members' phones the same
-  way; the job stays the record.
-- Full spec and constants (v1): `docs/prediction-score.md` and the top of `web/js/score.js`. After changing any weight,
-  run `bash scripts/check.sh score`.
+**Running it:** open predictions `accounts/{uid}/predictions/{TICKER}_{period}`; finished `accounts/{uid}/results`.
+`settle.yml` (every 15 min) scores due calls and updates those accounts' scores; the 2-hour data job rescores every
+account with a score, so **switching to v2 recalculated everyone on the first full run after 1.4.0** (a v1 score is
+kept as `pscore.was` for the one-time note). Player cards start a fresh score line at v2.
 
 ## 5a. Groups, following, leaderboard
 
@@ -322,14 +308,14 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 - Always say what a check covers and what it doesn't. Demo-mode tests alone never mean "done". The sandbox can't
   reach Firebase, the live site or Veer's phone: say so plainly.
 - Not yet in the real-database tests: shared lists, price alerts, push notifications, username change, account
-  deletion; and nothing checks the live site after a deploy. 1.3 adds tests for the back button and feed panels
-  (plan, "Release plan").
+  deletion, the indicators' feed setting and No change calls; and nothing checks the live site after a deploy.
 
 **Releasing:**
 - Bump `SHELL` in `web/sw.js` and `version` in `web/config.js` on every release. Add any new JS file to `sw.js` FILES
   and to `index.html` modulepreload.
-- Small releases, one area at a time. If a fix fails twice, stop patching and find the root cause. (1.3 is planned
-  as three gated steps, 1.3.0–1.3.2; Veer to confirm.)
+- Small releases, one area at a time. If a fix fails twice, stop patching and find the root cause. A batch of
+  releases goes as stacked branches (`release-1.3.0` → `release-1.3.1` → `release-1.4.0`, 23 Oct), each tested on
+  GitHub before `main` moves.
 - Commit to `main` and push; it's live about a minute after the tests pass. A docs-only push also runs the tests and
   redeploys the same app.
 - Commit messages end with the Co-Authored-By / Claude-Session lines.
@@ -346,6 +332,13 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
   GitHub UI works; the API proxy blocks it).
 
 **Known gotchas:**
+- **Pushes from this session don't start workflows** (23 Oct): run the tests on a branch with
+  `gh api -X POST repos/bigcapllco24-spec/pulse/actions/workflows/tests.yml/dispatches -f ref=<branch>` and read the
+  result from `actions/workflows/tests.yml/runs?branch=<branch>` (annotations show the failing checks).
+- **A manual or scheduled deploy (`deploy.yml` by hand, or the 2-hourly run) publishes `main` without running the
+  tests.** Only move `main` to code whose branch tests passed.
+- The live tests' `playwright install --with-deps … webkit` step sometimes hangs until the 30-minute timeout on
+  GitHub's runner ("cancelled"); dispatch again.
 - The session's GitHub proxy blocks the Actions secrets and logs endpoints, and deleting branches. Read job logs in
   Chrome instead.
 - `gh workflow run` fails. Trigger a job with
@@ -378,10 +371,10 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 ## 9. Decisions already made (don't re-ask, but say if new facts mean one should be revisited)
 
 - No AI anywhere in the app; news "In brief" is the outlet's own first sentence.
-- Three tabs: **Feed · Calls · You**. Your market is a list view of the feed, not a tab. Settings behind the gear on You.
+- Three tabs: **Feed · Calls · You**. The coins list is a page over the feed, not a tab. Settings behind the gear on You.
 - News pane is never empty (price events fill it). Feed % = move over the range on screen; details and full screen
   show the same number, labelled.
-- Indicators are one shared pick for every coin; S/R/pivots are one global setting. Default chart 1D.
+- Indicators are one shared pick for every coin; S/R/pivots are one global setting (full screen only). Default chart 1D.
 - **No passwords (17 Oct).** Username-only sign-in, no device limit, sign-out keeps the phone's sign-in. Anyone who
   types a username can open the account: accepted for testing only.
 - Username first, changeable twice.
@@ -403,8 +396,15 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
   current candle chart.** ƒx and S/R live in the full-screen chart; RSI/MACD and other panels can be added to the
   feed by the player (off by default, at most 2, existing players keep theirs). Calls gets an explanation line, clear
   tap affordances and the "About your score" sheet (exact copy in the plan).
-- **The score method is proprietary (22 Oct):** general points only in the app; never say it's being refined; v2
-  details stay out of the public repo. (Final word on publishing factors at a general level: open.)
+- **1.3 open decisions (22 Oct, Claude's recommendations accepted):** three gated steps; a one-time swipe hint; "Make
+  a call" on Calls with a coin picker; S/R off the feed entirely; no price-chart lines on the feed card.
+- **The score method is proprietary (22 Oct):** general points only in the app; never say it's being refined.
+  **The v2 code may stay in the public repo for now (22 Oct night); making it private is a later task.**
+- **Score v2 went live straight away (22 Oct night)**, with no shadow period, recalculating every account from all its
+  calls; a one-time note tells players. Built with two guards Claude added (23 Oct): no "Below guessing" while
+  provisional, and no pattern named before 10 calls.
+- **Group picks have no "No change"** (23 Oct, Claude): picks don't store the price shown (`clientP0`), so a No change
+  pick can't be told apart from a tiny call; adding it needs a rules change (backlog).
 
 ## 10. Open items
 
