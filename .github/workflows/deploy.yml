@@ -27,7 +27,7 @@ jobs:
   build:
     needs: tests
     if: always() && (needs.tests.result == 'success' || (needs.tests.result == 'skipped' && github.event_name != 'push'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -73,7 +73,7 @@ jobs:
     # always(): build's tests are skipped on scheduled and manual runs, and a skipped job upstream skips this one
     # otherwise (it did from 17 to 22 Oct: the data jobs ran but nothing was published)
     if: always() && needs.build.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
