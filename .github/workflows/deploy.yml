@@ -70,6 +70,9 @@ jobs:
           path: web
   deploy:
     needs: build
+    # always(): build's tests are skipped on scheduled and manual runs, and a skipped job upstream skips this one
+    # otherwise (it did from 17 to 22 Oct: the data jobs ran but nothing was published)
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

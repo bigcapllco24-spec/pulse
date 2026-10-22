@@ -18,7 +18,10 @@ jobs:
         with: { node-version: 22 }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install playwright==1.56.0 && python -m playwright install --with-deps chromium
+      # the browser download sometimes stalls until the job times out: give each try 5 minutes, up to 3 tries
+      - run: |
+          pip install playwright==1.56.0
+          for i in 1 2 3; do timeout 300 python -m playwright install --with-deps chromium && exit 0; echo "install try $i stalled"; done; exit 1
       - run: bash scripts/check.sh
         env: { PW_CHROMIUM: "" }
 
@@ -33,6 +36,9 @@ jobs:
         with: { distribution: temurin, java-version: "21" }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install playwright==1.56.0 && python -m playwright install --with-deps chromium webkit
+      # the browser download sometimes stalls until the job times out: give each try 5 minutes, up to 3 tries
+      - run: |
+          pip install playwright==1.56.0
+          for i in 1 2 3; do timeout 300 python -m playwright install --with-deps chromium webkit && exit 0; echo "install try $i stalled"; done; exit 1
       - name: Real-database tests (Firebase emulators)
         run: npx -y firebase-tools@13.29.1 emulators:exec --project demo-pulse --only auth,firestore "python3 tests/live.py -v"
