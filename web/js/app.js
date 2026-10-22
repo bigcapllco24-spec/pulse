@@ -16,7 +16,7 @@ import { openFull, closeFull } from "./full.js";
 import { openPage, closeAllPages, topPage, pageOpen } from "./nav.js";
 import { initFeedback } from "./feedback.js";
 import { initInteract, openLearn, chartTapHint, quizHtml, wireQuiz, cancelPendingHold } from "./interact.js";
-import { dueAt, HORIZONS, dailyVol, typicalMove } from "./score.js";
+import { dueAt, HORIZONS, dailyVol, typicalMove, isRight } from "./score.js";
 import { D, loadCached, refresh, view, bigMove, storiesFor, RANGES, INTRA, intraState, dailyOf, RANGE_LABEL } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, hhmm, toast, haptic, openSheet, DISCLAIMER } from "./ui.js";
 import { initPages, renderDash, openProfile, openSwitcher, openAddSheet, openChartSheet, demoRules } from "./pages.js";
@@ -399,7 +399,7 @@ function renderDetails(c, it) {
     ].filter(Boolean);
     html += sec("Right now", "glance", `<ul class="glance">${glance.map((g) => `<li>${esc(g)}</li>`).join("")}</ul>`);
     // your record on this coin, and your alerts (1.2.0)
-    const mine = store.results.filter((r) => r.coin === s.key && r.status === "scored"), rightN = mine.filter((r) => (r.target > r.p0) === (r.actual > r.p0)).length, waiting = store.preds.filter((p) => p.coin === s.key).length;
+    const mine = store.results.filter((r) => r.coin === s.key && r.status === "scored"), rightN = mine.filter(isRight).length, waiting = store.preds.filter((p) => p.coin === s.key).length;
     html += `<button class="dcard" data-mycalls><span class="main"><span class="t">Your ${esc(s.t)} calls</span><span class="s">${mine.length ? `${mine.length} scored, right direction in ${rightN}. Last one: <b class="good">${esc(mine[0].label)}</b>.` : "None scored yet."}${waiting ? ` ${waiting} waiting.` : ""}</span></span><span class="chev">›</span></button>`;
     html += `<button class="dcard" data-addrule><span class="main"><span class="t">Price alerts</span><span class="s">${rules.length ? `${rules.length} on: ${rules.slice(0, 1).map((r) => `${esc(METRICS[r.metric]?.label || r.metric)} ${esc(OPS[r.op])} ${esc(r.value)}${esc(METRICS[r.metric]?.unit || "")}`).join("")}${rules.length > 1 ? "…" : "."}` : "Tell me when a price or a reading is crossed."}</span></span><span class="linkbtn">${rules.length ? "Edit" : "Add"}</span></button>`;
     html += `<h3 class="dmore">More about the price</h3><div class="folds">`;

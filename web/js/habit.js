@@ -2,7 +2,7 @@
 // call, the "your calls tend to…" line, the weekly recap and the morning results summary. Plain ES module with no
 // dependencies on the page, shared by the app and the data job. Everything here describes the past: no advice, no
 // forecasts, and never anyone's price call.
-import { HORIZONS, CLOSENESS_LABELS, BANDS, SCORE_MAX, typicalMove } from "./score.js";
+import { HORIZONS, CLOSENESS_LABELS, BANDS, SCORE_MAX, typicalMove, isRight } from "./score.js";
 
 const DAY = 864e5, IST = 5.5 * 36e5;
 export const LABELS = CLOSENESS_LABELS.map(([, l]) => l); // Spot on, Very close, Close, Off, Far off
@@ -57,7 +57,7 @@ export function mixOf(results) {
 // The band above a score and how far there is to go: { name, need, share } (share = progress through this band).
 export function nextBand(score) {
   if (score == null) return null;
-  const asc = [...BANDS].reverse(); // Building 300 … Exceptional 800
+  const asc = [...BANDS].reverse(); // Below guessing 300 … Proven 650
   const i = asc.findIndex(([min], k) => score >= min && (k === asc.length - 1 || score < asc[k + 1][0]));
   if (i === asc.length - 1) return { name: null, need: 0, share: Math.min(1, (score - asc[i][0]) / (SCORE_MAX - asc[i][0])) };
   const [lo] = asc[i], [hi, name] = asc[i + 1];
@@ -82,7 +82,7 @@ export function tendency(results, horizon = null) {
   if (!per.length) return null;
   const [h, all] = per[0], xs = all.slice(0, 10), name = ADJ[h];
   const bigger = xs.filter((r) => Math.abs(Math.log(r.target / r.p0)) > Math.abs(Math.log(r.actual / r.p0))).length;
-  const right = xs.filter((r) => Math.sign(r.target - r.p0) === Math.sign(r.actual - r.p0)).length;
+  const right = xs.filter(isRight).length;
   const size = bigger >= 7 ? `expected a bigger move than happened in ${bigger} of your last 10`
     : bigger <= 3 ? `expected a smaller move than happened in ${10 - bigger} of your last 10` : `were about evenly split between expecting too big and too small a move`;
   return { horizon: h, text: `Your ${name} calls ${size}. The direction matched what happened in ${right} of 10.` };

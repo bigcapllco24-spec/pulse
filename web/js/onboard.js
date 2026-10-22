@@ -134,31 +134,32 @@ function firstcall() {
     return;
   }
   const tm = typicalMove(sigmaD, FIRST_H), sizes = callSizes(FIRST_H), at = scoredAt();
-  let dir = 0, size = 1;
+  let dir = null, size = 1; // null: nothing picked yet; 0: No change
   const price = () => p0 * Math.exp(dir * sizes[size][1] * tm);
   frame(`<div class="ob-top"><span class="label">Your first call</span><button class="btn ghost sm" id="obSkip">Skip</button></div>
     <h1>Where will Bitcoin be tomorrow at ${esc(at)}?</h1>
     <p>It's <b class="num">${esc(money(p0, "CRYPTO"))}</b> now. In a day it usually moves about ${(Math.expm1(tm) * 100).toFixed(1)}%, either way.</p>
     <div class="cdir ob-dir"><button data-dir="1" class="up" aria-pressed="false">▲ Higher</button><button data-dir="-1" class="dn" aria-pressed="false">▼ Lower</button></div>
+    <button class="cflat" data-dir="0" aria-pressed="false">= No change<small>About where it is now</small></button>
     <div id="obFar"></div>
     <button class="btn primary block" id="obGo" style="margin-top:14px" disabled>Pick higher or lower</button>
     <p class="hint" style="text-align:center">Scored tomorrow at ${esc(at)} against the real price. No money involved. Not advice.</p>`);
   const far = $("obFar"), go = $("obGo");
   const draw = () => {
-    if (!dir) return;
-    far.innerHTML = `<div class="label" style="margin-top:14px">How far</div>
-      <div class="seg ob-seg" role="group" aria-label="How far">${sizes.map(([l], i) => `<button data-k="${i}" aria-pressed="${i === size}">${esc(l)}</button>`).join("")}</div>
-      <div class="pnow" style="margin-top:10px"><span>Your call</span><b class="num">${dir > 0 ? "↑" : "↓"} about ${esc(money(price(), "CRYPTO"))}</b></div>`;
+    if (dir == null) return;
+    far.innerHTML = `${dir ? `<div class="label" style="margin-top:14px">How far</div>
+      <div class="seg ob-seg" role="group" aria-label="How far">${sizes.map(([l], i) => `<button data-k="${i}" aria-pressed="${i === size}">${esc(l)}</button>`).join("")}</div>` : ""}
+      <div class="pnow" style="margin-top:10px"><span>Your call</span><b class="num">${dir > 0 ? "↑" : dir < 0 ? "↓" : "="} about ${esc(money(price(), "CRYPTO"))}</b></div>`;
     far.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => { size = +b.dataset.k; haptic(); draw(); }));
     go.disabled = false; go.textContent = "Lock in my call";
   };
   gate.querySelectorAll("[data-dir]").forEach((b) => (b.onclick = () => { dir = +b.dataset.dir; gate.querySelectorAll("[data-dir]").forEach((x) => x.setAttribute("aria-pressed", x === b)); haptic(); draw(); }));
   gate.querySelector("#obSkip").onclick = finish;
   go.onclick = async () => {
-    if (!dir) return;
+    if (dir == null) return;
     go.disabled = true; go.textContent = "Locking in…";
     const target = price();
-    try { await makePrediction({ sym, horizon: FIRST_H, target, p0, sigmaD }); haptic([10, 40, 16]); locked(target, p0, at); }
+    try { await makePrediction({ sym, horizon: FIRST_H, target, p0, sigmaD, flat: dir === 0 }); haptic([10, 40, 16]); locked(target, p0, at); }
     catch (e) { toast(e.message || "Couldn't save the call. Try again."); go.disabled = false; go.textContent = "Lock in my call"; }
   };
 }

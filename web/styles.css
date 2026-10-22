@@ -1069,3 +1069,9 @@ body.guided .tabbar, body.guided .topbar { visibility: hidden; }
 .about { display: grid; gap: 14px; margin: 4px 0 16px; } .about p { display: flex; gap: 12px; align-items: flex-start; margin: 0; }
 .about svg { flex: none; width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .about-note { background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; margin: 0 0 16px; }
+/* "No change" (1.4.0): a quieter third choice under Higher and Lower */
+.cflat { display: flex; align-items: baseline; justify-content: center; gap: 10px; width: 100%; margin-top: 10px; min-height: 52px; border-radius: 16px; border: 1.5px solid var(--line); background: var(--bg); color: var(--accent); font: inherit; font-size: var(--t-l); font-weight: 800; cursor: pointer; }
+.cflat small { color: var(--muted); font-size: var(--t-s); font-weight: 600; }
+.cflat[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.cq .flat { color: var(--accent); }
+.you-note { margin-top: 12px; } .you-note .linkbtn { padding: 0; }

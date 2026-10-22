@@ -34,8 +34,11 @@ const want = scorePrediction({ horizon: "1h", p0, target, actual: real, sigmaD: 
 const made2 = NOW - 2 * 3600e3;
 const r2 = await settle({ coin: "CRYPTO:BTC", t: "BTC", horizon: "1d", target: priceOf(made2) * 1.05, createdAt: iso(made2) }, { now: NOW, rows: rowCache(fakeRows(NOW)) });
 
-// 3. the price moved before the lock: the call is now right on top of the real start price
-const r3 = await settle({ coin: "CRYPTO:BTC", t: "BTC", horizon: "1d", target: priceOf(made2), createdAt: iso(made2) }, { now: NOW, rows: rowCache(fakeRows(NOW)) });
+// 3. the price moved before the lock: the call is now right on top of the real start price, and a call made part-way
+// through a minute, locked at the open of the next one (a price nobody could see when calling)
+const r3 = await settle({ coin: "CRYPTO:BTC", t: "BTC", horizon: "1d", target: priceOf(made2), clientP0: priceOf(made2) * 0.999, createdAt: iso(made2) }, { now: NOW, rows: rowCache(fakeRows(NOW)) });
+const r3b = await settle({ coin: "CRYPTO:BTC", t: "BTC", horizon: "1d", target: 101, createdAt: iso(made2 + 25e3) }, { now: NOW, rows: rowCache(fakeRows(NOW)) });
+const r3c = await settle({ coin: "CRYPTO:BTC", t: "BTC", horizon: "1h", target: 101, createdAt: iso(NOW - 20e3) }, { now: NOW - 10e3, rows: rowCache(fakeRows(NOW - 10e3)) });
 // 4. a typo-sized call
 const r4 = await settle({ coin: "CRYPTO:BTC", t: "BTC", horizon: "30m", target: 1, createdAt: iso(made2) }, { now: NOW, rows: rowCache(fakeRows(NOW)) });
 // 5. already locked, resolved two days after its target time: falls back to 15-minute candles
@@ -68,12 +71,14 @@ const checks = [
   ["a due 1-hour call is locked at the real start price and scored at the exact end price", r1.status === "scored" && near(r1.patch.p0, p0) && near(r1.patch.actual, real) && near(r1.patch.sigmaD, sigma)],
   ["its closeness label and % off match the scoring module", r1.patch.label === want.label && near(r1.patch.pctOff, want.pctOff)],
   ["a call that isn't due yet is locked and stays open", r2.status === "open" && near(r2.patch.p0, priceOf(made2)) && r2.patch.actual === undefined],
-  ["a call the price moved onto before the lock is voided with a reason", r3.status === "void" && /moved before/.test(r3.patch.voidReason)],
+  ["a call the price moved onto before the lock still counts (it keeps its direction; no 'too close' void)", r3.status === "open" && near(r3.patch.p0, priceOf(made2))],
+  ["the start price is the open of the first full candle after the call; until that candle is out, it waits", near(r3b.patch.p0, priceOf(made2 + MIN)) && r3c.status === "open" && r3c.patch.p0 === undefined],
+  ["the lock records what the market had just done (the last day's move and the 90-day trend)", [-1, 0, 1].includes(r3.patch.prev) && [-1, 0, 1].includes(r3.patch.tr90)],
   ["a typo-sized call is voided", r4.status === "void" && /far outside/.test(r4.patch.voidReason)],
   ["a call scored two days late uses 15-minute candles at its exact target time", r5.status === "scored" && near(r5.patch.actual, priceOf(Math.floor(due5 / (15 * MIN)) * 15 * MIN))],
   ["nothing is scored until a minute after the target time", r6.status === "open" && r6.patch.actual === undefined],
   ["data job: the due call moves to results, the other stays open with its start price locked", res.length === 1 && res[0].status === "scored" && openLeft.length === 1 && openLeft[0].id === "BTC_1d" && near(openLeft[0].p0, priceOf(made2))],
-  ["data job: the profile score is written to the account, and only for accounts with results", store.get("accounts/u1").pscore?.score > 300 && store.get("accounts/u1").pscore?.n === 1 && store.get("accounts/u1").pscore?.provisional === true && !store.get("accounts/u2").pscore],
+  ["data job: the score (v2) is written to the account, and only for accounts with results", store.get("accounts/u1").pscore?.v === 2 && store.get("accounts/u1").pscore?.score >= 550 && store.get("accounts/u1").pscore?.score < 650 && store.get("accounts/u1").pscore?.flag === null && store.get("accounts/u1").pscore?.n === 1 && store.get("accounts/u1").pscore?.provisional === true && !store.get("accounts/u2").pscore],
   ["15-minute run: finds the still-open call through one query and leaves it open, scoring nothing twice", quick.scored === 0 && quick.void === 0 && (await db.list("accounts/u1/predictions")).length === 1 && (await db.list("accounts/u1/results")).length === 1],
   ["data job: each coin and candle size is fetched once per run", new Set(calls).size === calls.length && tally.scored === 1 && tally.locked === 2],
 ];

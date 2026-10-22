@@ -4,7 +4,7 @@
 import { CONFIG } from "../config.js";
 import { store, ls, save, allSyms, makePrediction, addCallDetails, myScore, enablePush, isAdmin, pendingHere, settleHere, nextDue } from "./store.js";
 import { openGuide } from "./guide.js";
-import { HORIZONS, PROVISIONAL_UNDER, CHANCE, callSizes, checkPrediction, canPredict, allowedRange, dailyVol, dueAt, closenessText, typicalMove } from "./score.js";
+import { HORIZONS, PROVISIONAL_UNDER, CHANCE, callSizes, checkPrediction, canPredict, dailyVol, dueAt, closenessText, typicalMove, isRight, callDir, BANDS } from "./score.js";
 import { settle, rowCache, krakenRows, SETTLE_DELAY } from "./predict.js";
 import { krakenBars } from "./data.js";
 import { D } from "./data.js";
@@ -25,7 +25,8 @@ import { S, onSocial, me, myName, bandOf, RANK_MIN, CH_PERIODS, PICK_MINS, GROUP
 const PERIODS = Object.keys(HORIZONS);
 const LABEL_CLASS = { "Spot on": "good", "Very close": "good", Close: "mid", Off: "low", "Far off": "bad", "Wrong way": "bad", "Not counted": "low" };
 // What a scored call shows (1.2.0): its closeness label, or "Wrong way" when the price went the other way from the call.
-export const wrongWay = (r) => r?.status === "scored" && r.p0 != null && r.actual != null && r.actual !== r.p0 && (r.target > r.p0) !== (r.actual > r.p0);
+// "Wrong way": the price went against a call up or down ("No change" calls are never shown as wrong way: they're Off).
+export const wrongWay = (r) => r?.status === "scored" && r.p0 != null && r.actual != null && r.actual !== r.p0 && callDir(r) !== 0 && !isRight(r);
 export const shownLabel = (r) => (wrongWay(r) ? "Wrong way" : r.label);
 const m$ = (x) => money(x, "CRYPTO");
 const num = (s) => `<span class="num">${s}</span>`;
@@ -111,7 +112,7 @@ const ICON = {
   bars: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h4V10H4zM10 18h4V6h-4zM16 18h4V13h-4z"/></svg>`,
 };
 const CHEV = `<span class="chev" aria-hidden="true">›</span>`;
-const dirOf = (p) => (p.target === p.clientP0 ? 0 : (p.target > (p.clientP0 ?? p.p0) ? 1 : -1));
+const dirOf = callDir;
 const badgeOf = (d) => `<span class="dbadge ${d > 0 ? "up" : d < 0 ? "dn" : "flat"}">${d > 0 ? ICON.up : d < 0 ? ICON.down : ICON.flat}</span>`;
 const callLine = (p) => { const d = dirOf(p); return d ? `${d > 0 ? "Higher" : "Lower"}, about ${num(esc(m$(p.target)))}` : `No change, about ${num(esc(m$(p.target)))}`; };
 const coinName = (key, t) => symOf(key).n || t;
@@ -139,12 +140,12 @@ function wirePicks(root) {
   root.querySelectorAll("[data-pick]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const [g, c] = b.dataset.pick.split("|"), ch = challengesOf(g).find((x) => x.id === c); if (ch) openPickSheet(g, ch); }));
 }
 // The plain-language read on how well someone reads the market. Needs about 30 scored calls to mean anything.
-export const VERDICT_AT = 30;
-export function verdictOf(sc) {
-  const n = sc?.n || 0;
+export const VERDICT_AT = 30, PROVEN = BANDS[0][0]; // "Reading it well" from the Proven band
+// n: scored calls (the phone's count, which is ahead of the score while the job confirms the newest)
+export function verdictOf(sc, n = sc?.n || 0) {
   if (!n) return { text: "Make your first call", key: "none", n };
   if (n < VERDICT_AT) return { text: "Too early to tell", key: "early", n };
-  return sc.score >= 600 ? { text: "Reading it well", key: "well", n } : { text: "Still learning", key: "learning", n };
+  return sc?.score >= PROVEN ? { text: "Reading it well", key: "well", n } : { text: "Still learning", key: "learning", n };
 }
 
 // ---------- Calls: your record, today, waiting, with friends, scored
@@ -155,7 +156,7 @@ function callsView(el) {
   const open = [...store.preds.filter((p) => !isHere(p)).map((p) => ({ ...p, kind: "pred" })), ...S.picks.filter((p) => !p.counts && p.status !== "scored" && p.status !== "void").map((p) => ({ ...p, kind: "pick" }))]
     .sort((a, b) => Date.parse(dueAt(a)) - Date.parse(dueAt(b)));
   const done = [...here, ...store.results].sort((a, b) => Date.parse(b.resolvedAt || 0) - Date.parse(a.resolvedAt || 0));
-  const sc = myScore(), v = verdictOf(sc), st = myStreak(), n = sc?.n || done.filter((r) => r.status === "scored").length;
+  const sc = myScore(), n = done.filter((r) => r.status === "scored").length, v = verdictOf(sc, n), st = myStreak();
   const callRow = (p, i) => {
     const due = dueAt(p), grp = p.g ? ` · ${esc(groupName(p.g))}` : "";
     return `<button class="row crow" data-open="${i}">${badgeOf(dirOf(p))}<span class="main"><span class="t">${esc(coinName(p.coin, p.t))} · ${SHORT[p.horizon]}</span><span class="s">${callLine(p)}${grp}${p.kind === "pick" ? " · group only" : ""}</span></span><span class="when">${ICON.clock}${esc(Date.now() >= Date.parse(due) ? "scoring" : until(due))}</span>${CHEV}</button>`;
@@ -250,10 +251,10 @@ const openListPage = (id) => openProfile("lists", id);
 // ---------- the replay (1.2.0): one scored call, played back on a small chart, with what happened over its period
 export function openResult(r) {
   if (!r || r.status !== "scored") return;
-  const wh = whatHappened(r, D.news?.stories || []), up = r.target > r.p0, went = r.actual === r.p0 ? null : r.actual > r.p0, wrong = wrongWay(r);
+  const wh = whatHappened(r, D.news?.stories || []), d = callDir(r), went = r.actual === r.p0 ? null : r.actual > r.p0, wrong = wrongWay(r);
   const missPct = Math.abs(r.actual / r.target - 1) * 100;
   openSheet(`${esc(r.t)} · ${SHORT[r.horizon]}`, `<div class="pc2-row" style="margin-bottom:6px"><span class="lab ${LABEL_CLASS[shownLabel(r)] || ""}" style="font-size:var(--t-xl)">${esc(shownLabel(r))}</span><span class="hint num">${esc(closenessText(r).split(" · ")[0])}</span></div>
-    <p class="hint" style="margin:0 0 10px">${wrong ? `You called ${up ? "up" : "down"}, it went ${went ? "up" : "down"}.` : `Right direction. ${missPct < 0.05 ? "Exact." : `Missed by ${missPct.toFixed(1)}%.`}`}</p>
+    <p class="hint" style="margin:0 0 10px">${d === 0 ? (isRight(r) ? "You called no change, and it stayed close." : `You called no change; it went ${went ? "up" : "down"} further than that.`) : wrong ? `You called ${d > 0 ? "up" : "down"}, it went ${went ? "up" : "down"}.` : `Right direction. ${missPct < 0.05 ? "Exact." : `Missed by ${missPct.toFixed(1)}%.`}`}</p>
     <div class="replay" id="rpChart"><p class="hint">Loading the price path…</p></div>
     <div class="hl">
       <div class="row"><span class="main"><span class="t">Price when you called</span><span class="s">${esc(when(r.createdAt, r.horizon))}</span></span><b class="num">${esc(m$(r.p0))}</b></div>
@@ -339,8 +340,8 @@ export function ranksView(el) {
     ...myGroups().map((g) => { const t = groupTable(g.id), i = t.findIndex((r) => r.a === me()), played = t.some((r) => r.pts > 0);
       return [g.id, g.name, `${new Date().toLocaleString("en-IN", { month: "long" })} · ${t.length} player${t.length === 1 ? "" : "s"}`, played && i >= 0 ? ord(i + 1) : "–", played ? `${t[i]?.pts ?? 0} pts` : "no results yet"]; })];
   el.innerHTML = `<div class="pl-cards">${rows.map(([k, t, s, big, small]) => `<button class="rcard" data-board="${esc(k)}"><span class="main"><b>${esc(t)}</b><span class="s">${esc(s)}</span></span><span class="r"><b class="${/^[#\d]/.test(big) ? "num" : ""}">${esc(big)}</b><span class="hint">${esc(small)}</span></span></button>`).join("")}</div>
-    <button class="row" id="plFind" style="margin-top:10px"><span class="main"><span class="t">Find players</span><span class="s">Follow people to compare</span></span><span class="chev">›</span></button>`;
-  el.querySelector("#plFind").onclick = () => openSearch();
+    <button class="row" id="rkFind" style="margin-top:10px"><span class="main"><span class="t">Find players</span><span class="s">Follow people to compare</span></span><span class="chev">›</span></button>`;
+  el.querySelector("#rkFind").onclick = () => openSearch();
   el.querySelectorAll("[data-board]").forEach((b) => (b.onclick = () => (b.dataset.board === "everyone" && !pub ? openJoinBoard() : openBoard(b.dataset.board))));
 }
 function openJoinBoard() {
@@ -408,13 +409,12 @@ export async function openPlayerCard(a, u = "") {
   c ||= { u, score: null, prov: true, n: 0, followers: 0, level: 0, fresh: true };
   const draw = () => {
     const on = isFollowing(a), common = myGroups().filter((g) => a in (g.members || {})), lvl = c.level || 0;
-    const v = c.score == null || c.prov ? (c.n ? "Too early to tell" : "No calls scored yet") : c.score >= 600 ? "Reading it well" : "Still learning";
-    const w = c.n ? Math.round(190 / Math.sqrt(c.n)) : null;
+    const v = c.score == null || c.prov ? (c.n ? "Too early to tell" : "No calls scored yet") : c.score >= PROVEN ? "Reading it well" : "Still learning";
     setSheetBody(`<div class="pcard2">
       ${levelAvatar(c.u, lvl, "lg")}<b class="pc2-name">@${esc(c.u)}</b>
       <span class="hint">${[`Level ${lvl}`, `${c.followers || 0} follower${c.followers === 1 ? "" : "s"}`, c.rank ? `#${c.rank} of ${c.of}` : ""].filter(Boolean).join(" · ")}</span></div>
       <div class="pc2-box you-score" style="margin-top:16px"><span class="hint">${esc(v)}</span>
-        <span style="display:flex;align-items:baseline;gap:10px"><b class="num you-big ${c.score >= 600 && !c.prov ? "good" : ""}" style="font-size:44px">${c.score ?? "–"}</b>${c.score != null && w ? `<span class="hint">likely ${Math.max(300, c.score - w)} to ${Math.min(900, c.score + w)}</span>` : ""}</span>
+        <span style="display:flex;align-items:baseline;gap:10px"><b class="num you-big ${c.score >= PROVEN && !c.prov ? "good" : ""}" style="font-size:44px">${c.score ?? "–"}</b>${c.score != null && c.band ? `<span class="hint">${esc(c.band)}</span>` : ""}</span>
         <span class="hint">${c.n ? `From ${c.n} scored call${c.n === 1 ? "" : "s"}` : "Everyone starts at 550"}</span></div>
       <div class="you-tiles"><div class="pc2-box"><b class="num">${c.right != null ? `${c.right}%` : "–"}</b><span>Right direction</span></div><div class="pc2-box"><b class="num">${c.closePlus != null ? `${c.closePlus}%` : "–"}</b><span>Close or better</span></div></div>
       ${c.best || common.length ? `<p class="hint" style="margin:12px 0 0">${[c.best ? `Strongest at ${HORIZONS[c.best]?.label || c.best} calls.` : "", common.length ? `You're both in ${esc(common.map((g) => g.name).join(", "))}.` : ""].filter(Boolean).join(" ")}</p>` : ""}
@@ -434,7 +434,7 @@ async function openPublicCalls(a, c) {
     let list; try { list = await getPublicCalls(a); } catch { list = []; }
     if (list === null) { body.innerHTML = `<div class="empty">Follow @${esc(c.u)} to see the calls they've made public.</div>`; return; }
     if (!list.length) { body.innerHTML = `<div class="empty">@${esc(c.u)} hasn't made any scored calls public yet.</div>`; return; }
-    const right = list.filter((r) => (r.target > r.p0) === (r.actual > r.p0)).length;
+    const right = list.filter((r) => isRight({ ...r, status: "scored" })).length;
     body.innerHTML = `<p class="hint" style="margin:0 0 10px">${list.length} public of ${c.n || list.length} scored. Right direction in ${Math.round((right / list.length) * 100)}%.</p><div class="hl">${list.map((r, i) => `<button class="row" data-pc="${i}"><span class="main"><span class="t">${esc(r.t)}, ${esc(HORIZONS[r.horizon]?.label || r.horizon)}</span><span class="s">${esc(ago(r.resolvedAt))} · called ${num(esc(m$(r.target)))} from ${num(esc(m$(r.p0)))}</span></span><span class="lab ${LABEL_CLASS[shownLabel(r)] || ""}">${esc(shownLabel(r))}</span></button>`).join("")}</div>
       <p class="hint" style="margin-top:12px">What happened, after it happened. Open calls are never shown. Not advice.</p>`;
     body.querySelectorAll("[data-pc]").forEach((b) => (b.onclick = () => openResult({ ...list[+b.dataset.pc], status: "scored" })));
@@ -644,18 +644,19 @@ function openGroupInfo(g) {
 }
 
 // ---------- making a call: the shared parts of the predict, challenge and pick sheets
+const priceHint = (sym) => `Type where you think ${sym.t} will be, up or down from now.`;
 function priceField(id, sym, horizon, keep) {
-  const p0 = lastPrice(sym.key), r = allowedRange({ horizon, p0, sigmaD: sigmaOf(sym.key) });
+  const p0 = lastPrice(sym.key);
   return `<div class="pnow"><span>${esc(sym.t)} now</span><b class="num">${esc(money(p0, sym.m))}</b></div>
     <label class="field" style="margin:12px 0 0"><span>Where will ${esc(sym.t)} be ${horizon === "1y" ? "in a year" : `in ${esc(HORIZONS[horizon].label)}`}?</span>
-      <div class="uname"><span>$</span><input id="${id}" class="num" inputmode="decimal" autocomplete="off" placeholder="${esc(money(r.upFrom, sym.m).replace("$", ""))}" value="${esc(keep || "")}"></div></label>
-    <p class="hint" id="${id}Msg">Call a move: ${esc(money(r.downFrom, sym.m))} or lower, or ${esc(money(r.upFrom, sym.m))} or higher.</p>`;
+      <div class="uname"><span>$</span><input id="${id}" class="num" inputmode="decimal" autocomplete="off" placeholder="${esc(money(p0, sym.m).replace("$", ""))}" value="${esc(keep || "")}"></div></label>
+    <p class="hint" id="${id}Msg">${esc(priceHint(sym))}</p>`;
 }
 function watchPrice(body, id, sym, horizon, onValid) {
-  const inp = body.querySelector("#" + id), msg = body.querySelector("#" + id + "Msg"), p0 = lastPrice(sym.key), sigmaD = sigmaOf(sym.key), r = allowedRange({ horizon, p0, sigmaD });
+  const inp = body.querySelector("#" + id), msg = body.querySelector("#" + id + "Msg"), p0 = lastPrice(sym.key), sigmaD = sigmaOf(sym.key);
   const val = () => parseFloat(inp.value.replace(/[^0-9.]/g, ""));
   const check = () => {
-    if (!inp.value.trim()) { msg.className = "hint"; msg.textContent = `Call a move: ${money(r.downFrom, sym.m)} or lower, or ${money(r.upFrom, sym.m)} or higher.`; onValid(false); return; }
+    if (!inp.value.trim()) { msg.className = "hint"; msg.textContent = priceHint(sym); onValid(false); return; }
     const c = checkPrediction({ horizon, p0, target: val(), sigmaD });
     msg.className = "hint " + (c.ok ? "good" : "bad");
     msg.textContent = c.ok ? `${pct(((val() - p0) / p0) * 100, 1)} from now · a call ${val() > p0 ? "up" : "down"}` : c.error;
@@ -667,14 +668,14 @@ function watchPrice(body, id, sym, horizon, onValid) {
 // lock-in: a short buzz (where the phone supports it) and a press-and-ripple on the button
 function lockFeel(btn) { haptic([10, 40, 16]); btn.classList.remove("thump"); void btn.offsetWidth; btn.classList.add("thump"); }
 
-// Call it (1.2.0): the period, higher or lower, a size (a little, a usual move, a big move) or your own move as a
-// percentage or a price, how sure you are, what it's based on, and whether followers may see it once scored. Can
-// also post the call to a group as a challenge.
+// Call it: the period, higher, lower or no change, a size (a touch, a little, a usual move) or your own price or
+// percentage, how sure you are, what it's based on, and whether followers may see it once scored. Can also post the
+// call to a group as a challenge (not a No change call: group picks are always a price up or down).
 export const SURE = [["hunch", "A hunch"], ["fairly", "Fairly sure"], ["very", "Very sure"]];
 export const BASIS = [["chart", "Chart"], ["indicators", "Indicators"], ["news", "News"], ["gut", "Gut"]];
-// Call it (1.2.8): one decision per screen. 1 · the period and which way; 2 · how far, then Lock in (your own price
-// opens on a tap; public and posting to a group sit in one quiet line); 3 · locked in, with "how sure" and "based on"
-// as optional extras that can't slow the call down (it's already saved). Before, all of it was on one screen.
+// One decision per screen. 1 · the period and which way (nothing picked for you); 2 · how far, then Lock in (your own
+// price opens on a tap; public and posting to a group sit in one quiet line; No change goes straight to Lock in);
+// 3 · locked in, with "how sure" and "based on" as optional extras that can't slow the call down (it's already saved).
 export function openPredictSheet(sym, onDone, prefer = null) {
   const p0 = lastPrice(sym.key), sigmaD = sigmaOf(sym.key);
   if (!p0 || sigmaD == null) { toast(`${sym.t} prices haven't loaded yet.`); return; }
@@ -683,7 +684,7 @@ export function openPredictSheet(sym, onDone, prefer = null) {
   let step = "dir", dir = 1, size = 1, own = null, typing = false, sure = null, basis = null, pub = store.data?.callsPublic !== false, post = false, g = myGroups()[0]?.id || null, made = null;
   const tm = () => typicalMove(sigmaD, horizon);
   const sizes = () => callSizes(horizon);
-  const price = () => (own != null ? own : p0 * Math.exp(dir * sizes()[size][1] * tm()));
+  const price = () => (dir === 0 ? p0 : own != null ? own : p0 * Math.exp(dir * sizes()[size][1] * tm()));
   const scored = () => when(new Date(Date.now() + HORIZONS[horizon].days * 864e5).toISOString(), horizon);
   openSheet(`Call ${esc(sym.t)}`, "", (body) => {
     const draw = () => {
@@ -703,20 +704,21 @@ export function openPredictSheet(sym, onDone, prefer = null) {
     const drawDir = () => {
       body.innerHTML = `<p class="hint" style="margin:0">Now <b class="num">${esc(money(p0, sym.m))}</b></p>
         <div class="utabs" role="group" aria-label="Time period" style="margin-top:14px">${PERIODS.map((h) => { const open = !canPredict(store.preds, sym.key, h); return `<button data-h="${h}" aria-selected="${h === horizon}" ${open ? "disabled" : ""}>${SHORT[h]}${open ? " · waiting" : ""}</button>`; }).join("")}</div>
-        <div class="cdir"><button data-dir="1" class="up">▲ Higher</button><button data-dir="-1" class="dn">▼ Lower</button></div>`;
+        <div class="cdir"><button data-dir="1" class="up">▲ Higher</button><button data-dir="-1" class="dn">▼ Lower</button></div>
+        <button class="cflat" data-dir="0">= No change<small>About where it is now</small></button>`;
       body.querySelectorAll("[data-h]").forEach((b) => (b.onclick = () => { horizon = b.dataset.h; drawDir(); }));
       body.querySelectorAll("[data-dir]").forEach((b) => (b.onclick = () => { dir = +b.dataset.dir; own = null; typing = false; size = 1; haptic(); step = "size"; draw(); }));
     };
     // 2 · how far, then Lock in
     const drawSize = () => {
-      const groups = myGroups(), canPost = groups.length && CH_PERIODS.includes(horizon), target = price(), chk = checkPrediction({ horizon, p0, target, sigmaD });
+      const groups = myGroups(), canPost = dir !== 0 && groups.length && CH_PERIODS.includes(horizon), target = price(), chk = checkPrediction({ horizon, p0, target, sigmaD, flat: dir === 0 });
       body.innerHTML = `<button class="linkbtn cback" id="pBack">‹ Back</button>
-        <p class="cq">${esc(sym.t)} <span class="${dir > 0 ? "up" : "dn"}">${dir > 0 ? "higher" : "lower"}</span> in ${esc(HORIZONS[horizon].label)}, by…</p>
+        ${dir === 0 ? `<p class="cq">${esc(sym.t)} <span class="flat">about ${esc(money(p0, sym.m))}</span> ${horizon === "1d" ? "tomorrow" : horizon === "1y" ? "in a year" : `in ${esc(HORIZONS[horizon].label)}`}</p><p class="hint" style="margin:0">Right if it ends close to today's price.</p>` : `<p class="cq">${esc(sym.t)} <span class="${dir > 0 ? "up" : "dn"}">${dir > 0 ? "higher" : "lower"}</span> in ${esc(HORIZONS[horizon].label)}, by…</p>
         <div class="csizes">${sizes().map(([l, k], i) => { const v = p0 * Math.exp(dir * k * tm()); return `<button class="csize" data-k="${i}" aria-pressed="${own == null && i === size}"><span><b>${esc(l)}</b><small>${pct((v / p0 - 1) * 100, 1)}</small></span><b class="num">${esc(money(v, sym.m))}</b></button>`; }).join("")}</div>
-        ${typing ? `<label class="cown"><input id="pOwn" class="num" inputmode="decimal" placeholder="A price, or a % like 2.5%" value="${own != null ? esc(String(+own.toPrecision(8))) : ""}"></label><p class="hint ${own != null && !chk.ok ? "bad" : ""}" id="pOwnMsg" style="margin:6px 0 0">${own != null ? esc(chk.ok ? `${pct((own / p0 - 1) * 100, 1)} from now` : chk.error) : "Type a price, or a percentage with %."}</p>`
-          : `<button class="linkbtn cownbtn" id="pOwnOpen">Type my own price</button>`}
+        ${dir === 0 ? "" : typing ? `<label class="cown"><input id="pOwn" class="num" inputmode="decimal" placeholder="A price, or a % like 2.5%" value="${own != null ? esc(String(+own.toPrecision(8))) : ""}"></label><p class="hint ${own != null && !chk.ok ? "bad" : ""}" id="pOwnMsg" style="margin:6px 0 0">${own != null ? esc(chk.ok ? `${pct((own / p0 - 1) * 100, 1)} from now` : chk.error) : "Type a price, or a percentage with %."}</p>`
+          : `<button class="linkbtn cownbtn" id="pOwnOpen">Type my own price</button>`}`}
         ${post && canPost ? `<div class="opts" style="margin-top:12px">${groups.map((x) => `<button class="opt" data-pg="${esc(x.id)}" aria-pressed="${x.id === g}">${esc(x.name)}</button>`).join("")}</div>` : ""}
-        <button class="btn primary block" id="pGo" style="margin-top:16px" ${chk.ok ? "" : "disabled"}>${post && canPost ? "Lock in and start challenge" : `Lock in ${esc(money(target, sym.m))}`}</button>
+        <button class="btn primary block" id="pGo" style="margin-top:16px" ${chk.ok ? "" : "disabled"}>${post && canPost ? "Lock in and start challenge" : dir === 0 ? "Lock in No change" : `Lock in ${esc(money(target, sym.m))}`}</button>
         <p class="hint" style="text-align:center;margin-top:8px">Scored ${esc(scored())} · Not advice</p>
         <div class="cmore"><button class="linkbtn" id="pPubT">${pub ? "Public once scored" : "Private"} · <b>Change</b></button>${canPost ? `<button class="linkbtn" id="pPostT">${post ? "Don't post to a group" : "Post to a group"}</button>` : ""}</div>`;
       body.querySelector("#pBack").onclick = () => { step = "dir"; draw(); };
@@ -741,7 +743,7 @@ export function openPredictSheet(sym, onDone, prefer = null) {
         const target = price();
         try {
           if (post && canPost) await startChallenge({ g, sym, horizon, target, p0, sigmaD, counts: true });
-          else await makePrediction({ sym, horizon, target, p0, sigmaD, pub });
+          else await makePrediction({ sym, horizon, target, p0, sigmaD, pub, flat: dir === 0 });
           lockFeel(go); made = { target, group: post && canPost ? g : null }; onDone?.();
           setTimeout(() => { step = "done"; draw(); }, 300);
         } catch (e) { go.disabled = false; go.textContent = label; const m = body.querySelector("#pErr") || go.insertAdjacentElement("afterend", Object.assign(document.createElement("p"), { id: "pErr" })); m.className = "hint bad"; m.style.margin = "8px 0 0"; m.textContent = e.message || "Couldn't save. Try again."; }
@@ -750,7 +752,7 @@ export function openPredictSheet(sym, onDone, prefer = null) {
     // 3 · locked in, with the optional extras
     const drawDone = () => {
       body.innerHTML = `<div class="cdone"><svg viewBox="0 0 80 80" aria-hidden="true" class="done-ring"><circle cx="40" cy="40" r="34"/><path d="M26 41l9 9 19-20"/></svg>
-          <p>${esc(sym.t)} at <b class="num">${esc(money(made.target, sym.m))}</b>, scored ${esc(scored())}.${made.group ? ` Posted to ${esc(groupName(made.group))}.` : ""}</p></div>
+          <p>${esc(sym.t)} ${made.target === p0 ? "about" : "at"} <b class="num">${esc(money(made.target, sym.m))}</b>${made.target === p0 ? " (no change)" : ""}, scored ${esc(scored())}.${made.group ? ` Posted to ${esc(groupName(made.group))}.` : ""}</p></div>
         ${made.group ? "" : `<div class="label" style="margin-top:20px">How sure are you? <span class="opt-l">optional</span></div>
         <div class="opts">${SURE.map(([k, l]) => `<button class="opt" data-sure="${k}" aria-pressed="${sure === k}">${l}</button>`).join("")}</div>
         <div class="label" style="margin-top:16px">Based on <span class="opt-l">optional</span></div>

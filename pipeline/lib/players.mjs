@@ -6,7 +6,7 @@
 //                    Spot on → Far off), streak and bestStreak (days in a row with a 1-day call, Indian time)
 //   boards/public    rows (top 100 public players), of (how many are ranked)
 // A card never holds a price call. Followers are counted from everyone's "following" lists (which stay private).
-import { HORIZONS } from "../../web/js/score.js";
+import { HORIZONS, isRight } from "../../web/js/score.js";
 import { mixOf, streakOf, streakBadges } from "../../web/js/habit.js";
 import { levelOf } from "../../web/js/progress.js";
 
@@ -26,7 +26,7 @@ export function record(results, now = Date.now(), open = []) {
   const spot = results.filter((r) => r.label === "Spot on").length;
   const st = streakOf([...results, ...open], now); // calls still open count too: a streak is about making calls
   const badges = [spot && "First Spot on", n >= 10 && "10 scored", n >= 100 && "100 scored", new Set(results.map((r) => r.horizon)).size === Object.keys(HORIZONS).length && "All 4 periods", ...streakBadges(st.best)].filter(Boolean);
-  const right = results.filter((r) => r.p0 != null && r.actual != null && (r.target > r.p0) === (r.actual > r.p0)).length;
+  const right = results.filter(isRight).length;
   return { spot, closePlus: n ? Math.round((close / n) * 100) : null, right: n ? Math.round((right / n) * 100) : null, best, badges, mix: mixOf(results), streak: st.n, bestStreak: st.best, level: levelOf(results).level };
 }
 
@@ -45,12 +45,13 @@ export async function publishPlayers(db, accounts, scored = new Map(), { now = D
   let wrote = 0;
   for (const a of named) {
     const ps = a.pscore || null, prev = old.get(a.id);
-    const line = (Array.isArray(prev?.line) ? prev.line : []).filter((x) => x.d > from && x.d !== today);
+    // the score's daily line; a card from before score v2 starts its line again, so two methods never share one line
+    const line = (prev?.v === 2 && Array.isArray(prev.line) ? prev.line : []).filter((x) => x.d > from && x.d !== today);
     if (ps?.score != null) line.push({ d: today, s: ps.score });
     const rec = scored.has(a.id) ? record(scored.get(a.id), now, open.get(a.id) || []) : { spot: prev?.spot ?? 0, closePlus: prev?.closePlus ?? null, right: prev?.right ?? null, level: prev?.level ?? 0, best: prev?.best ?? null, badges: prev?.badges ?? [], mix: prev?.mix ?? null, streak: prev?.streak ?? 0, bestStreak: prev?.bestStreak ?? 0 };
     const doc = { u: a.username, score: ps?.score ?? null, band: ps?.band ?? null, prov: ps ? !!ps.provisional : true, n: ps?.n || 0,
       followers: followers.get(a.id) || 0, public: a.public === true, rank: rank.get(a.id) || null, of: ranked.length,
-      ...rec, since: String(a.createdAt || "").slice(0, 7), line };
+      ...rec, since: String(a.createdAt || "").slice(0, 7), line, v: 2 };
     if (prev && same(Object.fromEntries(Object.keys(doc).map((k) => [k, prev[k] ?? null])), Object.fromEntries(Object.entries(doc).map(([k, v]) => [k, v ?? null])))) continue;
     await db.set(`players/${a.id}`, { ...doc, at: new Date(now).toISOString() }); wrote++;
   }

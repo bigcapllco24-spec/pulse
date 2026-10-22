@@ -35,9 +35,9 @@ check("crowd: never carries a price", !JSON.stringify(crowd).match(/target|actua
 
 // record, next band
 check("mix: calls per label, Spot on → Far off, voided ones left out", JSON.stringify(H.mixOf([{ label: "Close" }, { label: "Close" }, { label: "Far off" }, { status: "void", label: "Close" }])) === "[0,0,2,0,1]");
-const nb = H.nextBand(662);
-check("next band: 662 is 38 points from Very good, 62% through Good", nb.name === "Very good" && nb.need === 38 && Math.abs(nb.share - 0.62) < 1e-9 && nb.here === "Good", JSON.stringify(nb));
-check("next band: none above Exceptional; nothing without a score", H.nextBand(850).name === null && H.nextBand(null) === null);
+const nb = H.nextBand(620);
+check("next band: 620 is 30 points from Proven, 70% through Building", nb.name === "Proven" && nb.need === 30 && Math.abs(nb.share - 0.7) < 1e-9 && nb.here === "Building", JSON.stringify(nb));
+check("next band: none above Proven; nothing without a score", H.nextBand(720).name === null && H.nextBand(null) === null);
 const rec = record([r("CRYPTO:BTC", "Spot on", "2026-10-13T04:00:00Z")], now, [call("2026-10-14T04:00:00Z")]);
 check("player card: carries the mix and a streak that counts calls still open", rec.mix[0] === 1 && rec.streak === 2, JSON.stringify(rec));
 

@@ -307,7 +307,7 @@ def run(pw, base):
         check("groups: joining by link adds ben to the group", eventually(lambda: ben in ((doc(f"groups/{gid}") or {}).get("members") or {}), 12), json.dumps(doc(f"groups/{gid}"))[:200])
         iphone.wait_for_selector("#grp", timeout=10000); iphone.click("#grNew"); iphone.wait_for_selector("#cGo")
         iphone.click("#sheet [data-h='1h']"); iphone.wait_for_timeout(300)
-        hi = float(re.search(r"\$([\d,.]+) or higher", iphone.inner_text("#cInMsg")).group(1).replace(",", ""))
+        hi = float(re.search(r"\$([\d,.]+)", iphone.inner_text("#sheet .pnow")).group(1).replace(",", ""))  # the price now
         typein(iphone, "#cIn", f"{hi * 1.01:.4f}"); iphone.click("#cGo")
         ch = eventually(lambda: docs(f"groups/{gid}/challenges"), 12)
         check("groups: starting a challenge saves it with ana's pick", ch and ana in (ch[0].get("picked") or {}), json.dumps(ch)[:200])
@@ -316,7 +316,7 @@ def run(pw, base):
             android.click(".tabbar [data-tab=play]")
             if eventually(lambda: android.locator("[data-pick]").count() > 0, 15):
                 android.click("[data-pick] >> nth=0"); android.wait_for_selector("#kGo", timeout=10000)
-                lo = re.search(r"\$([\d,.]+) or higher", android.inner_text("#kInMsg"))
+                lo = re.search(r"\$([\d,.]+)", android.inner_text("#sheet .pnow"))  # the price now
                 typein(android, "#kIn", f"{float(lo.group(1).replace(',', '')) * 1.01:.4f}" if lo else "1")
                 android.click("#kGo")
                 check("groups: ben's pick is saved and the challenge shows he picked", eventually(lambda: ben in ((doc(f"groups/{gid}/challenges/{ch[0]['_id']}") or {}).get("picked") or {}), 12))

@@ -2,7 +2,7 @@
 // Firestore document is accounts/{uid}, readable and writable only by that sign-in.
 // Without a Firebase config the app runs in demo mode and keeps everything in this browser.
 import { CONFIG } from "../config.js";
-import { HORIZONS, checkPrediction, canPredict, profileScore, dueAt, relabel } from "./score.js";
+import { HORIZONS, checkPrediction, canPredict, dueAt, relabel } from "./score.js";
 import { settle, rowCache, SETTLE_DELAY } from "./predict.js";
 
 const FB = "https://www.gstatic.com/firebasejs/10.14.1/";
@@ -430,9 +430,10 @@ export async function setUsername(raw) {
 // ---- prediction game. One open prediction per coin and period; it can't be changed or cancelled once made.
 const PERIOD = (h) => HORIZONS[h].label.replace(/^1 /, "");
 // group: { g, c, endAt } when the prediction is also a group pick (demo mode only; live ones go in social.js's batch)
-export async function makePrediction({ sym, horizon, target, p0, sigmaD, group = null, sure = null, basis = null, pub = null }) {
+// flat: a "No change" call (the target is the price shown, exactly).
+export async function makePrediction({ sym, horizon, target, p0, sigmaD, flat = false, group = null, sure = null, basis = null, pub = null }) {
   if (!canPredict(store.preds, sym.key, horizon)) throw new Error(`You already have an open ${PERIOD(horizon)} call on ${sym.t}.`);
-  const chk = checkPrediction({ horizon, p0, target, sigmaD });
+  const chk = checkPrediction({ horizon, p0, target, sigmaD, flat });
   if (!chk.ok) throw new Error(chk.error);
   const doc = { coin: sym.key, t: sym.t, horizon, target, clientP0: p0, clientSigma: sigmaD, ...(sure ? { sure } : {}), ...(basis ? { basis } : {}), ...(pub != null ? { pub } : {}) };
   if (store.mode === "demo") {
@@ -511,17 +512,12 @@ export async function settleHere(fetchRows, now = Date.now()) {
 // When the next open prediction is due (ms), to wake up for it.
 export const nextDue = () => Math.min(Infinity, ...store.preds.map((p) => Date.parse(dueAt(p)) + SETTLE_DELAY));
 
-// The profile score: written by the data job for live accounts, worked out on the phone in demo mode, and on the phone
-// straight away when a prediction has just been scored here (the job writes the same number a few minutes later).
+// The score: worked out by the data job only (pipeline/lib/score2.mjs) and stored on the account. A call scored on this
+// phone a moment ago shows at once in Calls, marked "confirming"; the score moves when the job confirms it (within
+// 15 minutes). In demo mode there's no job, so there's a score only if one was put on the demo account.
 export function myScore() {
-  const here = pendingHere().filter((r) => r.status === "scored");
-  if (store.mode !== "demo" && here.length && store.results.length < 300) {
-    const ps = profileScore([...store.results.filter((r) => r.status === "scored"), ...here]);
-    if (ps.score != null) return { score: ps.score, band: ps.band, provisional: ps.provisional, n: ps.n, here: true };
-  }
-  if (store.mode !== "demo") return store.data?.pscore || null;
-  const ps = profileScore(store.results.filter((r) => r.status === "scored"));
-  return ps.score == null ? null : { score: ps.score, band: ps.band, provisional: ps.provisional, n: ps.n };
+  const ps = store.data?.pscore || null;
+  return ps && pendingHere().some((r) => r.status === "scored") ? { ...ps, confirming: true } : ps;
 }
 
 // beforeDelete: leaves groups and the like first (social.js), while the account still exists to prove membership

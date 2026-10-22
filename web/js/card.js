@@ -5,7 +5,7 @@ import { esc } from "./ui.js";
 import { BANDS, CHANCE, PROVISIONAL_UNDER, SCORE_MIN, SCORE_MAX } from "./score.js";
 import { LABELS, nextBand } from "./habit.js";
 
-export const BAND_CLASS = { Exceptional: "b5", "Very good": "b4", Good: "b3", Fair: "b2", Building: "b1" };
+export const BAND_CLASS = { Proven: "b5", Building: "b3", "Below guessing": "b1" };
 export const SHORT = { "30m": "30 min", "1h": "1 hour", "1d": "1 day", "1y": "1 year" };
 const ADJ = { "30m": "30-minute", "1h": "1-hour", "1d": "1-day", "1y": "1-year" };
 const num = (s) => `<span class="num">${s}</span>`;
@@ -28,7 +28,7 @@ const G = { cx: 150, cy: 150, r: 116 };
 const P = (v) => { const a = Math.PI * (1 - (v - SCORE_MIN) / (SCORE_MAX - SCORE_MIN)); return [G.cx + G.r * Math.cos(a), G.cy - G.r * Math.sin(a)]; };
 const arc = (a, b) => { const p = P(a), q = P(b); return `M${p[0].toFixed(1)} ${p[1].toFixed(1)} A${G.r} ${G.r} 0 0 1 ${q[0].toFixed(1)} ${q[1].toFixed(1)}`; };
 export function dialSvg(score, { sub = "out of 900" } = {}) {
-  const bands = [...BANDS].reverse().map(([min, name], i, a) => [min, i + 1 < a.length ? a[i + 1][0] : SCORE_MAX, name]); // Building … Exceptional
+  const bands = [...BANDS].reverse().map(([min, name], i, a) => [min, i + 1 < a.length ? a[i + 1][0] : SCORE_MAX, name]); // lowest band first
   const segs = bands.map(([lo, hi, name]) => `<path d="${arc(lo + 3, hi - 3)}" style="stroke:var(--${BAND_CLASS[name]});opacity:${score != null && lo <= score ? 1 : 0.28}"/>`).join("");
   const m = score != null ? P(score) : null;
   return `<svg class="pc2-dial" viewBox="0 0 300 172" role="img" aria-label="${score != null ? `Score ${score} of 900` : "Score 0: no calls scored yet"}">${segs}
@@ -89,7 +89,7 @@ export function cardHtml(c, { mine = false, actions = "", common = [] } = {}) {
       ${dialSvg(score)}
       ${score == null ? `<div class="pc2-next"><b>${mine ? `Make ${PROVISIONAL_UNDER} calls to get your score` : "No scored calls yet"}</b><span class="hint">The first scored call starts it at about ${CHANCE}, what guessing scores.</span>${mine ? `<button class="btn primary block" data-first>Make your first call</button>` : ""}</div>`
         : nb?.name ? `<div class="pc2-next"><div class="pc2-row"><b>${num(nb.need)} point${nb.need === 1 ? "" : "s"} to ${esc(nb.name)}</b><span class="hint">${Math.round(nb.share * 100)}% there</span></div><span class="pc2-bar" aria-hidden="true"><i style="width:${(nb.share * 100).toFixed(1)}%"></i></span><div class="pc2-row hint"><span>${esc(nb.here)} · ${nb.from}</span><span>${esc(nb.name)} · ${nb.to}</span></div></div>`
-        : `<div class="pc2-next"><b>Exceptional</b><span class="hint">The top band, from 800.</span></div>`}
+        : `<div class="pc2-next"><b>${esc(BANDS[0][1])}</b><span class="hint">The top band, from ${BANDS[0][0]}. Every point above it has to be earned over many calls.</span></div>`}
       <div class="pc2-key">${[...BANDS].reverse().map(([min, name]) => `<span><i style="background:var(--${BAND_CLASS[name]})"></i>${esc(name)} ${num(min)}</span>`).join("")}</div>
     </div>
     <div class="pc2-tiles">${tiles.map(([v, t, h, cls]) => `<div class="pc2-tile"><b class="${cls || ""}">${v}</b><span class="t">${t}</span><span class="hint">${h}</span></div>`).join("")}</div>
@@ -103,10 +103,8 @@ export function cardHtml(c, { mine = false, actions = "", common = [] } = {}) {
   </div>`;
 }
 
-// the help sheet behind "How it works"
-export const HOW_SCORE = `<p>Your prediction score runs from 300 to 900 and compares players fairly across coins and time periods.</p>
-  <p class="hint">Each call is judged by how far off it was, measured in <b>typical moves</b> for that coin and period, so a 3% miss over 30 minutes counts as far off but over a year as spot on.</p>
-  <p class="hint">The score mixes closeness (45%), how steady your results are (25%), whether the price went the way you called (15%), whether you beat guessing "no change" (10%) and how widely you play (5%). Longer calls count more: a 1-year result moves it about 40 times as much as a 30-minute one. Results fade slowly over time.</p>
-  <p class="hint">Everyone starts at ${CHANCE}, about what random guessing scores. It's provisional until ${PROVISIONAL_UNDER} calls are scored.</p>
+// the help sheet behind "How it works": the same general points as About your score, never how it's worked out
+export const HOW_SCORE = `<p>The score runs from 300 to 900. Everyone starts at ${CHANCE}, about what guessing scores, and it's provisional until ${PROVISIONAL_UNDER} calls are scored.</p>
+  <p class="hint">Calling the right direction matters. Getting close to the real price matters too. One call can be luck: the score shows skill over many calls, so give it about 30.</p>
   <div class="pc2-key" style="margin-top:12px">${[...BANDS].reverse().map(([min, name]) => `<span><i style="background:var(--${BAND_CLASS[name]})"></i>${esc(name)} ${num(min)}</span>`).join("")}</div>
   <p class="hint">A learning game: no money, nothing to buy, and never advice.</p>`;

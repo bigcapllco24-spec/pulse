@@ -35,14 +35,14 @@ const db = {
 const made = NOW - 3 * 3600e3, endAt = iso(made + 2 * 3600e3); // a 1-hour challenge that someone joined an hour late
 const shared = await settle({ coin: "CRYPTO:BTC", t: "BTC", horizon: "1h", target: priceOf(made) * Math.exp(tm), createdAt: iso(made), endAt }, { now: NOW, rows: rowCache(fake(NOW)) });
 
-// 2. a group, a challenge and three picks: close up, far down, and one the price moved onto before the lock
+// 2. a group, a challenge and three picks: close up, far down, and a typo far outside what the coin can do
 const at = NOW - 90 * MIN, end = at + 60 * MIN, g = "g".repeat(20), c = "c".repeat(20);
 store.set(`groups/${g}`, { name: "Weekend crew", owner: "a1", ownerName: "asha", members: { a1: "asha", a2: "veer", a3: "rohan", a4: "dev" } });
 store.set(`groups/${g}/challenges/${c}`, { coin: "CRYPTO:BTC", t: "BTC", horizon: "1h", by: "a1", byName: "asha", at: iso(at), joinUntil: iso(at + 20 * MIN), endAt: iso(end), picked: { a1: "asha", a2: "veer", a3: "rohan" }, status: "open" });
 const pick = (a, target, mins, counts) => store.set(`accounts/${a}/picks/${c}`, { g, c, coin: "CRYPTO:BTC", t: "BTC", horizon: "1h", target, counts, createdAt: iso(at + mins * MIN), endAt: iso(end) });
 pick("a1", priceOf(end) * 1.0001, 0, true); // nearly exact, called up
 pick("a2", priceOf(at + 5 * MIN) * Math.exp(-2 * tm), 5, false); // two typical moves down: wrong way
-pick("a3", priceOf(at + 10 * MIN) * 1.00001, 10, false); // the price is already there: voided at the lock
+pick("a3", 1, 10, false); // "$1": voided at the lock
 store.set(`groups/${g}/challenges/${"d".repeat(20)}`, { t: "ETH", horizon: "1d", by: "a1", byName: "asha", at: iso(NOW - 10 * MIN), joinUntil: iso(NOW + 110 * MIN), endAt: iso(NOW + DAY - 10 * MIN), picked: { a1: "asha" }, status: "open" });
 store.set(`accounts/a1/picks/${"d".repeat(20)}`, { g, c: "d".repeat(20), coin: "CRYPTO:ETH", t: "ETH", horizon: "1d", target: 1, counts: false, createdAt: iso(NOW - 10 * MIN), endAt: iso(NOW + DAY - 10 * MIN) });
 store.set(`groups/${"z".repeat(20)}/challenges/${"e".repeat(20)}`, { t: "BTC", horizon: "1h", by: "x", status: "open", endAt: iso(NOW), joinUntil: iso(NOW), picked: { x: "x" } }); // its group was deleted

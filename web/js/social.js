@@ -6,7 +6,7 @@
 // player's own picks until the data job scores them; groups only ever see who picked, then how close each was.
 import { levelAt } from "./progress.js";
 import { store, save, ls, randomId, fbx, connected, isoDates, myScore, makePrediction } from "./store.js";
-import { HORIZONS, BANDS, checkPrediction, canPredict, challengeResults, addPoints } from "./score.js";
+import { HORIZONS, bandOf, checkPrediction, canPredict, challengeResults, addPoints } from "./score.js";
 import { settle, rowCache, SETTLE_DELAY } from "./predict.js";
 
 export const GROUP_MAX = 20, GROUPS_MAX = 10, FOLLOW_MAX = 200, RANK_MIN = 10;
@@ -28,7 +28,7 @@ export const me = () => (store.mode === "demo" ? "me" : store.id);
 export const myName = () => store.data?.username || "";
 const live = () => store.mode === "live";
 const nowIso = () => new Date().toISOString();
-export const bandOf = (score) => (score == null ? null : BANDS.find(([min]) => score >= min)[1]);
+export { bandOf };
 
 // ---------- demo mode: a made-up cast, stored on this phone
 const CAST = [["kiran", 862, 340], ["lumen", 841, 198], ["tara.q", 829, 260], ["omar", 822, 155], ["asha", 814, 212], ["nilufer", 771, 90], ["rohan", 705, 64], ["ashwin", 655, 40], ["dev", 598, 22], ["aslan", 552, 4]]

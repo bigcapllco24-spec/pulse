@@ -19,6 +19,7 @@ fi
 [[ $only == all || $only == pipeline ]] && run node tests/pipeline.test.mjs
 [[ $only == all || $only == levels ]] && run node tests/levels.test.mjs
 [[ $only == all || $only == score ]] && run node tests/score.test.mjs $verbose
+[[ $only == all || $only == score2 ]] && run node tests/score2.test.mjs $verbose
 [[ $only == all || $only == predict ]] && run node tests/predict.test.mjs $verbose
 [[ $only == all || $only == social ]] && run node tests/social.test.mjs $verbose
 [[ $only == all || $only == habit ]] && run node tests/habit.test.mjs $verbose

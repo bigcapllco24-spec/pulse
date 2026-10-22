@@ -10,6 +10,7 @@ import { OVERLAYS, PANELS, MAX_OVERLAYS, maxPanels, SETS, picks, FEED_MAX } from
 import { D, view, storiesFor, RANGE_LABEL, resolveInterval, dailyOf } from "./data.js";
 import { $, esc, money, pct, arrow, fmtDay, ago, toast, haptic, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
 import { openLearn } from "./interact.js";
+import { isRight } from "./score.js";
 import { APP, buildFeed, showTab, currentSyms, listName, applyTheme, doRefresh, backLabel, openDash } from "./app.js";
 import { openAvatarSheet } from "./play.js";
 import { openPage, closePage, backBtn, pageOpen } from "./nav.js";
@@ -164,14 +165,14 @@ function coinsView(el) {
   const cs = chartSettings(), syms = currentSyms(), wl = watchlists();
   const cur = store.data?.settings?.list || "all", w = wl.find((x) => x.id === cur), editing = APP.dashEdit && w;
   // each row's %, sparkline and colour all describe the same period: the one that coin's chart shows (1D = 24 hours)
-  const rec = (key) => { const rs = store.results.filter((r) => r.coin === key && r.status === "scored"); return { n: rs.length, ok: rs.filter((r) => (r.target > r.p0) === (r.actual > r.p0)).length }; };
+  const rec = (key) => { const rs = store.results.filter((r) => r.coin === key && r.status === "scored"); return { n: rs.length, ok: rs.filter(isRight).length }; };
   const withData = syms.map((s) => { const v = view(s.key, dailyOf(cs)), rv = v && view(s.key, chartSettings(s.key));
     const chg = rv ? rv.windowChange : v?.daily.now.changePct, typ = v?.daily.now.atrPct, x = typ ? Math.abs(chg) / typ : null;
     return { s, v, rv, chg, x, r: rec(s.key), waiting: store.preds.filter((p) => p.coin === s.key).length }; }).filter((x) => x.v);
   const noData = syms.filter((s) => !view(s.key, dailyOf(cs)));
   const sort = APP.dashSort || "move";
   if (!editing) withData.sort((a, b) => sort === "az" ? a.s.t.localeCompare(b.s.t) : sort === "record" ? (b.r.n ? b.r.ok / b.r.n : -1) - (a.r.n ? a.r.ok / a.r.n : -1) || b.r.n - a.r.n : sort === "uncalled" ? (a.waiting + a.r.n) - (b.waiting + b.r.n) : (b.x ?? 0) - (a.x ?? 0));
-  const moving = withData.filter((x) => x.x != null && x.x >= 1.5).length, all = store.results.filter((r) => r.status === "scored"), allOk = all.filter((r) => (r.target > r.p0) === (r.actual > r.p0)).length;
+  const moving = withData.filter((x) => x.x != null && x.x >= 1.5).length, all = store.results.filter((r) => r.status === "scored"), allOk = all.filter(isRight).length;
   const row = ({ s, v, rv, chg: c, x, r, waiting }, i) => {
     return editing ? `<div class="row"><span class="main"><span class="t">${esc(s.t)}</span><span class="s">${esc(s.n)}</span></span>
       <button class="btn ghost sm" data-up="${esc(s.key)}" ${i === 0 ? "disabled" : ""} aria-label="Move ${esc(s.t)} up">↑</button><button class="btn ghost sm" data-dn="${esc(s.key)}" ${i === withData.length - 1 ? "disabled" : ""} aria-label="Move ${esc(s.t)} down">↓</button><button class="btn ghost sm danger" data-rm="${esc(s.key)}" aria-label="Remove ${esc(s.t)}">✕</button></div>`

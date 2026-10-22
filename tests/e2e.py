@@ -72,6 +72,8 @@ def active(p):
     return p.evaluate("(()=>{const c=document.querySelector('.card.active');return c?[c.getAttribute('aria-label'),c.dataset.view||'main',+c.dataset.i]:[null,null,-1]})()")
 def demo_preds(p): return p.evaluate("JSON.parse(localStorage.getItem('pl.demoPreds')||'{}')")
 def set_results(p, rs): p.evaluate("(rs)=>{const k='pl.demoPreds'; const d=JSON.parse(localStorage.getItem(k)||'{}'); d.results=rs; localStorage.setItem(k, JSON.stringify(d));}", rs)
+def set_score(p, ps):  # the score is worked out by the data job; in demo mode the test puts one on the account
+    p.evaluate("(ps)=>{const a=JSON.parse(localStorage.getItem('pl.demoAccount')); a.pscore=ps; localStorage.setItem('pl.demoAccount', JSON.stringify(a))}", ps)
 def _iso(ms): return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(ms / 1000)) + ".000Z"
 def fake_results(n, pub=True):
     now = time.time() * 1000; out = []
@@ -223,8 +225,14 @@ def calls_test(b):
     p.click("#abMake"); p.wait_for_timeout(600)
     pk = sheet_text(p)
     p.click("#sheet [data-cp='0']"); p.wait_for_timeout(600)
-    check("calls: Make a call lists your coins; picking one opens Call it for that coin", "Make a call" in pk and p.locator("#sheet [data-dir]").count() == 2 and "Call " in p.inner_text("#shTitle"), pk[:120].replace("\n", " "))
-    close_sheet(p)
+    check("calls: Make a call lists your coins; picking one opens Call it for that coin, with Higher, Lower and No change", "Make a call" in pk and p.locator("#sheet [data-dir]").count() == 3 and p.is_visible("#sheet .cflat") and "Call " in p.inner_text("#shTitle"), pk[:120].replace("\n", " "))
+    p.click("#sheet [data-dir='0']"); p.wait_for_timeout(300)
+    s0 = sheet_text(p)
+    check("call it: No change skips how far and locks in the price shown", "no change" in p.inner_text("#pGo").lower() and not p.locator("#sheet .csize").count() and "close to today's price" in s0, s0[:160].replace("\n", " "))
+    p.click("#pGo"); p.wait_for_timeout(1200)
+    pr = [x for x in demo_preds(p).get("open", []) if x.get("target") == x.get("clientP0")]
+    check("call it: a No change call is saved with the price shown as its target", len(pr) == 1, json.dumps(demo_preds(p).get("open", []))[:200])
+    p.click("#pDone"); p.wait_for_timeout(500)
     check("calls: a call that went the wrong way is labelled Wrong way", "Wrong way" in t)
     p.click("#play [data-res='0']"); p.wait_for_timeout(1500)
     s = sheet_text(p)
@@ -250,17 +258,22 @@ def you_test(b):
     p.click(".tabbar [data-tab=you]"); p.wait_for_timeout(700)
     y = p.inner_text("#you")
     check("you: with no calls, You says to make the first one, the score waits at 550 and the breakdowns are locked until level 3", "Make your first call" in y and "550" in y and "Opens at level 3" in y and "Level 0" in y, y[:160].replace("\n", " "))
-    set_results(p, fake_results(9)); p.reload(); p.wait_for_timeout(3000); p.click(".tabbar [data-tab=you]"); p.wait_for_timeout(700)
+    set_results(p, fake_results(9)); set_score(p, {"score": 561, "band": "Building", "n": 9, "provisional": True, "v": 2, "flag": None, "held": False}); p.reload(); p.wait_for_timeout(3000); p.click(".tabbar [data-tab=you]"); p.wait_for_timeout(700)
     y = p.inner_text("#you")
     check("you: with 9 calls it's Too early to tell, the score is provisional and the right-direction tiles show counts", "Too early to tell" in y and "9 calls so far" in y and "Provisional" in y and "of 9 calls" in y and "Level 1" in y, y[:200].replace("\n", " "))
-    p.evaluate("localStorage.setItem('pl.level', '1')"); set_results(p, fake_results(40)); p.reload(); p.wait_for_timeout(3500)
+    p.evaluate("localStorage.setItem('pl.level', '1')"); set_results(p, fake_results(40)); set_score(p, {"score": 668, "band": "Proven", "n": 40, "provisional": False, "v": 2, "flag": "always up", "held": True, "was": {"score": 702, "v": 1}}); p.reload(); p.wait_for_timeout(3500)
     lv = sheet_text(p) if p.is_visible("#sheet") else ""
     check("levels: going up a level shows the level-up sheet with what it opens", "Level up" in lv and "Level 3" in lv and "30 calls scored" in lv and "breakdowns" in lv, lv[:160].replace("\n", " "))
     if p.is_visible("#sheet"): close_sheet(p)
     p.click(".tabbar [data-tab=you]"); p.wait_for_timeout(700)
     y = p.inner_text("#you")
-    check("you: with 40 calls the verdict is plain words, the score has a likely range, and the breakdowns open (being sure, what works, by period)", ("Still learning" in y or "reading it well" in y) and "likely range" in y and "Does being sure help" in y and "What works for you" in y and "By time period" in y and "Level 3" in y, y[:200].replace("\n", " "))
-    check("you: Where you rank lists Everyone, People you follow and Find players; no How the score works explainer", "Where you rank" in y and "Everyone" in y and "People you follow" in y and p.is_visible("#plFind") and "How the score works" not in y)
+    check("you: with 40 calls and a Proven score the verdict is Reading it well; the score shows its band and no range; the breakdowns open", "reading it well" in y and "668" in y and "Proven" in y and "likely range" not in y.lower() and "Does being sure help" in y and "What works for you" in y and "By time period" in y and "Level 3" in y, y[:200].replace("\n", " "))
+    check("you: quiet lines under the score: progress held, and a pattern named in plain words", "Some of your progress is held until your record is longer." in y and "Most of your calls are up." in y)
+    check("you: a one-time note says the score was worked out again from all calls, with the old number", "worked out again from all your scored calls" in y and "702" in y)
+    p.click("#you [data-v2ok]"); p.wait_for_timeout(300); p.click(".tabbar [data-tab=play]"); p.wait_for_timeout(300); p.click(".tabbar [data-tab=you]"); p.wait_for_timeout(500)
+    check("you: Got it hides the note for good", "worked out again" not in p.inner_text("#you"))
+    y = p.inner_text("#you")
+    check("you: Where you rank lists Everyone, People you follow and Find players; no How the score works explainer", "Where you rank" in y and "Everyone" in y and "People you follow" in y and p.is_visible("#rkFind") and "How the score works" not in y)
     p.click("#youLearn"); p.wait_for_timeout(600)
     l = p.inner_text("#profile")
     check("learn: six short reads on what a score doesn't show", "Before you put money in" in l and p.locator("#profile .dsec.read").count() == 6 and "Leverage" in l, l[:120].replace("\n", " "))
@@ -291,7 +304,7 @@ def people_test(b):
     check("find players: typing searches usernames", "@rohan" in sheet_text(p) and "most followed" not in sheet_text(p).lower())
     p.click("#fpRes [data-a]"); p.wait_for_timeout(900)
     s = sheet_text(p)
-    check("player card: level, followers, a verdict, the score with its likely range, right direction and close or better, Scored calls and Follow", "@rohan" in s and "Level" in s and "follower" in s and "likely" in s and "Right direction" in s and "Close or better" in s and "Scored calls, public" in s and p.is_visible("#pcFollow"), s[:200].replace("\n", " "))
+    check("player card: level, followers, a verdict, the score with its band, right direction and close or better, Scored calls and Follow", "@rohan" in s and "Level" in s and "follower" in s and "Proven" in s and "likely" not in s and "Right direction" in s and "Close or better" in s and "Scored calls, public" in s and p.is_visible("#pcFollow"), s[:200].replace("\n", " "))
     p.click("#pcCalls"); p.wait_for_timeout(700)
     check("public calls: before following, a player's calls stay hidden", "Follow @rohan to see" in sheet_text(p), sheet_text(p)[:100])
     close_sheet(p)
@@ -310,7 +323,7 @@ def people_test(b):
     st = social(); gid = next(iter(st.get("groups", {})), None); grp = st["groups"].get(gid, {}) if gid else {}
     check("groups: a new group records who started it and opens on its own page with a link to share", grp.get("owner") == "me" and grp.get("members", {}).get("me") == "chart_fan" and p.is_visible("#grp") and p.is_visible("#grShare") and p.is_visible("#grNew"), json.dumps(grp)[:160])
     p.click("#grNew"); p.wait_for_timeout(600); p.click("#sheet [data-h='1h']"); p.wait_for_timeout(300)
-    hint = p.inner_text("#cInMsg"); hi = float(re.search(r"\$([\d,.]+) or higher", hint).group(1).replace(",", ""))
+    hi = float(re.search(r"\$([\d,.]+)", p.inner_text("#sheet .pnow")).group(1).replace(",", ""))  # the price now
     typein(p, "#cIn", f"{hi * 1.01:.4f}"); p.wait_for_timeout(200); p.click("#cGo"); p.wait_for_timeout(1500)
     st = social(); ch = (st.get("ch", {}).get(gid) or [{}])[0]
     check("challenge: starting one is the first pick, the friends pick too, and it ends an hour later for everyone", ch.get("horizon") == "1h" and sorted(ch.get("picked", {}).values()) == ["asha", "chart_fan", "dev", "rohan"], json.dumps(ch)[:200])
