@@ -2,7 +2,7 @@
 // with simulated Kraken candles and an in-memory Firestore.
 import { settle, priceAt, intervalFor, sigmaBefore, rowCache } from "../web/js/predict.js";
 import { settlePredictions, settleOpen } from "../pipeline/lib/predictions.mjs";
-import { scorePrediction, typicalMove, HORIZONS } from "../web/js/score.js";
+import { scorePrediction, typicalMove } from "../web/js/score.js";
 
 const MIN = 60e3, DAY = 864e5;
 const NOW = Date.parse("2026-10-11T12:00:00Z");

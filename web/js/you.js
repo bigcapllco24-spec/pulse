@@ -5,7 +5,10 @@ import { store, ls, myScore, pendingHere } from "./store.js";
 import { CHANCE, SCORE_MIN, SCORE_MAX, PROVISIONAL_UNDER, HORIZONS, isRight, bandOf } from "./score.js";
 import { $, esc, openSheet } from "./ui.js";
 import { myName, myCard } from "./social.js";
-import { verdictOf, VERDICT_AT, myLevel, ranksView, openAvatarSheet, myFullCard, levelAvatar, SURE, BASIS, resultRow, openResult, openAboutScore, openCoinPicker } from "./play.js";
+import { verdictOf, VERDICT_AT, myLevel, levelAvatar, resultRow, openResult, openAboutScore, openCoinPicker } from "./calls.js";
+import { ranksView, myFullCard } from "./people.js";
+import { openAvatarSheet } from "./account.js";
+import { SURE, BASIS } from "./callit.js";
 import { backLabel } from "./app.js";
 import { openPage, closePage, backBtn } from "./nav.js";
 import { openProfile } from "./pages.js";
@@ -14,7 +17,6 @@ import { svgIcon, cardHtml } from "./card.js";
 import { UNLOCKS, callsFor } from "./progress.js";
 
 export function initYou() {}
-const num = (s) => `<span class="num">${s}</span>`;
 const pc = (a, b) => (b ? Math.round((a / b) * 100) : null);
 
 export function renderYou() {

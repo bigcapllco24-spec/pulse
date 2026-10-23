@@ -1,5 +1,5 @@
 // Coins (watchlists and alerts), the settings pages opened from the avatar sheet, sheets (add coins, watchlists,
-// switcher, chart, indicators, lines), Your market, the settings pages and Learn. The Calls tab and people live in play.js.
+// switcher, chart, indicators, lines), Your market, the settings pages and Learn. The Calls tab is calls.js; people groups.js and people.js.
 import { CONFIG } from "../config.js";
 import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, listFeedback, setFeedbackStatus, myUid, signOutDevice } from "./store.js";
 import { leaveAllGroups, deleteMySocial } from "./social.js";
@@ -7,12 +7,13 @@ import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./sea
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
 import { sparkline } from "./chart.js";
 import { OVERLAYS, PANELS, MAX_OVERLAYS, maxPanels, SETS, picks, FEED_MAX } from "./studies.js";
-import { D, view, storiesFor, RANGE_LABEL, resolveInterval, dailyOf } from "./data.js";
-import { $, esc, money, pct, arrow, fmtDay, ago, toast, haptic, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
+import { D, view, RANGE_LABEL, resolveInterval, dailyOf } from "./data.js";
+import { $, esc, money, pct, fmtDay, ago, toast, haptic, openSheet, setSheetBody, closeSheet, DISCLAIMER } from "./ui.js";
 import { openLearn } from "./interact.js";
 import { isRight } from "./score.js";
-import { APP, buildFeed, showTab, currentSyms, listName, applyTheme, doRefresh, backLabel, openDash } from "./app.js";
-import { openAvatarSheet } from "./play.js";
+import { APP, showTab, currentSyms, listName, applyTheme, doRefresh, backLabel, openDash } from "./app.js";
+import { buildFeed } from "./feed.js";
+import { openAvatarSheet } from "./account.js";
 import { openPage, closePage, backBtn, pageOpen } from "./nav.js";
 
 const symDoc = (r) => ({ key: r.key, t: r.t, n: r.n, m: r.m, ty: r.ty });

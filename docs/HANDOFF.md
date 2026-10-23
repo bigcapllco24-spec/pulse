@@ -1,6 +1,6 @@
 # Pulse: handoff for a new chat
 
-**Last updated: 23 Oct 2026, 02:53 IST**
+**Last updated: 23 Oct 2026, 09:57 IST**
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open. Read `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`; also the project's
@@ -93,21 +93,32 @@ position is clear. What follows from that, as agreed on 18 Oct:
 ```
 web/                    the app (served by GitHub Pages; the deploy minifies JS and CSS, the repo keeps readable code)
   index.html            shell + modulepreload list; starts the three data files downloading early (window.__pre)
-  sw.js                 service worker: cache-first; bump SHELL ("pulse-shell-vNN") on every release. A release installs
-                        as one complete set (fetched with ?v=SHELL); files are never refreshed one by one.
-  config.js             version, Firebase web config (public by design), VAPID key; CONFIG.emulator only in tests
+  sw.js                 the offline copy (service worker): cache-first; bump SHELL ("pulse-shell-vNN") on every release.
+                        A release installs as one complete set; since 1.4.1 files whose fingerprint (HASHES, written by
+                        scripts/stamp-sw.mjs at deploy) is unchanged are reused from the phone's copy, the rest fetched
+                        with ?v=<fingerprint>. The app asks for a release once the first prices are in, and reloads onto
+                        it only if nobody has touched the screen yet; otherwise "Update", applied at the next return.
+  config.js             version, Firebase web config (public by design), VAPID key; CONFIG.emulator and CONFIG.swTest
+                        only in tests
   styles.css            all styles; type scale tokens --t-xs/s/m/l/xl/xxl in :root; landscape block at the end
   data/                 candles.json + news.json + daily.json (written by the data job), indicators.json (guides), symbols.json
-  js/app.js             feed: cards, swipes, details pane ("Before you call"), news pane, tabs (showTab: Feed, Calls, You),
-                        the position rail (progress()), the one-time swipe hint, openDash (the coins list page), redrawCards()
+  js/app.js             the frame: APP state, tabs (showTab: Feed, Calls, You), openDash (the coins list page), refresh
+                        and the status chip, theme, boot, the offline copy and releases
+  js/feed.js            the feed: paging and swipes, virtual cards, a card's main pane (chart, Call it chip, your call
+                        lines), the position rail, the one-time swipe hint, redrawCards()
+  js/news.js            a card's news pane (stories by status, price events from daily candles)
+  js/details.js         a card's details pane, "Before you call"
   js/nav.js             back everywhere (1.3.0): one history guard entry while any sheet or page is open, so the phone's
                         back closes the top layer; openPage/closePage (pages slide in over the tab), backBtn("‹ Calls")
   js/onboard.js         first run: welcome → how Pulse works (what a call is) → username → first call (Bitcoin, 1 day,
                         nothing picked for you; Higher, Lower or No change) → locked in; "I already have an account"
   js/guide.js           How Pulse works: five cards, once per account and from Settings (1.2.9)
-  js/play.js            Calls tab (renderPlay), About your score, Make a call (coin picker), waiting-call details, Call it
-                        sheet (openPredictSheet, three steps), replay of a scored call, With friends page, group page,
-                        challenges and picks, player cards, find players, leaderboard, the Settings sheet
+  js/calls.js           Calls tab (renderPlay), About your score, Make a call (coin picker), waiting-call details, the
+                        daily coin, replay of a scored call, With friends page, a coin's calls, #/ links, shared helpers
+  js/callit.js          the Call it sheet (openPredictSheet, three steps) and the price field the group sheets share
+  js/groups.js          groups: list, start, the group page, table, invites, challenge and pick sheets
+  js/people.js          ranks, leaderboard, player cards and public calls, find players, following
+  js/account.js         the avatar sheet (your account and settings)
   js/you.js             You tab and the Your record page (same record): verdict, score with its quiet lines (change after
                         the last call, held progress, a named pattern, the one-time v2 note), tiles, breakdowns, Learn, ranks
   js/progress.js        levels (effort, not skill), shared with the job
@@ -140,18 +151,21 @@ pipeline/               Node 22, run by GitHub Actions
                         public board, most-followed board, public calls), habit, google (Firestore REST + FCM)
 .github/workflows/
   deploy.yml            push to main → tests (tests.yml) → publish only if they pass (~1 min after tests; reuses live data)
-                        every 2 h / manual → data job (~2 min) → minify → publish (rules only on a push)
+                        every 2 h / manual → data job (~2 min) → minify → fingerprint (stamp-sw) → publish
+                        (rules only on a push)
   tests.yml             scripts/check.sh, then tests/live.py against the Firebase emulators; runs on every branch push too
   settle.yml            every 15 min → pipeline/settle.mjs
 firestore.rules         source of truth for rules; published by the deploy
-scripts/check.sh        quick checks + Node tests (score, score2, predict, social, habit, …) + tests/e2e.py (demo mode,
-                        Playwright; ONLY=nav,calls runs some suites) + static lint (tests/lint.mjs)
+scripts/check.sh        quick checks, static lint (tests/lint.mjs: imports match exports, every app file in the offline
+                        copy and preloaded), ESLint (tests/eslint.config.mjs: undefined and unused names), Node tests
+                        (score, score2, predict, social, habit, stamp, …), tests/e2e.py (demo mode, Playwright; ONLY=nav,
+                        calls runs some suites) and tests/sw.py (the offline copy and releases in a real browser)
 tests/live.py           real-database tests: app + jobs against the emulators, WebKit (iPhone) and Chromium (slow
                         Android), typing key by key (43 checks)
 docs/                   HANDOFF, BACKLOG, EXPECTATIONS, PLAN-1.3 (copies of the project docs), prediction-score (general)
 ```
 
-## 4. Features as of 1.4.0 (23 Oct 2026)
+## 4. Features as of 1.4.1 (23 Oct 2026)
 
 **Tabs: Feed · Calls · You** (Feed on the left). Settings sit behind the gear on You.
 

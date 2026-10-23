@@ -12,7 +12,6 @@ const ADJ = { "30m": "30-minute", "1h": "1-hour", "1d": "1-day", "1y": "1-year" 
 // ---------- days: everyone shares one calendar day, Indian time (so the daily coin and streaks agree for everyone)
 export const istDay = (ms) => new Date(ms + IST).toISOString().slice(0, 10);
 const dayNum = (d) => Math.round(Date.parse(d + "T00:00:00Z") / DAY);
-const numDay = (n) => new Date(n * DAY).toISOString().slice(0, 10);
 export const msUntilNextDay = (now = Date.now()) => (dayNum(istDay(now)) + 1) * DAY - IST - now;
 
 // ---------- streaks: consecutive days with at least one 1-day call made (scored, open or not counted)

@@ -95,8 +95,6 @@ export const closenessText = (s) => `${Math.abs(s.pctOff) < 0.05 ? "Exact" : `${
 // ---------- group challenges (shared by the data job and the app's demo mode)
 // Group points for one pick: by how close it was, plus 1 for calling the direction right.
 export const POINTS = { "Spot on": 5, "Very close": 3, Close: 2, Off: 1, "Far off": 0 };
-const PERIOD = { "1h": "1-hour", "1d": "1-day", "1y": "1-year" };
-const acctOf = (path) => path.split("/")[1];
 
 // The results table for one challenge, best first. Ties go to the smaller miss, then the earlier pick.
 // Never includes a price called: only how close (label, % off), the direction, and the points.

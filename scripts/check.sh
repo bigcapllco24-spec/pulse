@@ -16,6 +16,11 @@ if [[ $only == all || $only == syntax ]]; then
   [[ $bad == 0 ]] && echo "syntax: all files parse" || status=1
 fi
 [[ $only == all || $only == lint ]] && run node tests/lint.mjs
+# ESLint: names used but never defined or imported, and unused code (tests/eslint.config.mjs)
+if [[ $only == all || $only == eslint ]]; then
+  if command -v eslint >/dev/null; then es=(eslint); else es=(npx -y eslint@10.1.0); fi
+  "${es[@]}" -c tests/eslint.config.mjs --no-config-lookup web pipeline scripts tests && echo "eslint: no undefined or unused names" || status=1
+fi
 [[ $only == all || $only == pipeline ]] && run node tests/pipeline.test.mjs
 [[ $only == all || $only == levels ]] && run node tests/levels.test.mjs
 [[ $only == all || $only == score ]] && run node tests/score.test.mjs $verbose

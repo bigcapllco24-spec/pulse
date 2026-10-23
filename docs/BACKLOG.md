@@ -1,6 +1,6 @@
 # Pulse backlog
 
-**Last updated: 23 Oct 2026, 02:53 IST** (live: 1.4.0)
+**Last updated: 23 Oct 2026, 09:57 IST** (live: 1.4.0)
 
 How Pulse works and where everything is: `claude/pulse-handoff.md` (repo: `docs/HANDOFF.md`). How to work:
 `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`). Ordered by the priority in the expectations: trust
@@ -73,6 +73,12 @@ first, then "works on a real phone", then simplicity, then new features.
   1.4.0 branches once merged): delete in the GitHub UI after checking each is merged.
 
 ## Later / parked
+- **Bundle the app's files at deploy** (one file instead of 34): would remove the ~75 ms the 1.4.1 split added to
+  opening on a slowed phone (7 more files), and more. Needs the deploy, the offline-copy list and the tests changed.
+- **First visit downloads the app twice** (the page, then the offline copy): ~150 KB extra once per phone. The offline
+  copy could reuse the page's files after checking their fingerprints.
+- **Measure on a real phone with Firebase and fonts** (not possible from Claude's sessions): the 1.4.1 numbers are
+  demo mode on a simulated slow phone (scratch harness: CPU x4, 150 ms, 1.6 Mbps).
 - Designer's points not done: product images in onboarding (2), ƒx naming (5, mostly solved), panel values (6),
   one news view with filters (12).
 - Full-screen chart: pivot labels crowd the price scale.
@@ -86,6 +92,11 @@ first, then "works on a real phone", then simplicity, then new features.
 - To discuss: compare two coins on one chart; moving an account to a new phone.
 
 ## Recent releases (details in git log and the handoff)
+- **1.4.1 (23 Oct):** speed and structure, no feature changes. Measured on a slowed phone (CPU x4, slow 4G): the first
+  open after a release went from 6.8 s to about 3 s (a release downloads only changed files, ~50 KB instead of
+  214 KB) and never reloads the app under someone using it; everyday opening was already fast (chart ~0.85 s).
+  play.js and app.js split into calls, callit, groups, people, account, feed, news, details; ESLint and an
+  offline-copy test (tests/sw.py) added; dead code removed.
 - **1.4.0 (23 Oct):** score v2 is the score (jobs only), everyone recalculated with a one-time note; Higher, Lower or
   No change; any call size; start price after the call; no "too close" void; tidy (dead code and ~12 KB of CSS).
 - **1.3.1 (23 Oct):** feed rail instead of story bars; coins sheet; ƒx and S/R in full screen; up to 2 panels on the

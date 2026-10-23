@@ -103,7 +103,7 @@ export function panelFact(code, ov, win) {
   const unit = win[0].t.length > 10 ? "candles" : gap >= 6 ? "weeks" : "days";
   const run = (test) => { let k = 0; for (let i = n - 1; i >= 0 && test(i); i--) k++; return k; };
   const span = (k) => (k >= n ? "for this whole view" : `for the last ${k} ${k === 1 ? unit.replace(/s$/, "") : unit}`);
-  if (P.vol) { const v = ov.volRatio?.[n - 1]; let mx = 0, mi = 0; win.forEach((b, i) => { if ((b.v || 0) > (win[mx].v || 0)) mx = i; }); return `Busiest candle in this view: ${win[mx].t.slice(0, 10)}${v != null ? `. The latest is ${v.toFixed(1)}× the usual volume.` : "."}`; }
+  if (P.vol) { const v = ov.volRatio?.[n - 1]; let mx = 0; win.forEach((b, i) => { if ((b.v || 0) > (win[mx].v || 0)) mx = i; }); return `Busiest candle in this view: ${win[mx].t.slice(0, 10)}${v != null ? `. The latest is ${v.toFixed(1)}× the usual volume.` : "."}`; }
   if ((P.lines || []).length >= 2 && !P.refs?.length || code === "MACD" || code === "STOCH" || code === "ADX" || code === "AROON") {
     const [a, b] = code === "ADX" ? ["plusDI", "minusDI"] : [P.lines[0][0], P.lines[1][0]];
     const A = ov[a], B = ov[b];
