@@ -3,14 +3,30 @@
 const SHELL = "pulse-shell-v65"; // 1.4.0
 const FILES = ["./", "index.html", "styles.css", "config.js", "manifest.webmanifest", "icon.svg", "icon-192.png",
   "js/app.js", "js/pages.js", "js/store.js", "js/data.js", "js/chart.js", "js/studies.js", "js/indicators.js", "js/describe.js", "js/search.js", "js/interact.js", "js/levels.js", "js/onboard.js", "js/you.js", "js/progress.js", "js/guide.js", "js/full.js", "js/ui.js", "js/nav.js", "js/score.js", "js/predict.js", "js/social.js", "js/play.js", "js/feedback.js", "js/panels.js", "js/habit.js", "js/card.js", "js/share.js", "data/indicators.json"];
-// cache: "reload" skips the browser's own cache (GitHub Pages lets it keep files 10 minutes), so a release never caches old files
-// Each file is fetched with the release name in its address, so a CDN copy of the previous release can never end up in
-// the new set, then saved under its plain address.
-self.addEventListener("install", (e) => { e.waitUntil(caches.open(SHELL).then((c) => Promise.all(FILES.map(async (f) => {
-  const r = await fetch(new Request(`${f}${f.includes("?") ? "&" : "?"}v=${SHELL}`, { cache: "reload" }));
-  if (!r.ok) throw new Error(`${f}: ${r.status}`);
-  await c.put(new Request(f), r);
-}))).then(() => self.skipWaiting())); });
+// Each file's content fingerprint, written in by the deploy (scripts/stamp-sw.mjs); null when run from the repo.
+const HASHES = null;
+// A new release's set: a file whose fingerprint matches the copy the phone already has is reused from it; every other
+// file is downloaded. cache: "reload" skips the browser's own cache (GitHub Pages lets it keep files 10 minutes), and
+// each download carries its fingerprint (or the release name) in its address, so a CDN copy of an older version can
+// never end up in the new set. Files are saved under their plain address, marked with their fingerprint.
+self.addEventListener("install", (e) => { e.waitUntil((async () => {
+  const c = await caches.open(SHELL);
+  const older = HASHES ? await Promise.all((await caches.keys()).filter((k) => k !== SHELL).map((k) => caches.open(k))) : [];
+  await Promise.all(FILES.map(async (f) => {
+    const h = HASHES?.[f];
+    for (const o of h ? older : []) {
+      const hit = await o.match(f);
+      if (hit?.headers.get("x-pulse-hash") === h) return c.put(new Request(f), hit);
+    }
+    const r = await fetch(new Request(`${f}${f.includes("?") ? "&" : "?"}v=${h || SHELL}`, { cache: "reload" }));
+    if (!r.ok) throw new Error(`${f}: ${r.status}`);
+    if (!h) return c.put(new Request(f), r);
+    const headers = new Headers(r.headers); headers.set("x-pulse-hash", h);
+    headers.delete("content-encoding"); headers.delete("content-length"); // the saved body is already unpacked
+    await c.put(new Request(f), new Response(await r.blob(), { status: r.status, statusText: r.statusText, headers }));
+  }));
+  await self.skipWaiting();
+})()); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== SHELL).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);

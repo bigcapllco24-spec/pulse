@@ -23,6 +23,7 @@ fi
 [[ $only == all || $only == predict ]] && run node tests/predict.test.mjs $verbose
 [[ $only == all || $only == social ]] && run node tests/social.test.mjs $verbose
 [[ $only == all || $only == habit ]] && run node tests/habit.test.mjs $verbose
+[[ $only == all || $only == stamp ]] && run node tests/stamp.test.mjs
 if [[ $only == all || $only == e2e ]]; then
   port=$((8800 + RANDOM % 100))
   (cd web && exec python3 -m http.server "$port" >/dev/null 2>&1) & srv=$!
@@ -30,5 +31,7 @@ if [[ $only == all || $only == e2e ]]; then
   run python3 tests/e2e.py "http://localhost:$port/" $verbose
   kill "$srv" 2>/dev/null
 fi
+# the offline copy and releases (serves its own copy of web/)
+[[ $only == all || $only == sw ]] && run python3 tests/sw.py $verbose
 [[ $status == 0 ]] && echo "ALL CHECKS PASSED" || echo "SOME CHECKS FAILED"
 exit $status

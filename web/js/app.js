@@ -711,6 +711,7 @@ export function applyTheme() {
   if (/^#\/(g\/|predict)/.test(location.hash)) named.then(() => openLink()); // a group's invite link, or a push about a challenge
   addEventListener("hashchange", () => { if (/^#\/(g\/|predict)/.test(location.hash)) named.then(() => openLink()); });
   await doRefresh(false);
+  startOfflineCopy();
   await named;
   // the guide, once per account: accounts made before it existed see it on their next open (new ones see it after
   // their first call, from onboard.js). Waits briefly for the account so one that has seen it elsewhere isn't shown it.
@@ -719,14 +720,26 @@ export function applyTheme() {
   setTimeout(() => ls.set("pl.lastOpen", new Date().toISOString()), 4000);
   loadSymbols().catch(() => {});
 })();
-if ("serviceWorker" in navigator && location.protocol === "https:") {
-  navigator.serviceWorker.register("sw.js" + (CONFIG.firebase ? "?config=" + encodeURIComponent(JSON.stringify(CONFIG.firebase)) : "")).catch(() => {});
-  // When a new release takes over right after opening, reload once so the new version shows straight away.
+// ---------- the offline copy of the app (sw.js) and new releases
+// Off on plain http, except the release test (tests/sw.py) on this computer.
+const SW = "serviceWorker" in navigator && (location.protocol === "https:" || (CONFIG.swTest && location.hostname === "localhost"));
+// Started once the first prices are in (boot), so its download of every app file never competes with them on a slow
+// connection. An installed copy is asked about a new release at the same moment: the browser's own check comes only
+// seconds later, and a release found sooner shows sooner.
+function startOfflineCopy() {
+  if (!SW) return;
+  navigator.serviceWorker.register("sw.js" + (CONFIG.firebase ? "?config=" + encodeURIComponent(JSON.stringify(CONFIG.firebase)) : ""))
+    .then((r) => { if (r.active) return r.update(); }).catch(() => {});
+}
+if (SW) {
   // A new release took over. A Home Screen app is usually resumed rather than restarted, so it could run an old
-  // version for days: reload at once if the app has just opened or just come back to the front (nothing is lost:
-  // everything is saved); in the middle of using it, offer Update and apply it anyway the next time it comes back.
+  // version for days: reload at once if the app has just opened or come back to the front and hasn't been touched
+  // yet (nothing is lost: everything is saved). Once someone is using it, never pull the screen away from them:
+  // offer Update, and apply it anyway the next time the app comes back to the front.
   const hadController = !!navigator.serviceWorker.controller;
-  let frontSince = performance.now(), updateReady = false;
+  let frontSince = performance.now(), touched = false, updateReady = false;
+  for (const ev of ["pointerdown", "keydown", "wheel"]) addEventListener(ev, () => (touched = true), { capture: true, passive: true });
+  const toFront = () => { frontSince = performance.now(); touched = false; };
   const reloadNow = () => {
     const last = +sessionStorage.getItem("pl.swReload") || 0;
     if (Date.now() - last < 20000) return false; // never loop
@@ -735,15 +748,16 @@ if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!hadController) return;
     updateReady = true;
-    if (performance.now() - frontSince < 10000 && reloadNow()) return;
+    if (!touched && performance.now() - frontSince < 10000 && reloadNow()) return;
     toast("A new version of the app is ready.", { action: "Update", onAction: () => location.reload(), ms: 10 * 60e3 });
   });
   // every time the app comes back to the front: apply a release that's waiting, or check for one
+  const check = () => navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {});
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) return;
-    frontSince = performance.now();
+    toFront();
     if (updateReady && reloadNow()) return;
-    navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {});
+    check();
   });
-  addEventListener("pageshow", (e) => { if (e.persisted) { frontSince = performance.now(); navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {}); } });
+  addEventListener("pageshow", (e) => { if (e.persisted) { toFront(); check(); } });
 }

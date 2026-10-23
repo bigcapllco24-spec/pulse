@@ -65,6 +65,9 @@ jobs:
         run: |
           npx -y esbuild@0.28.2 web/js/*.js --minify --outdir=web/js --allow-overwrite --log-level=warning
           npx -y esbuild@0.28.2 web/styles.css --minify --outfile=web/styles.css --allow-overwrite --log-level=warning
+      # each offline-copy file's fingerprint into sw.js, so a release downloads only what changed (tests/sw.py)
+      - name: Fingerprint the offline copy
+        run: node scripts/stamp-sw.mjs web
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web
