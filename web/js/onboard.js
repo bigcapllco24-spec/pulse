@@ -77,7 +77,7 @@ function how() {
       ${step(2, "Say where the price will be", `<span class="hint">Higher or lower, and roughly how far. That's a <b>call</b>.</span>`)}
       ${step(3, "Get scored against the real price", `<span class="ob-chips"><span class="lab good">Very close</span><span class="hint">Right way, near your price</span></span>`)}
     </div>
-    <p class="hint">Every call adds to your record. After about 30, it starts to show how well you really read the market. No money involved, and it's not advice.</p>
+    <p class="hint">Every call adds to your record. After 10, it starts to show how well you really read the market. No money involved, and it's not advice.</p>
     <div class="ob-actions"><button class="btn primary block" id="obGo">Continue</button></div>`, { back: "welcome" });
   gate.querySelector("#obGo").onclick = () => show("create");
 }

@@ -1,7 +1,7 @@
 // Coins (watchlists and alerts), the settings pages opened from the avatar sheet, sheets (add coins, watchlists,
 // switcher, chart, indicators, lines), Your market, the settings pages and Learn. The Calls tab is calls.js; people groups.js and people.js.
 import { CONFIG } from "../config.js";
-import { store, save, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, listFeedback, setFeedbackStatus, myUid, signOutDevice } from "./store.js";
+import { store, save, saveSoon, chartSettings, setUsername, checkUsername, usernameChangesLeft, USERNAME_CHANGES, allSyms, watchlists, listsOf, setSymLists, newWatchlist, renameWatchlist, deleteWatchlist, moveInWatchlist, markAlertsRead, clearAlerts, addDemoAlerts, createList, joinList, leaveList, enablePush, deleteAccount, listFeedback, setFeedbackStatus, myUid, signOutDevice } from "./store.js";
 import { leaveAllGroups, deleteMySocial } from "./social.js";
 import { loadSymbols, searchSymbols, symbolIndex, MKLABEL, TYLABEL } from "./search.js";
 import { METRICS, OPS, ruleMet, fmt } from "./indicators.js";
@@ -130,8 +130,8 @@ export function openSwitcher() {
     <div class="hl" style="margin-top:12px"><button class="row" id="swList"><span class="main"><span class="t">See them as a list</span></span><span class="chev">›</span></button><button class="row" id="swEdit"><span class="main"><span class="t">Edit lists and coins</span></span><span class="chev">›</span></button></div>
     <div class="label" style="margin:18px 0 8px">Order in the feed</div><div class="opts">${[["watchlist", "List order"], ["move", "Biggest move"], ["news", "Most news"], ["rsi", "Lowest RSI"], ["az", "A to Z"]].map(([k, l]) => `<button class="opt" data-o="${k}" aria-pressed="${chartSettings().order === k}">${l}</button>`).join("")}</div>`, (body) => {
     const done = () => { closeSheet(); buildFeed(); if (pageOpen("sDash")) renderDash(); };
-    body.querySelectorAll("[data-l]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, list: b.dataset.l } }); done(); }));
-    body.querySelectorAll("[data-o]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, chart: { ...chartSettings(), order: b.dataset.o } } }); done(); }));
+    body.querySelectorAll("[data-l]").forEach((b) => (b.onclick = async () => { saveSoon({ settings: { ...store.data.settings, list: b.dataset.l } }); done(); }));
+    body.querySelectorAll("[data-o]").forEach((b) => (b.onclick = async () => { saveSoon({ settings: { ...store.data.settings, chart: { ...chartSettings(), order: b.dataset.o } } }); done(); }));
     body.querySelector("#swList").onclick = () => { closeSheet(); openDash(); };
     body.querySelector("#swEdit").onclick = () => { closeSheet(); openProfile("watchlists"); };
   });
@@ -170,7 +170,7 @@ function coinsView(el) {
     ${!syms.length ? `<div class="empty">Nothing in this watchlist yet.</div>` : ""}
     <div style="display:flex;gap:8px;margin-top:16px">${w ? (editing ? `<button class="btn ghost sm" id="dRen">Rename</button><button class="btn ghost sm danger" id="dDel">Delete</button><button class="btn sm" id="dDone">Done</button>` : `<button class="btn ghost sm" id="dEdit">Edit this watchlist</button>`) : ""}</div>
     <p class="hint" style="margin-top:12px">Moves are facts about the past, never advice.</p>`;
-  const pick = async (id) => { APP.dashEdit = false; await save({ settings: { ...store.data.settings, list: id } }); APP.needsRebuild = true; renderDash(); };
+  const pick = async (id) => { APP.dashEdit = false; saveSoon({ settings: { ...store.data.settings, list: id } }); APP.needsRebuild = true; renderDash(); };
   el.querySelector("#dFeed").onclick = () => closePage("sDash");
   el.querySelector("#dAdd").onclick = () => openAddSheet();
   el.querySelector("#dEdit")?.addEventListener("click", () => { APP.dashEdit = true; renderDash(); });
@@ -267,9 +267,9 @@ function pChart(el, back) {
     ${chartOptsHtml(c)}
     ${custom.length ? `<h2>Coins with their own chart</h2><p>${custom.map((k) => `<span class="pill">${esc(k.split(":")[1])}</span>`).join(" ")} <button class="btn ghost sm" id="cReset">Reset all to default</button></p>` : ""}`;
   const re = () => pChart(el, back);
-  const set = async ({ _pick, ...patch }) => { await save({ settings: { ...store.data.settings, ...(_pick ? { levelsPick: patch.levels } : {}), chart: { ...store.data.settings.chart, ...patch } } }); APP.needsRebuild = true; re(); };
+  const set = async ({ _pick, ...patch }) => { saveSoon({ settings: { ...store.data.settings, ...(_pick ? { levelsPick: patch.levels } : {}), chart: { ...store.data.settings.chart, ...patch } } }); APP.needsRebuild = true; re(); };
   el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => (b.dataset.k === "levels" ? setLines(b.dataset.v).then(re) : set({ [b.dataset.k]: b.dataset.v }))));
-  el.querySelector("#cReset")?.addEventListener("click", async () => { await save({ settings: { ...store.data.settings, chartBy: {} } }); APP.needsRebuild = true; re(); });
+  el.querySelector("#cReset")?.addEventListener("click", async () => { saveSoon({ settings: { ...store.data.settings, chartBy: {} } }); APP.needsRebuild = true; re(); });
 }
 
 // The time chip on a feed card: change this coin's chart, or every coin in the list the feed is showing.
@@ -283,10 +283,10 @@ export function openChartSheet(sym, onChange) {
       ${own ? `<p style="margin-top:14px"><button class="btn ghost sm" id="csReset">Use my default chart for ${esc(sym.t)}</button></p>` : ""}`;
     body.querySelectorAll("[data-scope]").forEach((b) => (b.onclick = () => { scope = b.dataset.scope; draw(body); }));
     body.querySelectorAll("[data-k]").forEach((b) => (b.onclick = async () => {
-      if (b.dataset.k === "levels" && b.dataset.v !== "off") await save({ settings: { ...store.data.settings, levelsPick: b.dataset.v } });
+      if (b.dataset.k === "levels" && b.dataset.v !== "off") saveSoon({ settings: { ...store.data.settings, levelsPick: b.dataset.v } });
       await applyChart(sym, scope, w, { [b.dataset.k]: b.dataset.v }); draw(body); onChange?.();
     }));
-    body.querySelector("#csReset")?.addEventListener("click", async () => { const by = { ...(store.data.settings.chartBy || {}) }; delete by[sym.key]; await save({ settings: { ...store.data.settings, chartBy: by } }); scope = "all"; draw(body); onChange?.(); });
+    body.querySelector("#csReset")?.addEventListener("click", async () => { const by = { ...(store.data.settings.chartBy || {}) }; delete by[sym.key]; saveSoon({ settings: { ...store.data.settings, chartBy: by } }); scope = "all"; draw(body); onChange?.(); });
   };
   openSheet(`Chart · ${esc(sym.t)}`, "", draw, () => buildFeed({ keepKey: sym.key }));
 }
@@ -296,10 +296,10 @@ async function applyChart(sym, scope, w, patch) {
   else if (w) for (const x of w.syms || []) by[x.key] = { ...(by[x.key] || {}), ...patch };
   else { // all my coins: becomes the default, and no coin keeps an older value for these settings
     for (const k of Object.keys(by)) { const o = { ...by[k] }; for (const p of Object.keys(patch)) delete o[p]; if (Object.keys(o).length) by[k] = o; else delete by[k]; }
-    await save({ settings: { ...st, chart: { ...(st.chart || {}), ...patch }, chartBy: by } });
+    saveSoon({ settings: { ...st, chart: { ...(st.chart || {}), ...patch }, chartBy: by } });
     return;
   }
-  await save({ settings: { ...st, chartBy: by } });
+  saveSoon({ settings: { ...st, chartBy: by } });
 }
 
 // Every guide uses the one template in interact.js, so all explanations read the same way.
@@ -364,7 +364,7 @@ function pLists(el, back) {
     ${lists.map((l) => `<div class="box"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h3>${esc(l.name)}</h3><span><button class="btn sm" data-copy="${esc(l.id)}">Invite link</button> <button class="btn ghost sm" data-leave="${esc(l.id)}">Leave</button></span></div>
       <p class="hint">Members: ${esc(Object.values(l.members || {}).join(", ") || "just you")}</p><p>${(l.symbols || []).map((s) => esc(s.t)).join(", ") || `<span class="hint">Empty</span>`}</p>
       ${(l.symbols || []).length ? `<button class="btn primary sm" data-scroll="${esc(l.id)}">Scroll these in the feed</button> <button class="btn sm" data-copyto="${esc(l.id)}">Copy into a watchlist</button>` : ""}</div>`).join("")}`;
-  el.querySelectorAll("[data-scroll]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, list: b.dataset.scroll } }); APP.needsRebuild = true; showTab("feed"); }));
+  el.querySelectorAll("[data-scroll]").forEach((b) => (b.onclick = async () => { saveSoon({ settings: { ...store.data.settings, list: b.dataset.scroll } }); APP.needsRebuild = true; showTab("feed"); }));
   const re = () => pLists(el, back);
   el.querySelector("#lForm").onsubmit = (e) => {
     e.preventDefault();
@@ -421,7 +421,7 @@ function pLearn(el, back) {
 function pAppearance(el, back) {
   const t = store.data.settings?.theme || "dark";
   el.innerHTML = `${back}<h1>Appearance</h1><div class="opts">${[["dark", "Dark"], ["light", "Light"], ["auto", "Match phone"]].map(([k, l]) => `<button class="opt" data-t="${k}" aria-pressed="${t === k}">${l}</button>`).join("")}</div>`;
-  el.querySelectorAll("[data-t]").forEach((b) => (b.onclick = async () => { await save({ settings: { ...store.data.settings, theme: b.dataset.t } }); applyTheme(); pAppearance(el, back); }));
+  el.querySelectorAll("[data-t]").forEach((b) => (b.onclick = async () => { saveSoon({ settings: { ...store.data.settings, theme: b.dataset.t } }); applyTheme(); pAppearance(el, back); }));
 }
 function pLegal(el, back) {
   el.innerHTML = `${back}<h1>Legal and disclaimer</h1>
@@ -470,7 +470,7 @@ export function openIndicatorsSheet(onChange) {
   };
   const body = () => `${swapBox()}
     <div class="fxsets">${SETS.map((x) => `<button class="opt" data-sset="${x.id}" aria-pressed="${x.over.join() === pk.over.join() && x.lower.slice(0, maxPanels()).join() === pk.lower.join()}">${esc(x.name)}</button>`).join("")}<button class="opt" data-sset="none">Clear</button></div>
-    <div class="seg fxseg" role="tablist">${[["lower", "Panels under the chart", pk.lower.length, maxPanels()], ["over", "Lines on the price", pk.over.length, MAX_OVERLAYS]].map(([k, l, n, m]) => `<button data-fxtab="${k}" aria-pressed="${fxTab === k}">${l} <small>${n}/${m}</small></button>`).join("")}</div>
+    <div class="seg fxseg" role="tablist">${[["lower", "Panels", pk.lower.length, maxPanels()], ["over", "Lines on price", pk.over.length, MAX_OVERLAYS]].map(([k, l, n, m]) => `<button data-fxtab="${k}" aria-pressed="${fxTab === k}">${l} <small>${n}/${m}</small></button>`).join("")}</div>
     <p class="hint fxcap">${fxTab === "lower" ? (feedFull() ? `On your feed: ${FEED_MAX} of ${FEED_MAX}. Turn one off to add another.` : `On your feed: ${pk.feed.length} of ${FEED_MAX}. Tap + Feed to see a panel on every coin as you scroll.`) : "Lines show in the full-screen chart only."}</p>
     ${list()}
     <p class="disclaimer">Indicators are arithmetic on past prices and volume. They describe what happened, not what will happen. Tap a name for its guide.</p>`;
@@ -503,7 +503,7 @@ export function openIndicatorsSheet(onChange) {
 export async function setLines(mode) {
   const st = store.data.settings, by = { ...(st.chartBy || {}) };
   for (const k of Object.keys(by)) { const o = { ...by[k] }; delete o.levels; if (Object.keys(o).length) by[k] = o; else delete by[k]; }
-  await save({ settings: { ...st, ...(mode !== "off" ? { levelsPick: mode } : {}), chart: { ...(st.chart || {}), levels: mode }, chartBy: by } });
+  saveSoon({ settings: { ...st, ...(mode !== "off" ? { levelsPick: mode } : {}), chart: { ...(st.chart || {}), levels: mode }, chartBy: by } });
   APP.needsRebuild = true;
 }
 export function openLinesSheet(onChange) {

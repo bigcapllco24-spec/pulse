@@ -1,7 +1,7 @@
 // The chart feed. Scroll up or down for the next coin; swipe for its news (finger moves right) or its details (finger
 // moves left). The feed loops through the list with a "caught up" card between rounds. A card's main pane is drawn
 // here; its news and details panes are news.js and details.js.
-import { store, ls, save, chartSettings } from "./store.js";
+import { store, ls, saveSoon, chartSettings } from "./store.js";
 import { openPredictSheet } from "./callit.js";
 import { mainChart, lowerChart } from "./chart.js";
 import { picks, studyWindow } from "./studies.js";
@@ -321,7 +321,15 @@ function wire(c, it) {
   const justScrubbed = () => Date.now() - (APP.scrubEndAt || 0) < 400;
   c.querySelectorAll("[data-learn]").forEach((p) => p.addEventListener("click", (e) => { e.stopPropagation(); if (!justScrubbed()) openLearn(p.dataset.learn, c._v); }));
   c.querySelector("[data-pexp]")?.addEventListener("click", (e) => { e.stopPropagation(); openPanels(c._v, it.sym, RANGES[c._v?.range]); });
-  c.querySelectorAll("[data-range]").forEach((b) => b.addEventListener("click", async (e) => { e.stopPropagation(); if (b.getAttribute("aria-pressed") === "true") return; const by = { ...(store.data.settings.chartBy || {}) }; if (by[it.sym.key]) { const { range, ...rest } = by[it.sym.key]; by[it.sym.key] = rest; } await save({ settings: { ...store.data.settings, chartBy: by, chart: { ...store.data.settings.chart, range: b.dataset.range } } }); redrawCards(); }));
+  // the time range is one choice for every coin: it becomes the default and no coin keeps an older range of its own
+  // (until 1.4.2 a coin with its own range kept it, feedback 15 Oct); drawn at once, saved in the background
+  c.querySelectorAll("[data-range]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation(); if (b.getAttribute("aria-pressed") === "true") return;
+    const st = store.data.settings, by = {};
+    for (const [k, o] of Object.entries(st.chartBy || {})) { const { range, ...rest } = o; if (Object.keys(rest).length) by[k] = rest; }
+    saveSoon({ settings: { ...st, chartBy: by, chart: { ...st.chart, range: b.dataset.range } } });
+    redrawCards();
+  }));
   c.querySelector(".chartbox:not(.nodata)")?.addEventListener("click", () => { if (!justScrubbed()) chartTapHint(); });
   // two fingers on a card's chart: open it full screen, where pinching zooms the chart
   c.querySelector(".chartbox")?.addEventListener("touchstart", (e) => { if (e.touches.length === 2) { cancelPendingHold(); openFull(it.sym); } }, { passive: true });

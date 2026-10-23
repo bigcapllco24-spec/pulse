@@ -1,6 +1,6 @@
 // Service worker: makes the app installable and opens instantly from cache; prices and news always come
 // from the network first. Also receives push alerts when Firebase is configured (config arrives in the URL).
-const SHELL = "pulse-shell-v66"; // 1.4.1
+const SHELL = "pulse-shell-v67"; // 1.4.2
 const FILES = ["./", "index.html", "styles.css", "config.js", "manifest.webmanifest", "icon.svg", "icon-192.png",
   "js/app.js", "js/feed.js", "js/news.js", "js/details.js", "js/pages.js", "js/store.js", "js/data.js", "js/chart.js", "js/studies.js", "js/indicators.js", "js/describe.js", "js/search.js", "js/interact.js", "js/levels.js", "js/onboard.js", "js/you.js", "js/progress.js", "js/guide.js", "js/full.js", "js/ui.js", "js/nav.js", "js/score.js", "js/predict.js", "js/social.js", "js/calls.js", "js/callit.js", "js/groups.js", "js/people.js", "js/account.js", "js/feedback.js", "js/panels.js", "js/habit.js", "js/card.js", "js/share.js", "data/indicators.json"];
 // Each file's content fingerprint, written in by the deploy (scripts/stamp-sw.mjs); null when run from the repo.

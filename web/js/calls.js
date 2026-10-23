@@ -4,7 +4,7 @@
 // Data lives in store.js (your account and calls) and social.js (people and groups).
 import { CONFIG } from "../config.js";
 import { store, ls, allSyms, myScore, pendingHere, settleHere, nextDue } from "./store.js";
-import { HORIZONS, canPredict, dailyVol, dueAt, closenessText, isRight, callDir, BANDS } from "./score.js";
+import { HORIZONS, canPredict, dailyVol, dueAt, closenessText, isRight, callDir, BANDS, PROVISIONAL_UNDER } from "./score.js";
 import { krakenRows } from "./predict.js";
 import { krakenBars, D } from "./data.js";
 import { $, esc, money, pct, toast, haptic, openSheet, closeSheet, ago } from "./ui.js";
@@ -119,7 +119,7 @@ export function openAboutScore() {
   openSheet("About your score", `<div class="about">
       <p>${ICON.up}<span>Calling the right direction matters.</span></p>
       <p>${ICON.target}<span>Getting close to the real price matters too.</span></p>
-      <p>${ICON.bars}<span>One call can be luck. Your record shows skill over many calls, so give it about 30.</span></p>
+      <p>${ICON.bars}<span>One call can be luck. Your record shows skill over many calls: it starts to count after 10.</span></p>
     </div>
     <p class="about-note"><b>Every call builds your record.</b> The more you call, the sooner your skill shows, and the more your score says about you.</p>
     <button class="btn primary block" id="abMake">Make a call</button>`, (body) => { body.querySelector("#abMake").onclick = () => openCoinPicker(); });
@@ -137,8 +137,9 @@ export function openCoinPicker() {
 export function wirePicks(root) {
   root.querySelectorAll("[data-pick]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const [g, c] = b.dataset.pick.split("|"), ch = challengesOf(g).find((x) => x.id === c); if (ch) openPickSheet(g, ch); }));
 }
-// The plain-language read on how well someone reads the market. Needs about 30 scored calls to mean anything.
-export const VERDICT_AT = 30, PROVEN = BANDS[0][0]; // "Reading it well" from the Proven band
+// The plain-language read on how well someone reads the market: from 10 scored calls, when the score stops being
+// provisional (score v2; until 1.4.2 it waited for 30, feedback 17 Oct).
+export const VERDICT_AT = PROVISIONAL_UNDER, PROVEN = BANDS[0][0]; // "Reading it well" from the Proven band
 // n: scored calls (the phone's count, which is ahead of the score while the job confirms the newest)
 export function verdictOf(sc, n = sc?.n || 0) {
   if (!n) return { text: "Make your first call", key: "none", n };
@@ -159,7 +160,7 @@ function callsView(el) {
     const due = dueAt(p), grp = p.g ? ` · ${esc(groupName(p.g))}` : "";
     return `<button class="row crow" data-open="${i}">${badgeOf(dirOf(p))}<span class="main"><span class="t">${esc(coinName(p.coin, p.t))} · ${SHORT[p.horizon]}</span><span class="s">${callLine(p)}${grp}${p.kind === "pick" ? " · group only" : ""}</span></span><span class="when">${ICON.clock}${esc(Date.now() >= Date.parse(due) ? "scoring" : until(due))}</span>${CHEV}</button>`;
   };
-  const bits = [n < VERDICT_AT ? `${n} of about ${VERDICT_AT} scored calls` : `${n} scored calls`, st.n ? `${st.n}-day streak` : "", levelText()].filter(Boolean).join(" · ");
+  const bits = [n < VERDICT_AT ? `${n} of ${VERDICT_AT} scored calls` : `${n} scored calls`, st.n ? `${st.n}-day streak` : "", levelText()].filter(Boolean).join(" · ");
   const waits = waitingForMe(), groups = myGroups(), lists = [...store.lists.values()];
   const friendRows = [
     ...waits.slice(0, 2).map((ch) => `<div class="row"><span class="gicon">${ICON.group}</span><span class="main"><span class="t">${esc(groupName(ch.g))}</span><span class="s warnt">Needs your pick · ${esc(until(ch.joinUntil))} left</span></span><button class="btn primary sm" data-pick="${esc(ch.g)}|${esc(ch.id)}">Pick</button></div>`),

@@ -214,6 +214,11 @@ export async function save(patch) {
   await fb.f.setDoc(fb.f.doc(fb.db, "accounts", store.id), patch, { merge: true });
 }
 
+// Display settings (chart, which list, order, theme): on screen at once, written in the background, so a tap never
+// waits for the server (on a weak connection a time-range tap took 15–20 s, feedback 15 Oct). A failed write keeps
+// the phone's copy, and the next setting saved writes the whole settings object again.
+export const saveSoon = (patch) => { save(patch).catch(() => {}); };
+
 // ---- watchlists. "All my coins" is every symbol in any watchlist, each once, in watchlist order.
 export const watchlists = () => store.data?.watchlists || [];
 export function allSyms() {

@@ -24,7 +24,7 @@ export function renderYou() {
   const sub = [`Level ${lv.level}`, followers ? `${followers} follower${followers === 1 ? "" : "s"}` : "", `${lv.toNext} call${lv.toNext === 1 ? "" : "s"} to level ${lv.level + 1}`].filter(Boolean).join(" · ");
   el.innerHTML = `<div class="you-top">
       <button class="you-me" id="youCard" aria-label="Your player card">${levelAvatar(u, lv.level, "lg")}<span class="main"><span class="t">@${esc(u || "you")}</span><span class="s">${esc(sub)}</span></span></button>
-      <span class="pl-topb"><button class="iconbtn ghost" id="youShare" aria-label="Share your card">${svgIcon("share")}</button><button class="iconbtn ghost" id="youSet" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button></span>
+      <span class="pl-topb"><button class="iconbtn ghost" id="youShare" aria-label="Share your card">${svgIcon("share")}</button><button class="iconbtn ghost" id="youSet" aria-label="Settings"><svg viewBox="0 0 24 24" style="stroke-width:2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button></span>
     </div>
     ${recordHtml()}
     <div class="you-box">
@@ -91,7 +91,7 @@ function recordHtml() {
   const right = scored.filter(isRight).length;
   const closePlus = scored.filter((r) => ["Spot on", "Very close", "Close"].includes(r.label)).length;
   const intro = v.key === "none" ? "Your first scored call starts your score. Tap Call it on any chart."
-    : v.key === "early" ? `${n} call${n === 1 ? "" : "s"} so far. Around ${VERDICT_AT} shows how well you really read the market.`
+    : v.key === "early" ? `${n} call${n === 1 ? "" : "s"} so far. After ${VERDICT_AT}, your record starts to show how well you read the market.`
     : `Based on ${n} calls. Each call makes this surer.`;
   const pos = (x) => `${(((x - SCORE_MIN) / (SCORE_MAX - SCORE_MIN)) * 100).toFixed(1)}%`;
   const byH = Object.keys(HORIZONS).map((h) => { const rs = scored.filter((r) => r.horizon === h); const ok = rs.filter(isRight).length; return { h, n: rs.length, p: pc(ok, rs.length) }; });
