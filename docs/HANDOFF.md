@@ -1,6 +1,6 @@
 # Pulse: handoff for a new chat
 
-**Last updated: 23 Oct 2026, 10:33 IST**
+**Last updated: 23 Oct 2026, 13:54 IST**
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open. Read `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`; also the project's
@@ -433,11 +433,12 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 ## 10. Open items
 
 See `claude/pulse-backlog.md` for the prioritised list. The big ones:
-- **Live: 1.4.1** (commit 04d174c, published 23 Oct 10:20 IST by a manual deploy). The same commit passed every
-  test on the branch, real-database tests included; on main the real-database job couldn't install its Ubuntu
-  packages twice ("browsers: system packages failed 3 times"), so the push deploy didn't publish. Not yet checked:
-  the live site in a browser (neither browser was reachable from the session), the offline copy updating on a real
-  phone, and the recalculated `pscore` values in Firestore (section 8).
+- **Live: 1.4.2** (commit cf65a31, published 23 Oct 13:51 IST by a manual deploy). The code (d5411ac) passed every
+  test on its branch; GitHub's runners then failed to install Ubuntu packages on one test job per run (twice today),
+  so the push deploys didn't publish. Not yet checked: the live site in a browser (Veer's computer can't reach
+  github.io: ERR_SSL_PROTOCOL_ERROR on every *.github.io site, 23 Oct), the offline copy updating on a real phone,
+  and the recalculated `pscore` values in Firestore (section 8). The 5 notes fixed in 1.4.2 and "Blah" are still
+  open in the feedback inbox: close them from the phone (Settings → Feedback inbox) or Veer's Chrome.
 - **Check what shipped on 22–23 Oct on a real phone** (Veer): back everywhere, onboarding, feed, indicators, Calls,
   You. Everything automated passed (unit suites, demo-mode e2e 120+ checks, real-database tests 49/49 on GitHub), but
   nothing was tried on a real phone and nothing checks the live site after a deploy.

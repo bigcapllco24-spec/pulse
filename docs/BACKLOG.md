@@ -1,6 +1,6 @@
 # Pulse backlog
 
-**Last updated: 23 Oct 2026, 13:41 IST** (live: 1.4.2)
+**Last updated: 23 Oct 2026, 13:54 IST** (live: 1.4.2)
 
 How Pulse works and where everything is: `claude/pulse-handoff.md` (repo: `docs/HANDOFF.md`). How to work:
 `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`). Ordered by the priority in the expectations: trust
@@ -53,8 +53,9 @@ first, then "works on a real phone", then simplicity, then new features.
   on a real iPhone and Android.
 - **Two-account live test before CUG:** create a group, join by link, start a challenge, pick, invite, search,
   follow, reveal after the job runs.
-- **Browser-test installs on GitHub fail at times** (Ubuntu packages for WebKit, 23 Oct): consider Playwright's
-  ready-made container for the real-database job, so no packages are installed per run.
+- **Browser-test installs on GitHub fail often** (Ubuntu packages, 3 of 6 runs on 23 Oct, both test jobs): run the
+  test jobs in Playwright's ready-made container, so no packages are installed per run. Until then a push deploy
+  may not publish; a manual deploy of code that passed on its branch does.
 - **Deploy safety:** a manual or scheduled deploy publishes `main` without tests; only move `main` to tested code.
   Consider making the 2-hourly run skip publishing when the last push's tests failed. From 17 to 22 Oct those runs
   published nothing (site stuck on 18 Oct; fixed 23 Oct). Runners pinned to Ubuntu 24.04 for Playwright 1.56; move
