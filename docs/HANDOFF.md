@@ -1,6 +1,6 @@
 # Pulse: handoff for a new chat
 
-**Last updated: 23 Oct 2026, 09:57 IST**
+**Last updated: 23 Oct 2026, 10:33 IST**
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open. Read `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`; also the project's
@@ -356,6 +356,9 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
   phases (system packages, browser download), each with 4 minutes and 3 tries, and the browsers are cached; a stall
   shows as a "browsers: …" warning on the run. Runners are pinned to `ubuntu-24.04` (Playwright 1.56's packages).
   First run after the change passed; not yet proven over many runs.
+- **Ubuntu package installs for the browser tests can fail on GitHub's runners for a while** (23 Oct, 10:00 IST:
+  the WebKit packages failed on every try for ~20 minutes). The run's warnings name the phase. If the same commit
+  passed on its branch, a manual deploy publishes it; otherwise wait and re-run.
 - **From 17 to 22 Oct no scheduled or manual deploy published** (the publish job needed the build, whose tests are
   skipped on those runs, so it was skipped too): the data jobs wrote to Firestore, but the site stayed on the 18 Oct
   build with 18 Oct prices and news. Fixed 23 Oct (`if: always()` on the deploy job). After a deploy, check its
@@ -430,9 +433,11 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 ## 10. Open items
 
 See `claude/pulse-backlog.md` for the prioritised list. The big ones:
-- **Live: 1.4.0** (commit 0599fb2, published 23 Oct 02:32 IST by a tested push, then by a manual run with fresh
-  prices and news). Scores were recalculated by the data job on 1.4.0 at 02:16 IST. Not yet checked: the live site
-  in a browser, and the recalculated `pscore` values in Firestore (section 8).
+- **Live: 1.4.1** (commit 04d174c, published 23 Oct 10:20 IST by a manual deploy). The same commit passed every
+  test on the branch, real-database tests included; on main the real-database job couldn't install its Ubuntu
+  packages twice ("browsers: system packages failed 3 times"), so the push deploy didn't publish. Not yet checked:
+  the live site in a browser (neither browser was reachable from the session), the offline copy updating on a real
+  phone, and the recalculated `pscore` values in Firestore (section 8).
 - **Check what shipped on 22–23 Oct on a real phone** (Veer): back everywhere, onboarding, feed, indicators, Calls,
   You. Everything automated passed (unit suites, demo-mode e2e 120+ checks, real-database tests 49/49 on GitHub), but
   nothing was tried on a real phone and nothing checks the live site after a deploy.
