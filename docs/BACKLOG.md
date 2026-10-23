@@ -1,6 +1,6 @@
 # Pulse backlog
 
-**Last updated: 23 Oct 2026, 10:33 IST** (live: 1.4.1)
+**Last updated: 23 Oct 2026, 13:41 IST** (live: 1.4.2)
 
 How Pulse works and where everything is: `claude/pulse-handoff.md` (repo: `docs/HANDOFF.md`). How to work:
 `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`). Ordered by the priority in the expectations: trust
@@ -61,6 +61,14 @@ first, then "works on a real phone", then simplicity, then new features.
   to Ubuntu 26 together with a Playwright upgrade.
 - Feedback note "formatting issue for bottom bar" (13 Oct, tab bar, 390×797): waiting for a screenshot.
 
+## Next: feedback still open (23 Oct review of the inbox)
+- **One design pass, mockup first:** You page cluttered and plain (23 Oct); the score box on Calls too busy, streak
+  line sits badly (16 Oct); band colours on "How others see you" should be more vivid and match their meaning (19 Oct).
+- **Share a scored call as a story, like the card** (19 Oct): only scored results, never open calls (a shared open
+  call is a tip).
+- Full-screen button closer to the chart (15 Oct): moved next to the chart in 1.3.1; check on a phone, else close.
+- Bottom bar formatting (13 Oct): needs a screenshot, else close. "Blah" (19 Oct): a test entry, close.
+
 ## Waiting on Veer
 - **The 20 Oct review's recommendations:** freeze new features until real players answer "want it, come back, trust
   it"; take 30-minute and 1-hour calls out of the score; credit Binance; news as headline and link; a 30–100 person
@@ -94,6 +102,10 @@ first, then "works on a real phone", then simplicity, then new features.
 - To discuss: compare two coins on one chart; moving an account to a new phone.
 
 ## Recent releases (details in git log and the handoff)
+- **1.4.2 (23 Oct):** five open feedback notes fixed: display settings (time range, list, order, theme, chart
+  options) redraw at once and save in the background (a range tap took 15–20 s on a weak connection); a range tap
+  applies to every coin, also one with its own range; a gear for Settings on You; indicator tabs that fit; Your
+  record counts to 10 scored calls (when the score stops being provisional), not 30.
 - **1.4.1 (23 Oct):** speed and structure, no feature changes. Measured on a slowed phone (CPU x4, slow 4G): the first
   open after a release went from 6.8 s to about 3 s (a release downloads only changed files, ~50 KB instead of
   214 KB) and never reloads the app under someone using it; everyday opening was already fast (chart ~0.85 s).
