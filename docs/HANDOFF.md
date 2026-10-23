@@ -1,6 +1,6 @@
 # Pulse: handoff for a new chat
 
-**Last updated: 23 Oct 2026, 15:15 IST**
+**Last updated: 23 Oct 2026, 15:35 IST**
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open. Read `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`; also the project's
@@ -433,12 +433,11 @@ cd web && python3 -m http.server 8775 &      # for your own probes; check.sh sta
 ## 10. Open items
 
 See `claude/pulse-backlog.md` for the prioritised list. The big ones:
-- **Live: 1.4.2** (commit cf65a31, published 23 Oct 13:51 IST by a manual deploy). The code (d5411ac) passed every
-  test on its branch; GitHub's runners then failed to install Ubuntu packages on one test job per run (twice today),
-  so the push deploys didn't publish. Not yet checked: the live site in a browser (Veer's computer can't reach
-  github.io: ERR_SSL_PROTOCOL_ERROR on every *.github.io site, 23 Oct), the offline copy updating on a real phone,
-  and the recalculated `pscore` values in Firestore (section 8). The 5 notes fixed in 1.4.2 and "Blah" are still
-  open in the feedback inbox: close them from the phone (Settings → Feedback inbox) or Veer's Chrome.
+- **Live: 1.5.0** (commit f950501, published 23 Oct 15:34 IST by the tested push deploy; branch and main runs both
+  green, real-database tests 49/49). Not yet checked: the live site in a browser (Veer's computer can't reach
+  github.io: ERR_SSL_PROTOCOL_ERROR on every *.github.io site, 23 Oct), the redesign on a real phone, and the
+  recalculated `pscore` values in Firestore (section 8). Feedback inbox: the 1.4.2 notes, "Blah", and the three design
+  notes (16, 19, 23 Oct) fixed in 1.5.0 are still open there; close them from the phone (Settings → Feedback inbox).
 - **Check what shipped on 22–23 Oct on a real phone** (Veer): back everywhere, onboarding, feed, indicators, Calls,
   You. Everything automated passed (unit suites, demo-mode e2e 120+ checks, real-database tests 49/49 on GitHub), but
   nothing was tried on a real phone and nothing checks the live site after a deploy.
