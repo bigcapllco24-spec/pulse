@@ -9,8 +9,8 @@ import { BAND_CLASS } from "./card.js";
 import { ls } from "./store.js";
 
 const LOOKS = { // the app's own two themes (styles.css)
-  light: { bg: "#F4F6F8", surface: "#FFFFFF", s2: "#EEF1F4", line: "#DCE2E8", text: "#131C24", muted: "#5A6774", accent: "#2B4FC7", up: "#0B7A4B", down: "#C0362C", b1: "#8A939C", b2: "#5A6774", b3: "#2B4FC7", b4: "#7B4FD6", b5: "#9A6A00" },
-  dark: { bg: "#0B0F14", surface: "#131A21", s2: "#1A232C", line: "#24303B", text: "#E8EEF3", muted: "#8A98A6", accent: "#7EA2FF", up: "#3DD68C", down: "#FF6B61", b1: "#6B7785", b2: "#A3B0BD", b3: "#7EA2FF", b4: "#B48CFF", b5: "#F5C451" },
+  light: { bg: "#F4F6F8", surface: "#FFFFFF", s2: "#EEF1F4", line: "#DCE2E8", text: "#131C24", muted: "#5A6774", accent: "#2B4FC7", up: "#0B7A4B", down: "#C0362C", b1: "#A35A3F", b2: "#5A6774", b3: "#8A6A1E", b4: "#7B4FD6", b5: "#2E7A60" },
+  dark: { bg: "#0B0F14", surface: "#131A21", s2: "#1A232C", line: "#24303B", text: "#E8EEF3", muted: "#8A98A6", accent: "#7EA2FF", up: "#3DD68C", down: "#FF6B61", b1: "#B9775F", b2: "#A3B0BD", b3: "#BFA05E", b4: "#B48CFF", b5: "#4E9C82" },
 };
 const SIZES = { story: [360, 640], square: [360, 360] };
 const SCALE = 3; // 1080 px wide
@@ -85,7 +85,7 @@ function line(ctx, x, y, w, h, pts, k) {
 export async function drawCard(c, o) {
   try { await Promise.all([document.fonts.load(`800 20px ${FONT}`), document.fonts.load(`600 40px ${MONO}`)]); } catch {} // the image waits for the app's fonts
   const [W, H] = SIZES[o.fmt] || SIZES.story, k = { ...LOOKS[o.look] || LOOKS.light };
-  k.band = k[BAND_CLASS[c.band] || "b3"]; k.bandText = ["b1", "b2"].includes(BAND_CLASS[c.band]) ? k.muted : k.band; // the grey bands are too faint for text
+  k.band = k[BAND_CLASS[c.band] || "b3"]; k.bandText = BAND_CLASS[c.band] === "b2" ? k.muted : k.band; // the grey is too faint for text
   const cv = document.createElement("canvas"); cv.width = W * SCALE; cv.height = H * SCALE;
   const ctx = cv.getContext("2d"); ctx.scale(SCALE, SCALE);
   ctx.fillStyle = k.bg; ctx.fillRect(0, 0, W, H);

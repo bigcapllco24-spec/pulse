@@ -2,10 +2,18 @@
 // well as showing it: a dial split into the five bands, how far it is to the next band, a record with a note on each
 // number, how close calls landed, and the last 90 days with the band lines drawn. Never shows a price call.
 import { esc } from "./ui.js";
-import { BANDS, CHANCE, PROVISIONAL_UNDER, SCORE_MIN, SCORE_MAX } from "./score.js";
+import { BANDS, CHANCE, PROVISIONAL_UNDER, SCORE_MIN, SCORE_MAX, bandOf } from "./score.js";
 import { LABELS, nextBand } from "./habit.js";
 
 export const BAND_CLASS = { Proven: "b5", Building: "b3", "Below guessing": "b1" };
+// The bands as one thin bar in their own colours, with a mark at the score (You, Your record and the Calls card, 1.5.0).
+export function bandBar(score, cls = "") {
+  const segs = [...BANDS].reverse().map(([min, name], i, all) => `<i class="${BAND_CLASS[name]}" style="flex:${(all[i + 1]?.[0] ?? SCORE_MAX) - min}"></i>`).join("");
+  const at = score != null ? (((score - SCORE_MIN) / (SCORE_MAX - SCORE_MIN)) * 100).toFixed(1) : null;
+  return `<span class="ys-bar ${cls}" aria-hidden="true"><span>${segs}</span>${at != null ? `<b style="left:${at}%"></b>` : ""}</span>`;
+}
+// The band as a dot and its name ("Provisional" while it is).
+export const bandTag = (sc, cls = "ys-band") => (sc?.score == null ? "" : `<span class="${cls}"><i class="${sc.provisional ? "prov" : BAND_CLASS[sc.band || bandOf(sc.score)]}"></i>${sc.provisional ? "Provisional" : esc(sc.band || bandOf(sc.score))}</span>`);
 export const SHORT = { "30m": "30 min", "1h": "1 hour", "1d": "1 day", "1y": "1 year" };
 const ADJ = { "30m": "30-minute", "1h": "1-hour", "1d": "1-day", "1y": "1-year" };
 const num = (s) => `<span class="num">${s}</span>`;

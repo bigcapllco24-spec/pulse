@@ -12,7 +12,7 @@ import { APP, showTab, backLabel } from "./app.js";
 import { openRecord, renderRecord } from "./you.js";
 import { openPage, closePage, backBtn, pageOpen } from "./nav.js";
 import { openProfile, openAddSheet } from "./pages.js";
-import { BAND_CLASS, SHORT } from "./card.js";
+import { BAND_CLASS, SHORT, bandBar, bandTag } from "./card.js";
 import { istDay, dailyCoin, msUntilNextDay, whatHappened } from "./habit.js";
 import { levelOf, ringClass, ringOf, ringName, callsFor, UNLOCKS } from "./progress.js";
 import { S, onSocial, myName, bandOf, myGroups, peekGroup, joinGroup, settleChallengesHere, nextChallengeEnd, challengesOf, waitingForMe, unseenResults } from "./social.js";
@@ -160,7 +160,9 @@ function callsView(el) {
     const due = dueAt(p), grp = p.g ? ` · ${esc(groupName(p.g))}` : "";
     return `<button class="row crow" data-open="${i}">${badgeOf(dirOf(p))}<span class="main"><span class="t">${esc(coinName(p.coin, p.t))} · ${SHORT[p.horizon]}</span><span class="s">${callLine(p)}${grp}${p.kind === "pick" ? " · group only" : ""}</span></span><span class="when">${ICON.clock}${esc(Date.now() >= Date.parse(due) ? "scoring" : until(due))}</span>${CHEV}</button>`;
   };
-  const bits = [n < VERDICT_AT ? `${n} of ${VERDICT_AT} scored calls` : `${n} scored calls`, st.n ? `${st.n}-day streak` : "", levelText()].filter(Boolean).join(" · ");
+  // 1.5.0 (feedback 16 Oct: too much in this box): the score, its band and the verdict; the streak moved to Today
+  const up = sc?.score != null ? [...BANDS].reverse().find(([min]) => min > sc.score) : null;
+  const bits = [`${n} scored call${n === 1 ? "" : "s"}`, n < VERDICT_AT ? `${VERDICT_AT - n} to go` : up ? `${up[0] - sc.score} to ${up[1]}` : ""].filter(Boolean).join(" · ");
   const waits = waitingForMe(), groups = myGroups(), lists = [...store.lists.values()];
   const friendRows = [
     ...waits.slice(0, 2).map((ch) => `<div class="row"><span class="gicon">${ICON.group}</span><span class="main"><span class="t">${esc(groupName(ch.g))}</span><span class="s warnt">Needs your pick · ${esc(until(ch.joinUntil))} left</span></span><button class="btn primary sm" data-pick="${esc(ch.g)}|${esc(ch.id)}">Pick</button></div>`),
@@ -168,9 +170,9 @@ function callsView(el) {
     ...lists.slice(0, 2).map((l) => `<button class="row" data-list="${esc(l.id)}"><span class="gicon">${ICON.list}</span><span class="main"><span class="t">${esc(l.name)}</span><span class="s">Shared list · ${(l.symbols || []).length} coins · ${Object.keys(l.members || {}).length} members</span></span>${CHEV}</button>`),
   ];
   const link = (id, text) => `<button class="linkbtn more" id="${id}">${text}<span aria-hidden="true"> ›</span></button>`;
-  el.innerHTML = `<button class="progcard" id="plProg"><span class="pc-top"><span><span class="label">Your record</span><b>${esc(v.text)}</b></span><span class="linkbtn more">Open<span aria-hidden="true"> ›</span></span></span><span class="pl-prog" aria-hidden="true"><i style="width:${Math.min(100, (n / VERDICT_AT) * 100)}%"></i></span><span class="hint">${esc(bits)}</span></button>
-    <div class="secrow"><span class="label">Today</span></div>
-    ${dailyBox(here)}
+  el.innerHTML = `<button class="progcard pc3" id="plProg"><span class="pc3-row"><span class="pc3-score"><b class="num">${sc?.score ?? "–"}</b>${bandTag(sc, "pc3-band")}</span><span class="pc3-main"><span class="label">Your record</span><b>${esc(v.text)}</b><span class="s">${esc(bits)}</span></span>${CHEV}</span>${bandBar(sc?.score, "pc3-bar")}</button>
+    <div class="secrow"><span class="label">Today</span>${st.n ? `<span class="streak">${FLAME}${st.n}-day streak</span>` : ""}</div>
+    ${dailyBox(here, st.n)}
     <div class="secrow"><span class="label">Waiting${open.length ? ` · ${open.length}` : ""}</span></div>
     ${open.length ? `<div class="hl">${open.map(callRow).join("")}</div>` : `<p class="hint pl-empty">Nothing waiting. Make a call above, or tap Call it on any chart in the feed.</p>`}
     <div class="secrow"><span class="label">With friends</span>${link("plFriends", `All groups${groupsNeedYou() ? ' <span class="dot" aria-label="needs you"></span>' : ""}`)}</div>
@@ -208,10 +210,11 @@ function dailyState(here = pendingHere()) {
   return { day, dc, mine, blocked: !mine && !canPredict(store.preds, dc.key, "1d"), price: lastPrice(dc.key), left: `${Math.floor(left / 36e5)}h ${Math.floor((left % 36e5) / 6e4)}m` };
 }
 // today's coin as a row: everyone calls the same coin today; it's a 1-day call like any other
-function dailyBox(here) {
+const FLAME = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-4 2.5-5 .3 2 1.3 3 2.5 3 0-3-1-5 0-8z"/></svg>`;
+function dailyBox(here, streak = 0) {
   const { dc, mine, blocked, left } = dailyState(here);
   const right = mine ? `<span class="chip good">You're in</span>${CHEV}` : blocked ? `<span class="hint">1-day call open</span>` : `<span class="btn primary sm" aria-hidden="true">Call</span>`;
-  return `<div class="hl"><button class="row" data-daily><span class="gicon">${ICON.target}</span><span class="main"><span class="t">Today's coin: ${esc(dc.n)}</span><span class="s">${mine ? `Called ${esc(m$(mine.target))}, scored ${esc(when(dueAt(mine), "1d"))}` : `Everyone calls it, ${esc(left)} left`}</span></span>${right}</button></div>`;
+  return `<div class="hl"><button class="row" data-daily><span class="gicon">${ICON.target}</span><span class="main"><span class="t">Today's coin: ${esc(dc.n)}</span><span class="s">${mine ? `Called ${esc(m$(mine.target))}, scored ${esc(when(dueAt(mine), "1d"))}` : `${streak ? "Call it to keep your streak" : "Everyone calls it"}, ${esc(left)} left`}</span></span>${right}</button></div>`;
 }
 // Level up (1.2.0): shown once when the level rises, with what it opens. Remembered on this phone.
 const LS_LEVEL = "pl.level";
@@ -232,7 +235,6 @@ function checkLevelUp() {
 }
 // the level line on the progress card (progress.js): effort, not skill
 export const myLevel = () => levelOf([...store.results, ...pendingHere()]);
-const levelText = () => `Level ${myLevel().level}`;
 // With friends (every group and shared list): a page over Calls.
 export function openFriends() {
   const back = backLabel();

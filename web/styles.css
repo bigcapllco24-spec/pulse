@@ -641,8 +641,12 @@ html { touch-action: pan-x pan-y; }
 .full .fcard { touch-action: none; }
 
 /* ---------- 1.0: Predict tab, people and groups. Numbers that matter (scores, prices, countdowns) use Geist Mono. */
-:root { --num: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; --b1: #6B7785; --b2: #A3B0BD; --b3: #7EA2FF; --b4: #B48CFF; --b5: #F5C451; }
-:root[data-theme="light"] { --b1: #8A939C; --b2: #5A6774; --b3: #2B4FC7; --b4: #7B4FD6; --b5: #9A6A00; }
+/* Score bands (1.5.0, feedback 19 Oct): read like a credit score, in muted tones. b1 Below guessing (clay), b3 Building
+   (ochre), b5 Proven (sage); b2 marks a provisional score. --gold is for streak and badge icons, which aren't bands. */
+:root { --num: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; --b1: #B9775F; --b2: #A3B0BD; --b3: #BFA05E; --b4: #B48CFF; --b5: #4E9C82; --gold: #F5C451;
+  --r-good: #4E9C82; --r-close: #5F85B8; --r-off: #2E3946; --r-bad: #B66A62; }
+:root[data-theme="light"] { --b1: #A35A3F; --b2: #5A6774; --b3: #8A6A1E; --b4: #7B4FD6; --b5: #2E7A60; --gold: #9A6A00;
+  --r-good: #2E7A60; --r-close: #3C64A0; --r-off: #C9D1D9; --r-bad: #A6463D; }
 .num, .price, .row .r b, .pnow b { font-family: var(--num); font-feature-settings: "tnum" 1; letter-spacing: -.02em; }
  .b4t { color: var(--b4); }
 /* letter avatars: the username's first letter, ringed in the score band's colour, dashed while provisional */
@@ -804,12 +808,12 @@ body.grpopen .tabbar { display: none; } /* the group page is its own screen: no 
 .pc2-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; background: var(--surface2); font-size: var(--t-s); font-weight: 600; }
 .pc2-chip.band { background: color-mix(in srgb, var(--bandc) 18%, transparent); color: color-mix(in srgb, var(--bandc) 70%, var(--text)); font-weight: 700; }
 .pc2-chip.band i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.pc2-chip svg { width: 14px; height: 14px; fill: none; stroke: var(--b5); stroke-width: 2.2; stroke-linejoin: round; }
+.pc2-chip svg { width: 14px; height: 14px; fill: none; stroke: var(--gold); stroke-width: 2.2; stroke-linejoin: round; }
 .pc2-hero .hint { margin: 0; }
 .pc2-box { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 14px 16px; display: grid; gap: 10px; }
 .pc2-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; } .pc2-row .label, .pc2-row .linkbtn { margin: 0; padding: 0; }
 .pc2-dial { width: 100%; max-width: 320px; justify-self: center; display: block; }
-.pc2-dial path { fill: none; stroke-width: 16; }
+.pc2-dial path { fill: none; stroke-width: 10; }
 .pc2-mark { fill: var(--text); stroke: var(--surface); stroke-width: 4; }
 .pc2-big { fill: var(--text); font-family: var(--num); font-size: 54px; font-weight: 600; letter-spacing: -2px; }
 .pc2-sub { fill: var(--muted); font-family: var(--font); font-size: 12.5px; }
@@ -833,7 +837,7 @@ body.grpopen .tabbar { display: none; } /* the group page is its own screen: no 
 .pc2-th { stroke-opacity: .6; stroke-dasharray: 3 4; } .pc2-thl { font-family: var(--font); font-size: 10px; font-weight: 700; }
 .pc2-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .pc2-badge { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
-.pc2-badge svg { width: 16px; height: 16px; fill: none; stroke: var(--b5); stroke-width: 2; stroke-linejoin: round; }
+.pc2-badge svg { width: 16px; height: 16px; fill: none; stroke: var(--gold); stroke-width: 2; stroke-linejoin: round; }
 .pc2 .pc-acts { margin: 0; }
 /* rows with an icon (profile page) */
 
@@ -1047,3 +1051,70 @@ body.guided .tabbar, body.guided .topbar { visibility: hidden; }
 .cflat[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .cq .flat { color: var(--accent); }
 .you-note { margin-top: 12px; } .you-note .linkbtn { padding: 0; }
+
+/* ---------- You (1.5.0, feedback 23 Oct: calmer, smaller type): one score block, three numbers, your last ten calls */
+#you { padding-bottom: 8px; }
+.you-top { margin-bottom: 14px; }
+.you-acts { display: flex; flex: none; }
+.you-ib { width: 44px; height: 44px; border: 0; border-radius: 50%; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.you-ib svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.you-me .t { font-size: 15px; } .you-me .s { font-size: 12px; }
+.you-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; margin-top: 12px; }
+.ys { padding: 16px; display: grid; gap: 12px; margin-top: 0; }
+.ys-top { display: flex; justify-content: space-between; align-items: center; }
+.ys-lab { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ys-band { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
+.ys-band i { width: 7px; height: 7px; border-radius: 50%; background: var(--b2); }
+.ys-band i.b1 { background: var(--b1); } .ys-band i.b3 { background: var(--b3); } .ys-band i.b5 { background: var(--b5); }
+.ys-main { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ys-big { font-size: 40px; font-weight: 600; line-height: 1; letter-spacing: -.03em; }
+.ys-verdict { font-size: 13px; color: var(--muted); }
+.ys-bar { position: relative; height: 4px; }
+.ys-bar span { position: absolute; inset: 0; display: flex; gap: 2px; }
+.ys-bar span i { display: block; height: 4px; } .ys-bar span i:first-child { border-radius: 2px 0 0 2px; } .ys-bar span i:last-child { border-radius: 0 2px 2px 0; }
+.ys-bar span i.b1 { background: var(--b1); } .ys-bar span i.b3 { background: var(--b3); } .ys-bar span i.b5 { background: var(--b5); }
+.ys-bar b { position: absolute; top: -5px; width: 2px; height: 14px; margin-left: -1px; border-radius: 1px; background: var(--text); }
+.ys-ends { display: flex; justify-content: space-between; margin-top: -4px; font-size: 11px; color: var(--muted); }
+.ys-notes { border-top: 1px solid var(--line); padding-top: 11px; display: grid; gap: 4px; }
+.ys-notes p { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); } .ys-notes p.lead { font-size: 13px; color: var(--text); }
+.ystats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ystats > div { padding: 13px 12px; display: grid; gap: 2px; align-content: start; } .ystats > div + div { border-left: 1px solid var(--line); }
+.ystats b { font-size: 18px; font-weight: 600; } .ystats span { font-size: 12px; } .ystats em { font-style: normal; font-size: 11px; color: var(--muted); }
+.ylast { padding: 14px 16px; display: grid; gap: 10px; }
+.ylast-h { display: flex; justify-content: space-between; align-items: center; } .ylast-h .t { font-size: 13px; font-weight: 600; } .ylast-h .linkbtn { font-size: 12px; padding: 0; margin: 0; }
+.ylast-sq { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.ylast-sq button { height: 18px; border: 0; border-radius: 3px; padding: 0; cursor: pointer; background: var(--r-off); position: relative; }
+.ylast-sq button::after { content: ""; position: absolute; inset: -13px -2px; } /* a 44 px tall tap area */
+.ylast-sq .good, .ylast-key .good { background: var(--r-good); } .ylast-sq .close, .ylast-key .close { background: var(--r-close); } .ylast-sq .bad, .ylast-key .bad { background: var(--r-bad); }
+.ylast-key { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--muted); }
+.ylast-key span { display: inline-flex; align-items: center; gap: 5px; } .ylast-key i { width: 8px; height: 8px; border-radius: 2px; background: var(--r-off); }
+.page .you-few { margin: 10px 0 0; font-size: 12px; }
+.ylock { padding: 14px 16px; display: grid; gap: 9px; }
+.ylock-h { display: flex; align-items: center; gap: 8px; } .ylock-h svg { width: 15px; height: 15px; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ylock-h .t { flex: 1; font-size: 13px; font-weight: 600; } .ylock-h .s { font-size: 12px; color: var(--muted); }
+.ylock-bar { height: 3px; border-radius: 2px; background: var(--line); display: block; } .ylock-bar i { display: block; height: 3px; border-radius: 2px; background: var(--muted); }
+.ylock .hint { margin: 0; font-size: 12px; line-height: 1.45; }
+#you .you-h2, #record .you-h2 { margin: 22px 0 6px; font-size: 14px; font-weight: 600; }
+.you-rank { overflow: hidden; }
+.you-rank .pl-cards { gap: 0; }
+.you-rank .rcard { border: 0; border-radius: 0; background: none; padding: 12px 16px; } .you-rank .rcard + .rcard { border-top: 1px solid var(--line); }
+.you-rank .rcard .main b { font-size: 13px; font-weight: 600; } .you-rank .rcard .s { font-size: 12px; }
+.you-rank .rcard .r b { font-size: 15px; font-weight: 600; }
+.you-rank #rkFind { margin: 0 !important; border-top: 1px solid var(--line); padding: 12px 16px; }
+.you-rank #rkFind .t { font-size: 13px; } .you-rank #rkFind .s { font-size: 12px; }
+.you-row { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 12px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 14px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.you-row .main { flex: 1; display: grid; gap: 2px; } .you-row .t { font-size: 13px; font-weight: 600; } .you-row .s { font-size: 12px; color: var(--muted); } .you-row .chev { color: var(--muted); }
+.page .you-foot { margin: 14px 2px 0; font-size: 11px; line-height: 1.55; color: var(--muted); }
+/* the Calls record card (1.5.0): the score and its band, the verdict, the bands as a thin bar; the streak sits on Today */
+.pc3 { gap: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; }
+.pc3-row { display: flex; align-items: center; gap: 14px; }
+.pc3-score { display: grid; gap: 5px; justify-items: start; } .pc3-score b { font-size: 26px; font-weight: 600; line-height: 1; letter-spacing: -.02em; }
+.pc3-band { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.pc3-band i { width: 6px; height: 6px; border-radius: 50%; background: var(--b2); }
+.pc3-band i.b1 { background: var(--b1); } .pc3-band i.b3 { background: var(--b3); } .pc3-band i.b5 { background: var(--b5); }
+.pc3-main { flex: 1; display: grid; gap: 2px; min-width: 0; } .pc3-main .label { margin: 0; font-size: 11px; } .pc3-main b { font-size: 15px; font-weight: 600; } .pc3-main .s { font-size: 12px; color: var(--muted); }
+.pc3 .chev { color: var(--muted); font-size: 18px; }
+.pc3-bar { display: block; }
+.secrow .streak { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.secrow .streak svg { width: 13px; height: 13px; fill: none; stroke: var(--gold); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.you-me .ava.lv .lvb { right: -6px; bottom: -6px; min-width: 13px; height: 15px; padding: 0 3px; font-size: 9px; }

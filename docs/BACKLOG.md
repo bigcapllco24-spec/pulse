@@ -1,6 +1,6 @@
 # Pulse backlog
 
-**Last updated: 23 Oct 2026, 13:54 IST** (live: 1.4.2)
+**Last updated: 23 Oct 2026, 15:15 IST** (live: 1.4.2)
 
 How Pulse works and where everything is: `claude/pulse-handoff.md` (repo: `docs/HANDOFF.md`). How to work:
 `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`). Ordered by the priority in the expectations: trust
@@ -63,8 +63,6 @@ first, then "works on a real phone", then simplicity, then new features.
 - Feedback note "formatting issue for bottom bar" (13 Oct, tab bar, 390×797): waiting for a screenshot.
 
 ## Next: feedback still open (23 Oct review of the inbox)
-- **One design pass, mockup first:** You page cluttered and plain (23 Oct); the score box on Calls too busy, streak
-  line sits badly (16 Oct); band colours on "How others see you" should be more vivid and match their meaning (19 Oct).
 - **Share a scored call as a story, like the card** (19 Oct): only scored results, never open calls (a shared open
   call is a tip).
 - Full-screen button closer to the chart (15 Oct): moved next to the chart in 1.3.1; check on a phone, else close.
@@ -103,6 +101,12 @@ first, then "works on a real phone", then simplicity, then new features.
 - To discuss: compare two coins on one chart; moving an account to a new phone.
 
 ## Recent releases (details in git log and the handoff)
+- **1.5.0 (23 Oct):** the design pass from the feedback inbox (mockup "Pulse You page and score redesign", approved
+  23 Oct): You is one score block (score, band, verdict, a thin band bar), three numbers (right direction, close or
+  better, streak), your last 10 calls as coloured squares (tap for the replay), a compact lock row, ranks in one card,
+  and "What your score doesn't show" as one line that opens the list; smaller type throughout. The Calls record card
+  shows the score, band and verdict; the streak moved to Today. Band colours read like a credit score in muted
+  tones: clay, ochre, sage (and on the player card and share image).
 - **1.4.2 (23 Oct):** five open feedback notes fixed: display settings (time range, list, order, theme, chart
   options) redraw at once and save in the background (a range tap took 15–20 s on a weak connection); a range tap
   applies to every coin, also one with its own range; a gear for Settings on You; indicator tabs that fit; Your

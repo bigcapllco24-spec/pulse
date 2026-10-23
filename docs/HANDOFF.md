@@ -1,6 +1,6 @@
 # Pulse: handoff for a new chat
 
-**Last updated: 23 Oct 2026, 13:54 IST**
+**Last updated: 23 Oct 2026, 15:15 IST**
 
 Read this first. It tells you what Pulse is, where everything lives, how the prediction game works, how to change
 things safely, and what's open. Read `claude/pulse-expectations.md` (repo: `docs/EXPECTATIONS.md`; also the project's
@@ -138,7 +138,7 @@ web/                    the app (served by GitHub Pages; the deploy minifies JS 
   js/score.js           the rules a call follows and what a scored call shows (labels, callDir, isRight, bands); shared
   js/predict.js         settling a call: start-price lock, end price, market context (prev, tr90); shared
   js/habit.js           streaks, daily coin, crowd, what happened, tendency, weekly recap, morning summary (IST days)
-  js/card.js, share.js  player card markup; share your card as an image (Story / Square)
+  js/card.js, share.js  player card markup, bandBar/bandTag (the bands in their colours); share your card as an image
   js/feedback.js        press-and-hold (3 s) → note about the tapped part
   js/panels.js, search.js, ui.js (sheets incl. swipe-down close, toast)
 pipeline/               Node 22, run by GitHub Actions
@@ -165,7 +165,7 @@ tests/live.py           real-database tests: app + jobs against the emulators, W
 docs/                   HANDOFF, BACKLOG, EXPECTATIONS, PLAN-1.3 (copies of the project docs), prediction-score (general)
 ```
 
-## 4. Features as of 1.4.1 (23 Oct 2026)
+## 4. Features as of 1.5.0 (23 Oct 2026)
 
 **Tabs: Feed · Calls · You** (Feed on the left). Settings sit behind the gear on You.
 
